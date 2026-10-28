@@ -161,7 +161,7 @@ async function loadShapes(fn, isImage) {
 function loadImage() {
   if (!state.lastImage) return;
   if ($('fit').value === 'native') $('fit').value = 'fill'; // una imagen no tiene unidades físicas
-  loadShapes(() => traceImage(state.lastImage, +$('thr').value), true);
+  loadShapes(() => traceImage(state.lastImage, +$('thr').value, $('imgHow').value), true);
 }
 
 /* ---------- archivos ---------- */
@@ -191,6 +191,7 @@ $('clear').addEventListener('click', () => {
 });
 $('thr').addEventListener('input', () => { $('thrVal').textContent = $('thr').value; });
 $('thr').addEventListener('change', loadImage);
+$('imgHow').addEventListener('change', loadImage);
 
 /* ---------- parámetros ---------- */
 ['pw', 'ph', 'margin', 'speck', 'fit'].forEach(id => $(id).addEventListener('change', () => { rebuildDesign(); assemble(); refresh(); }));

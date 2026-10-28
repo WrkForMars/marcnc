@@ -106,6 +106,8 @@
             </div>
           </details>
           <div id="imgOpts" hidden>
+            <div class="params" style="margin-top:12px"><label class="full">Vectorizar la imagen como<select id="imgHow"><option value="area">Áreas (Relleno, Contorno o Invertir)</option><option value="center">Línea central (cada trazo en una pasada)</option></select></label></div>
+            <p class="hint">Línea central sirve para dibujos de trazos delgados y letras a mano: la herramienta pasa una vez por el centro de cada trazo.</p>
             <label class="hint" for="thr">Umbral de la imagen: <b id="thrVal">128</b> (más alto toma grises más claros como dibujo)</label>
             <input type="range" id="thr" min="20" max="235" value="128">
           </div>

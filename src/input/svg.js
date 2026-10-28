@@ -20,7 +20,8 @@ function sanitize(svg) {
 
 /**
  * @typedef {{kind:'fill', white:boolean, rule:'evenodd'|'nonzero', rings:[number,number][][]}
- *          |{kind:'stroke', lines:{pts:[number,number][], closed:boolean}[]}} RawShape
+ *          |{kind:'stroke', group?:boolean, lines:{pts:[number,number][], closed:boolean}[]}} RawShape
+ * `group`: todas las líneas forman una sola figura (la línea central de una pieza de la imagen).
  * Las coordenadas salen en "unidades de lienzo": las del viewBox × `native.unit`.
  */
 

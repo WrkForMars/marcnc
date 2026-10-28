@@ -40,7 +40,7 @@ export function renderList(box, allBox, s) {
       t.textContent = e.type === 'line' ? 'Trazo' : 'Figura';
       const p = e.parts[0];
       sm.textContent = e.type === 'line'
-        ? (p.closed ? 'cerrado' : 'abierto')
+        ? (e.parts.length > 1 ? `${e.parts.length} tramos` : p.closed ? 'cerrado' : 'abierto')
         : (p.holes.length ? `${p.holes.length} hueco${p.holes.length > 1 ? 's' : ''}` : 'sin huecos');
     }
     name.append(num, t, sm);

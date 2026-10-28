@@ -24,7 +24,8 @@ src/
   demo.js            dibujo y texto de ejemplo
   input/svg-path.js  lector de rutas SVG puro (sin DOM) — probado
   input/svg.js       lee un SVG con estilos y transformaciones (usa DOM)
-  input/image.js     imagen → contornos con ImageTracer
+  input/image.js     imagen → contornos con ImageTracer, o línea central
+  input/centerline.js  esqueletización (Zhang–Suen) → polilíneas por pieza, puro — probado
   geometry/clipper.js  envolturas de Clipper (offset, unión, resta, regiones)
   geometry/simplify.js RDP, distancia a segmento, punto en polígono
   cam/tool.js        ancho de línea según herramienta y profundidad — probado
@@ -65,16 +66,15 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
 
 ## Pruebas
 
-Cualquier cambio en `cam/`, `geometry/`, `input/svg-path.js`, `design.js` o `text/hershey.js` lleva su prueba.
+Cualquier cambio en `cam/`, `geometry/`, `input/svg-path.js`, `input/centerline.js`, `design.js` o `text/hershey.js` lleva su prueba.
 Las pruebas de `tests/gcode.test.js` fijan los parámetros de la tarea de referencia (pieza 90 × 50 mm,
 T3 ball mill 1/8", S2200, F60 en Z, F130 en XY, retracción Z3, profundidad 0.1 mm): si una cambia,
 es un cambio de comportamiento que hay que justificar.
 
 ## Pendiente (en orden de valor)
 
-1. Línea central desde imágenes (esqueletización) para que trazos delgados se graben en una pasada.
-2. Paquete de entrega escolar: .txt + imagen de coordenadas en cuadrícula + tabla que explica cada línea.
-3. Perfiles de máquina y material (avances sugeridos para aluminio, acrílico, MDF).
-4. Mover vectorizado y vaciado a un Web Worker.
-5. Simulación animada del recorrido.
-6. PWA instalable (manifest + service worker).
+1. Paquete de entrega escolar: .txt + imagen de coordenadas en cuadrícula + tabla que explica cada línea.
+2. Perfiles de máquina y material (avances sugeridos para aluminio, acrílico, MDF).
+3. Mover vectorizado y vaciado a un Web Worker.
+4. Simulación animada del recorrido.
+5. PWA instalable (manifest + service worker).

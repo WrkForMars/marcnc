@@ -43,13 +43,14 @@ export function buildDesign(raw, p, previous = []) {
       if (s.white) list = list.map(r => (r.kind === 'fill' ? { ...r, paths: diff(r.paths, paths) } : r));
       else list.push({ kind: 'fill', paths });
     } else {
-      list.push({ kind: 'stroke', lines: s.lines.map(l => ({ pts: l.pts.map(T), closed: l.closed })) });
+      list.push({ kind: 'stroke', group: !!s.group, lines: s.lines.map(l => ({ pts: l.pts.map(T), closed: l.closed })) });
     }
   });
 
   let regs = [], lines = [];
   list.forEach(r => {
-    if (r.kind === 'stroke') lines.push(...r.lines);
+    // cada línea es una figura, salvo que vengan agrupadas (una pieza de la imagen = una figura)
+    if (r.kind === 'stroke') lines.push(...(r.group ? [r.lines] : r.lines.map(l => [l])));
     else regs.push(...regionsFromPaths(r.paths, minA));
   });
   if (regs.length + lines.length > MAX_ELEMENTS) {
@@ -60,7 +61,7 @@ export function buildDesign(raw, p, previous = []) {
     out.note = `El dibujo tiene ${before} figuras; se conservaron las ${MAX_ELEMENTS} más grandes. Sube el valor de "Ignorar manchas" o usa una imagen más limpia.`;
   }
   regs.forEach(r => out.elements.push({ src: 'design', type: 'region', parts: [{ outer: r.outer, holes: r.holes }], mode: 'fill' }));
-  lines.forEach(l => out.elements.push({ src: 'design', type: 'line', parts: [l], mode: 'line' }));
+  lines.forEach(g => out.elements.push({ src: 'design', type: 'line', parts: g, mode: 'line' }));
 
   if (previous.length === out.elements.length) {
     out.elements.forEach((e, i) => { if (previous[i].type === e.type) e.mode = previous[i].mode; });

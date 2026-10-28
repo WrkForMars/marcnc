@@ -1,5 +1,6 @@
 // Imagen con fondo blanco → contornos de las zonas oscuras, vía ImageTracer.
 import ImageTracer from 'imagetracerjs';
+import { centerlines } from './centerline.js';
 
 const TRACE_OPTS = {
   numberofcolors: 2, colorsampling: 0,
@@ -48,9 +49,10 @@ export function binarize(imgd, thr) {
 /**
  * @param {HTMLImageElement} img
  * @param {number} thr umbral 0–255
+ * @param {'area'|'center'} [how] áreas con contorno, o línea central de cada trazo
  * @returns {import('./svg.js').RawShape[]}
  */
-export function traceImage(img, thr) {
+export function traceImage(img, thr, how = 'area') {
   // 600 px en el lado mayor es suficiente para grabado y mantiene el trazado por debajo de ~0.3 s
   const max = 600;
   const k = Math.min(4, max / Math.max(img.naturalWidth, img.naturalHeight));
@@ -61,5 +63,12 @@ export function traceImage(img, thr) {
   x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); // lo transparente cuenta como fondo
   x.drawImage(img, 0, 0, w, h);
   const d = binarize(x.getImageData(0, 0, w, h), thr);
+  if (how === 'center') {
+    const ink = new Uint8Array(w * h);
+    for (let i = 0; i < ink.length; i++) ink[i] = d.data[i * 4] === 0 ? 1 : 0;
+    const groups = centerlines(ink, w, h);
+    if (!groups.length) throw new Error('No encontré trazos oscuros en la imagen; prueba otro umbral.');
+    return groups.map(g => ({ kind: 'stroke', group: true, lines: g.lines }));
+  }
   return [{ kind: 'fill', white: false, rule: 'evenodd', rings: tracedRings(d) }];
 }
