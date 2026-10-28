@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trazo CNC</title>
+<meta name="description" content="Convierte SVG e imágenes en código G y M para grabado CNC, con modo de corte por figura y simulación.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@600&display=swap">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Trazo <span>CNC</span></h1>
+      <p class="tag">Convierte un SVG o una imagen con fondo blanco en código G y M para grabado. Toca cada figura en la vista previa para elegir cómo se corta, y arrastra los textos para acomodarlos.</p>
+    </div>
+    <div class="actions">
+      <label class="filebtn">Cargar SVG o imagen<input type="file" id="file" accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp"></label>
+      <button id="demo" type="button">Ejemplo</button>
+      <button id="clear" type="button">Pieza vacía</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="col">
+      <section class="card">
+        <div class="card-head"><h2>Vista previa del grabado</h2>
+          <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted)"><input type="checkbox" id="showPath"> Ver recorrido de la herramienta</label>
+        </div>
+        <div class="stage"><canvas id="cv" width="900" height="500" aria-label="Vista previa de la pieza con el grabado simulado"></canvas><div class="busy" id="busy" hidden><span id="busyText">Procesando…</span></div></div>
+        <div class="legend">
+          <span><i style="background:var(--cut)"></i>Zona grabada (ancho real de la herramienta)</span>
+          <span><i style="background:var(--accent)"></i>Seleccionado</span>
+          <span><i style="border:1px dashed var(--muted)"></i>Omitido</span>
+        </div>
+        <div class="card-body" style="padding-top:0"><div class="stats" id="stats"></div><div id="warns"></div></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>Código G y M</h2>
+          <div class="actions"><button id="copy" type="button">Copiar</button><button class="primary" id="save" type="button">Descargar .txt</button></div>
+        </div>
+        <div class="card-body"><pre class="code" id="code"></pre><div class="toast" id="toast" role="status"></div></div>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="card">
+        <div class="card-head"><h2>Figuras</h2><span class="hint" id="elCount"></span></div>
+        <div class="card-body">
+          <p class="hint">Relleno vacía el área · Contorno sigue la orilla · Invertir graba la orilla exterior y vacía los huecos · Línea sigue un trazo por su centro.</p>
+          <div class="els" id="els"></div>
+          <div class="seg" id="allModes"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2 id="txtTitle">Agregar texto</h2></div>
+        <div class="card-body">
+          <div class="params">
+            <label class="full">Texto<input type="text" id="tText" value="LADO B" maxlength="80"></label>
+            <label class="full">Estilo de letra<select id="tFont"></select></label>
+            <label>Altura de mayúscula (mm)<input type="number" id="tH" value="6" min="1" step="0.5"></label>
+            <label>Espaciado (%)<input type="number" id="tSp" value="0" min="-30" max="100" step="5"></label>
+            <label>Centro X (mm)<input type="number" id="tX" value="45" step="0.5"></label>
+            <label>Centro Y (mm)<input type="number" id="tY" value="8" step="0.5"></label>
+          </div>
+          <div class="row2"><button class="primary" id="tAdd" type="button">Agregar a la pieza</button><button id="tDel" type="button" hidden>Eliminar texto</button><button id="tNew" type="button" hidden>Nuevo texto</button></div>
+          <p class="hint">Con un texto seleccionado, estos campos lo editan. También puedes arrastrarlo en la vista previa.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>Parámetros</h2></div>
+        <div class="card-body">
+          <div class="params">
+            <label>Pieza ancho (mm)<input type="number" id="pw" value="90" min="5" step="1"></label>
+            <label>Pieza alto (mm)<input type="number" id="ph" value="50" min="5" step="1"></label>
+            <label class="full">Tamaño del dibujo<select id="fit"><option value="fill">Ajustar a la pieza (con margen)</option><option value="native">Escala 1:1 (unidades del SVG = mm)</option></select></label>
+            <label>Margen del dibujo (mm)<input type="number" id="margin" value="3" min="0" step="0.5"></label>
+            <label>Profundidad (mm)<input type="number" id="depth" value="0.1" min="0.01" step="0.05"></label>
+            <label>Herramienta<select id="ttype"><option value="ball">Ball mill</option><option value="flat">Fresa plana</option><option value="v">V-bit</option></select></label>
+            <label>Diámetro (mm)<input type="number" id="tdia" value="3.175" min="0.1" step="0.025"></label>
+            <label id="vAngLbl" hidden>Ángulo del V-bit (°)<input type="number" id="vang" value="60" min="10" max="150" step="5"></label>
+            <label id="vTipLbl" hidden>Punta del V-bit (mm)<input type="number" id="vtip" value="0.1" min="0" step="0.05"></label>
+            <div class="eff full" id="eff"></div>
+            <label>Número de herramienta<input type="number" id="tnum" value="3" min="1" step="1"></label>
+            <label>Velocidad husillo (rpm)<input type="number" id="rpm" value="2200" min="0" step="100"></label>
+            <label>Avance en Z (mm/min)<input type="number" id="fz" value="60" min="1" step="5"></label>
+            <label>Avance en X-Y (mm/min)<input type="number" id="fxy" value="130" min="1" step="5"></label>
+            <label>Retracción Z (mm)<input type="number" id="retract" value="3" min="0.5" step="0.5"></label>
+            <label>Profundidad por pasada (mm)<input type="number" id="stepdown" value="0.2" min="0.01" step="0.05"></label>
+            <label>Paso de vaciado (%)<input type="number" id="stepover" value="45" min="10" max="90" step="5"></label>
+            <label>Ignorar manchas menores a (mm²)<input type="number" id="speck" value="0.5" min="0" step="0.1"></label>
+          </div>
+          <details>
+            <summary>Formato del código</summary>
+            <div class="params" style="margin-top:8px">
+              <label>Controlador<select id="dialect"><option value="fanuc">Fanuc / Haas</option><option value="grbl">GRBL</option></select></label>
+              <label>Decimales<select id="dec"><option>1</option><option selected>2</option><option>3</option></select></label>
+              <label>Tolerancia de curvas (mm)<input type="number" id="tol" value="0.05" min="0.005" step="0.01"></label>
+              <label>Número de programa<input type="number" id="prog" value="1" min="1" step="1"></label>
+              <label class="full" style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="arcs" checked> Convertir curvas a arcos G02/G03 (con 2 o 3 decimales)</label>
+            </div>
+          </details>
+          <div id="imgOpts" hidden>
+            <label class="hint" for="thr">Umbral de la imagen: <b id="thrVal">128</b> (más alto toma grises más claros como dibujo)</label>
+            <input type="range" id="thr" min="20" max="235" value="128">
+          </div>
+          <p class="hint err" id="loadErr" role="alert"></p>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div id="svghost" style="position:absolute;left:-20000px;top:0;width:1000px;height:1000px;overflow:hidden;pointer-events:none" aria-hidden="true"></div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
