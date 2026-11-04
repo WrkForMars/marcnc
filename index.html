@@ -3,60 +3,93 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Trazo CNC</title>
+<title>GrabaCNC</title>
 <meta name="description" content="Convierte SVG e imágenes en código G y M para grabado CNC, con modo de corte por figura y simulación.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@600&display=swap">
+<link rel="icon" type="image/svg+xml" href="./icon.svg">
+<script>
+  // tema elegido antes de pintar, para que no parpadee
+  try { const t = localStorage.getItem('grabacnc:tema'); if (t) document.documentElement.dataset.theme = t; } catch {}
+</script>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div>
-      <h1>Trazo <span>CNC</span></h1>
-      <p class="tag">Convierte un SVG o una imagen con fondo blanco en código G y M para grabado. Toca cada figura en la vista previa para elegir cómo se corta, y arrastra los textos para acomodarlos.</p>
-    </div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-open" viewBox="0 0 24 24"><path d="M4 20h16M12 4v12M7 9l5-5 5 5"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M4 20h16M12 4v12M7 11l5 5 5-5"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h9"/></symbol>
+  <symbol id="i-theme" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 0 0 16z" fill="currentColor"/></symbol>
+  <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4"/></symbol>
+</svg>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand"><img src="./icon.svg" alt="" width="32" height="32"><span>Graba<b>CNC</b></span></div>
     <div class="actions">
-      <label class="filebtn">Cargar SVG o imagen<input type="file" id="file" accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp"></label>
-      <button id="demo" type="button">Ejemplo</button>
-      <button id="clear" type="button">Pieza vacía</button>
+      <label class="btn" title="Abrir archivo (Ctrl+O)"><svg class="i"><use href="#i-open"/></svg><span>Abrir<span class="label"> SVG o imagen</span></span><input type="file" id="file" accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp"></label>
+      <button id="demo" type="button" class="ghost">Ejemplo</button>
+      <button id="clear" type="button" class="ghost">Pieza vacía</button>
+      <button id="theme" type="button" class="icon ghost" aria-label="Cambiar entre tema claro y oscuro" title="Tema claro u oscuro"><svg class="i"><use href="#i-theme"/></svg></button>
     </div>
-  </header>
+  </div>
+</header>
+
+<main class="wrap">
+  <p class="lede">Abre un SVG o una imagen con fondo blanco (o arrástrala a la vista previa), elige cómo se corta cada figura y guarda el código G y M.</p>
 
   <div class="grid">
     <div class="col">
-      <section class="card">
-        <div class="card-head"><h2>Vista previa del grabado</h2>
-          <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted)"><input type="checkbox" id="showPath"> Ver recorrido de la herramienta</label>
+      <section class="card" aria-labelledby="hPrev">
+        <div class="card-head"><h2 id="hPrev"><span class="step">1</span>Vista previa</h2>
+          <label class="check"><input type="checkbox" id="showPath"> Ver recorrido</label>
         </div>
-        <div class="stage"><canvas id="cv" width="900" height="500" aria-label="Vista previa de la pieza con el grabado simulado"></canvas><div class="busy" id="busy" hidden><span id="busyText">Procesando…</span></div></div>
+        <div class="stage" id="stage">
+          <canvas id="cv" width="900" height="500" aria-label="Vista previa de la pieza con el grabado simulado"></canvas>
+          <div class="busy" id="busy" hidden><span id="busyText">Procesando…</span></div>
+          <div class="drop" id="drop" hidden><svg class="i"><use href="#i-open"/></svg>Suelta el archivo para abrirlo</div>
+        </div>
         <div class="legend">
-          <span><i style="background:var(--cut)"></i>Zona grabada (ancho real de la herramienta)</span>
+          <span><i style="background:var(--cut)"></i>Grabado con el ancho real de la herramienta</span>
           <span><i style="background:var(--accent)"></i>Seleccionado</span>
           <span><i style="border:1px dashed var(--muted)"></i>Omitido</span>
         </div>
         <div class="card-body" style="padding-top:0"><div class="stats" id="stats"></div><div id="warns"></div></div>
       </section>
 
-      <section class="card">
-        <div class="card-head"><h2>Código G y M</h2>
-          <div class="actions"><button id="copy" type="button">Copiar</button><button class="primary" id="save" type="button">Descargar .txt</button></div>
+      <section class="card" aria-labelledby="hCode">
+        <div class="card-head"><h2 id="hCode"><span class="step">3</span>Código G y M</h2>
+          <div class="actions">
+            <button id="copy" type="button"><svg class="i"><use href="#i-copy"/></svg>Copiar</button>
+            <button class="primary" id="save" type="button" title="Guardar (Ctrl+S)"><svg class="i"><use href="#i-save"/></svg>Guardar código</button>
+          </div>
         </div>
         <div class="card-body"><pre class="code" id="code"></pre><div class="toast" id="toast" role="status"></div></div>
       </section>
     </div>
 
     <div class="col">
-      <section class="card">
-        <div class="card-head"><h2>Figuras</h2><span class="hint" id="elCount"></span></div>
+      <section class="card" id="imgOpts" hidden aria-labelledby="hImg">
+        <div class="card-head"><h2 id="hImg">Imagen</h2></div>
         <div class="card-body">
-          <p class="hint">Relleno vacía el área · Contorno sigue la orilla · Invertir graba la orilla exterior y vacía los huecos · Línea sigue un trazo por su centro.</p>
-          <div class="els" id="els"></div>
-          <div class="seg" id="allModes"></div>
+          <div class="params">
+            <label class="full">Vectorizar como<select id="imgHow"><option value="area">Áreas (Relleno, Contorno o Invertir)</option><option value="center">Línea central (cada trazo en una pasada)</option></select></label>
+          </div>
+          <p class="hint">Línea central sirve para trazos delgados y letras a mano: la herramienta pasa una vez por el centro de cada trazo.</p>
+          <div class="params">
+            <label class="full" for="thr">Umbral: <b id="thrVal">128</b> (más alto toma grises más claros como dibujo)<input type="range" id="thr" min="20" max="235" value="128"></label>
+          </div>
         </div>
       </section>
 
-      <section class="card">
+      <section class="card" aria-labelledby="hEls">
+        <div class="card-head"><h2 id="hEls"><span class="step">2</span>Figuras</h2><span class="hint" id="elCount"></span></div>
+        <div class="card-body">
+          <p class="hint">Relleno vacía el área · Contorno sigue la orilla · Invertir graba la orilla y vacía los huecos · Línea sigue el trazo por su centro.</p>
+          <div class="els" id="els"></div>
+          <div class="seg" id="allModes"></div>
+          <p class="hint err" id="loadErr" role="alert"></p>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="txtTitle">
         <div class="card-head"><h2 id="txtTitle">Agregar texto</h2></div>
         <div class="card-body">
           <div class="params">
@@ -67,56 +100,58 @@
             <label>Centro X (mm)<input type="number" id="tX" value="45" step="0.5"></label>
             <label>Centro Y (mm)<input type="number" id="tY" value="8" step="0.5"></label>
           </div>
-          <div class="row2"><button class="primary" id="tAdd" type="button">Agregar a la pieza</button><button id="tDel" type="button" hidden>Eliminar texto</button><button id="tNew" type="button" hidden>Nuevo texto</button></div>
+          <div class="row2"><button id="tAdd" type="button">Agregar a la pieza</button><button id="tDel" type="button" hidden>Eliminar texto</button><button id="tNew" type="button" class="ghost" hidden>Nuevo texto</button></div>
           <p class="hint">Con un texto seleccionado, estos campos lo editan. También puedes arrastrarlo en la vista previa.</p>
         </div>
       </section>
 
-      <section class="card">
-        <div class="card-head"><h2>Parámetros</h2></div>
+      <section class="card" aria-labelledby="hPar">
+        <div class="card-head"><h2 id="hPar">Pieza y herramienta</h2>
+          <button id="reset" type="button" class="ghost" title="Volver a los valores de la tarea de referencia"><svg class="i"><use href="#i-reset"/></svg>Valores iniciales</button>
+        </div>
         <div class="card-body">
           <div class="params">
-            <label>Pieza ancho (mm)<input type="number" id="pw" value="90" min="5" step="1"></label>
-            <label>Pieza alto (mm)<input type="number" id="ph" value="50" min="5" step="1"></label>
+            <h3>Pieza</h3>
+            <label>Ancho (mm)<input type="number" id="pw" value="90" min="5" step="1"></label>
+            <label>Alto (mm)<input type="number" id="ph" value="50" min="5" step="1"></label>
             <label class="full">Tamaño del dibujo<select id="fit"><option value="fill">Ajustar a la pieza (con margen)</option><option value="native">Escala 1:1 (unidades del SVG = mm)</option></select></label>
-            <label>Margen del dibujo (mm)<input type="number" id="margin" value="3" min="0" step="0.5"></label>
-            <label>Profundidad (mm)<input type="number" id="depth" value="0.1" min="0.01" step="0.05"></label>
-            <label>Herramienta<select id="ttype"><option value="ball">Ball mill</option><option value="flat">Fresa plana</option><option value="v">V-bit</option></select></label>
+            <label>Margen (mm)<input type="number" id="margin" value="3" min="0" step="0.5"></label>
+            <label>Ignorar manchas &lt; (mm²)<input type="number" id="speck" value="0.5" min="0" step="0.1"></label>
+
+            <h3>Herramienta</h3>
+            <label>Tipo<select id="ttype"><option value="ball">Ball mill</option><option value="flat">Fresa plana</option><option value="v">V-bit</option></select></label>
             <label>Diámetro (mm)<input type="number" id="tdia" value="3.175" min="0.1" step="0.025"></label>
             <label id="vAngLbl" hidden>Ángulo del V-bit (°)<input type="number" id="vang" value="60" min="10" max="150" step="5"></label>
             <label id="vTipLbl" hidden>Punta del V-bit (mm)<input type="number" id="vtip" value="0.1" min="0" step="0.05"></label>
+            <label>Número (T)<input type="number" id="tnum" value="3" min="1" step="1"></label>
+            <label>Profundidad (mm)<input type="number" id="depth" value="0.1" min="0.01" step="0.05"></label>
             <div class="eff full" id="eff"></div>
-            <label>Número de herramienta<input type="number" id="tnum" value="3" min="1" step="1"></label>
-            <label>Velocidad husillo (rpm)<input type="number" id="rpm" value="2200" min="0" step="100"></label>
+
+            <h3>Avances</h3>
+            <label>Husillo (rpm)<input type="number" id="rpm" value="2200" min="0" step="100"></label>
+            <label>Retracción Z (mm)<input type="number" id="retract" value="3" min="0.5" step="0.5"></label>
             <label>Avance en Z (mm/min)<input type="number" id="fz" value="60" min="1" step="5"></label>
             <label>Avance en X-Y (mm/min)<input type="number" id="fxy" value="130" min="1" step="5"></label>
-            <label>Retracción Z (mm)<input type="number" id="retract" value="3" min="0.5" step="0.5"></label>
-            <label>Profundidad por pasada (mm)<input type="number" id="stepdown" value="0.2" min="0.01" step="0.05"></label>
+            <label>Prof. por pasada (mm)<input type="number" id="stepdown" value="0.2" min="0.01" step="0.05"></label>
             <label>Paso de vaciado (%)<input type="number" id="stepover" value="45" min="10" max="90" step="5"></label>
-            <label>Ignorar manchas menores a (mm²)<input type="number" id="speck" value="0.5" min="0" step="0.1"></label>
           </div>
-          <details>
-            <summary>Formato del código</summary>
-            <div class="params" style="margin-top:8px">
-              <label>Controlador<select id="dialect"><option value="fanuc">Fanuc / Haas</option><option value="grbl">GRBL</option></select></label>
-              <label>Decimales<select id="dec"><option>1</option><option selected>2</option><option>3</option></select></label>
-              <label>Tolerancia de curvas (mm)<input type="number" id="tol" value="0.05" min="0.005" step="0.01"></label>
-              <label>Número de programa<input type="number" id="prog" value="1" min="1" step="1"></label>
-              <label class="full" style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="arcs" checked> Convertir curvas a arcos G02/G03 (con 2 o 3 decimales)</label>
-            </div>
-          </details>
-          <div id="imgOpts" hidden>
-            <div class="params" style="margin-top:12px"><label class="full">Vectorizar la imagen como<select id="imgHow"><option value="area">Áreas (Relleno, Contorno o Invertir)</option><option value="center">Línea central (cada trazo en una pasada)</option></select></label></div>
-            <p class="hint">Línea central sirve para dibujos de trazos delgados y letras a mano: la herramienta pasa una vez por el centro de cada trazo.</p>
-            <label class="hint" for="thr">Umbral de la imagen: <b id="thrVal">128</b> (más alto toma grises más claros como dibujo)</label>
-            <input type="range" id="thr" min="20" max="235" value="128">
-          </div>
-          <p class="hint err" id="loadErr" role="alert"></p>
         </div>
+        <details class="more">
+          <summary>Formato del código</summary>
+          <div class="params">
+            <label>Controlador<select id="dialect"><option value="fanuc">Fanuc / Haas</option><option value="grbl">GRBL</option></select></label>
+            <label>Decimales<select id="dec"><option>1</option><option selected>2</option><option>3</option></select></label>
+            <label>Tolerancia de curvas (mm)<input type="number" id="tol" value="0.05" min="0.005" step="0.01"></label>
+            <label>Número de programa<input type="number" id="prog" value="1" min="1" step="1"></label>
+            <label class="full check"><input type="checkbox" id="arcs" checked> Convertir curvas a arcos G02/G03</label>
+          </div>
+        </details>
       </section>
     </div>
   </div>
-</div>
+</main>
+
+<div class="mobilebar"><button class="primary" id="save2" type="button"><svg class="i"><use href="#i-save"/></svg>Guardar código</button></div>
 
 <div id="svghost" style="position:absolute;left:-20000px;top:0;width:1000px;height:1000px;overflow:hidden;pointer-events:none" aria-hidden="true"></div>
 <script type="module" src="/src/main.js"></script>

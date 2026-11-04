@@ -4,6 +4,7 @@ import { buildDesign } from './design.js';
 import { DEMO_SVG, DEMO_TEXT } from './demo.js';
 import { generateGcode } from './cam/gcode.js';
 import { computePlan } from './cam/plan.js';
+import { isDesktop, saveTextDesktop } from './desktop.js';
 import { toolGeometry } from './cam/tool.js';
 import { parseSVG } from './input/svg.js';
 import { traceImage } from './input/image.js';
@@ -16,7 +17,7 @@ const tick = () => new Promise(r => setTimeout(r, 0));
 
 const state = {
   raw: null, rawId: 0, design: [], designNote: '', texts: [], elements: [],
-  selected: -1, lastImage: null, gcode: '', plan: null, gen: 0, textSeq: 0,
+  selected: -1, lastImage: null, fileName: '', gcode: '', plan: null, gen: 0, textSeq: 0,
   cache: new Map(),
 };
 const preview = createPreview($('cv'));
@@ -165,10 +166,10 @@ function loadImage() {
 }
 
 /* ---------- archivos ---------- */
-$('file').addEventListener('change', ev => {
-  const f = ev.target.files[0];
-  if (!f) return;
+function openFile(f) {
   const isSvg = /svg/i.test(f.type) || /\.svg$/i.test(f.name);
+  if (!isSvg && !/^image\//.test(f.type)) { $('loadErr').textContent = 'Ese archivo no es un SVG ni una imagen (PNG, JPG o WEBP).'; return; }
+  state.fileName = f.name.replace(/\.[^.]+$/, '');
   const rd = new FileReader();
   if (isSvg) {
     rd.onload = () => { state.lastImage = null; const txt = String(rd.result); loadShapes(() => parseSVG(txt, $('svghost')), false); };
@@ -182,11 +183,27 @@ $('file').addEventListener('change', ev => {
     };
     rd.readAsDataURL(f);
   }
+}
+$('file').addEventListener('change', ev => {
+  const f = ev.target.files[0];
+  if (f) openFile(f);
   ev.target.value = '';
 });
-$('demo').addEventListener('click', () => { state.lastImage = null; $('fit').value = 'native'; loadShapes(() => parseSVG(DEMO_SVG, $('svghost')), false); });
+// arrastrar y soltar en cualquier parte de la ventana
+let dragDepth = 0;
+const hasFiles = ev => [...(ev.dataTransfer?.types || [])].includes('Files');
+document.addEventListener('dragenter', ev => { if (!hasFiles(ev)) return; ev.preventDefault(); dragDepth++; $('drop').hidden = false; });
+document.addEventListener('dragover', ev => { if (hasFiles(ev)) ev.preventDefault(); });
+document.addEventListener('dragleave', ev => { if (hasFiles(ev) && --dragDepth <= 0) { dragDepth = 0; $('drop').hidden = true; } });
+document.addEventListener('drop', ev => {
+  if (!hasFiles(ev)) return;
+  ev.preventDefault(); dragDepth = 0; $('drop').hidden = true;
+  const f = ev.dataTransfer.files[0];
+  if (f) openFile(f);
+});
+$('demo').addEventListener('click', () => { state.lastImage = null; state.fileName = ''; $('fit').value = 'native'; loadShapes(() => parseSVG(DEMO_SVG, $('svghost')), false); });
 $('clear').addEventListener('click', () => {
-  Object.assign(state, { raw: null, design: [], texts: [], lastImage: null, designNote: '' });
+  Object.assign(state, { raw: null, design: [], texts: [], lastImage: null, designNote: '', fileName: '' });
   $('imgOpts').hidden = true; assemble(); select(-1); refresh();
 });
 $('thr').addEventListener('input', () => { $('thrVal').textContent = $('thr').value; });
@@ -198,6 +215,40 @@ $('imgHow').addEventListener('change', loadImage);
 ['depth', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'rpm', 'fz', 'fxy', 'retract', 'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs']
   .forEach(id => $(id).addEventListener('change', () => { $('vAngLbl').hidden = $('vTipLbl').hidden = $('ttype').value !== 'v'; refresh(); }));
 $('showPath').addEventListener('change', () => drawOnly());
+
+// los parámetros se recuerdan entre sesiones (cada taller tiene su máquina y su herramienta)
+const SAVED = ['pw', 'ph', 'margin', 'speck', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'depth', 'rpm', 'retract', 'fz', 'fxy',
+  'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs', 'imgHow', 'thr'];
+const STORE = 'grabacnc:parametros';
+const getVal = id => ($(id).type === 'checkbox' ? $(id).checked : $(id).value);
+const setVal = (id, v) => { if ($(id).type === 'checkbox') $(id).checked = !!v; else $(id).value = v; };
+const DEFAULTS = Object.fromEntries(SAVED.map(id => [id, getVal(id)]));
+const syncLabels = () => { $('vAngLbl').hidden = $('vTipLbl').hidden = $('ttype').value !== 'v'; $('thrVal').textContent = $('thr').value; };
+function storeParams() {
+  try { localStorage.setItem(STORE, JSON.stringify(Object.fromEntries(SAVED.map(id => [id, getVal(id)])))); } catch { /* sin almacenamiento: no pasa nada */ }
+}
+function restoreParams() {
+  try { const o = JSON.parse(localStorage.getItem(STORE) || '{}'); SAVED.forEach(id => { if (id in o) setVal(id, o[id]); }); } catch { /* valores del HTML */ }
+  syncLabels();
+}
+SAVED.forEach(id => $(id).addEventListener('change', storeParams));
+$('reset').addEventListener('click', () => {
+  SAVED.forEach(id => setVal(id, DEFAULTS[id]));
+  storeParams(); syncLabels();
+  if (state.lastImage) { loadImage(); return; }
+  rebuildDesign(); assemble(); refresh();
+  $('toast').textContent = 'Parámetros de la tarea de referencia restablecidos.';
+});
+
+/* ---------- tema ---------- */
+$('theme').addEventListener('click', () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = dark ? 'light' : 'dark';
+  try { localStorage.setItem('grabacnc:tema', root.dataset.theme); } catch { /* solo esta sesión */ }
+  drawOnly();
+});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => drawOnly());
 
 /* ---------- textos ---------- */
 function textFromForm(t) {
@@ -282,26 +333,40 @@ $('copy').addEventListener('click', () => {
     () => { const r = document.createRange(); r.selectNodeContents($('code')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); t.textContent = 'Selecciona y copia el texto marcado.'; },
   );
 });
-$('save').addEventListener('click', async () => {
+async function saveCode() {
   const t = $('toast');
-  if (!state.gcode) return;
+  if (!state.gcode) { t.textContent = 'Todavía no hay código.'; return; }
+  const name = `${(state.fileName || 'grabado').replace(/[^\w\-]+/g, '_')}_GM.txt`;
+  if (isDesktop()) {
+    try { const ruta = await saveTextDesktop(name, state.gcode); t.textContent = ruta ? `Guardado en ${ruta}` : 'Guardado cancelado.'; }
+    catch (e) { t.textContent = ''; $('loadErr').textContent = `No se pudo guardar: ${e?.message || e}`; }
+    return;
+  }
   // dentro de un Artifact de Claude las descargas pasan por su capacidad; fuera, un enlace normal
   const dl = window.claude?.use ? await window.claude.use('downloads').catch(() => null) : null;
   if (dl) {
-    try { await dl.save({ filename: 'codigo_GM_trazo.txt', data: state.gcode }); t.textContent = 'Archivo guardado.'; }
+    try { await dl.save({ filename: name, data: state.gcode }); t.textContent = 'Archivo guardado.'; }
     catch (e) { t.textContent = e?.code === 'declined' ? 'Descarga cancelada.' : 'No se pudo descargar aquí; usa Copiar.'; }
     return;
   }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([state.gcode], { type: 'text/plain' }));
-  a.download = 'codigo_GM_trazo.txt';
+  a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  t.textContent = 'Archivo descargado.';
+  t.textContent = `Descargado como ${name}.`;
+}
+$('save').addEventListener('click', saveCode);
+$('save2').addEventListener('click', saveCode);
+document.addEventListener('keydown', ev => {
+  if (!(ev.ctrlKey || ev.metaKey) || ev.altKey || ev.shiftKey) return;
+  const k = ev.key.toLowerCase();
+  if (k === 's') { ev.preventDefault(); saveCode(); } else if (k === 'o') { ev.preventDefault(); $('file').click(); }
 });
 
 /* ---------- inicio ---------- */
 (async () => {
+  restoreParams();
   $('fit').value = 'native';
   await loadShapes(() => parseSVG(DEMO_SVG, $('svghost')), false);
   Object.entries(DEMO_TEXT).forEach(([k, v]) => { const id = { text: 'tText', font: 'tFont', h: 'tH', sp: 'tSp', x: 'tX', y: 'tY' }[k]; $(id).value = v; });

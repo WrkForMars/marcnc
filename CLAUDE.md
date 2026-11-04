@@ -1,8 +1,9 @@
-# Trazo CNC
+# GrabaCNC
 
 App web que convierte un SVG o una imagen con fondo blanco en código G y M para grabado CNC.
 Cada figura detectada tiene su propio modo de corte (Relleno, Contorno, Invertir, Línea, Omitir),
 se pueden agregar textos y la vista previa simula el grabado con el ancho real de la herramienta.
+Se publica como web (GitHub Pages) y como .exe de Windows (Tauri, `src-tauri/`).
 Público: estudiantes de ingeniería (ITL/TecNM) y talleres escolares. Toda la interfaz va en español.
 
 ## Comandos
@@ -11,14 +12,18 @@ Público: estudiantes de ingeniería (ITL/TecNM) y talleres escolares. Toda la i
 - `npm test` — pruebas (Vitest). Deben pasar antes de cada commit.
 - `npm run build` — build de producción en `dist/`
 - `npm run preview` — sirve `dist/` para probar el build
+- `npm run escritorio` / `npm run exe` — app de escritorio con Tauri (requiere Rust); el .exe de Windows lo compila CI
 
 ## Arquitectura
 
-Todo corre en el navegador; no hay backend.
+Todo corre en el navegador; no hay backend. El .exe es la misma web dentro de WebView2: lo único nativo es
+el diálogo de "Guardar como" (`src/desktop.js` → comando `guardar_texto` en `src-tauri/src/main.rs`).
+Las fuentes van empaquetadas (`@fontsource`) para que funcione sin internet; no cargar nada de CDNs.
 
 ```
 src/
-  main.js            interfaz: estado, eventos, ciclo de cálculo (refresh)
+  main.js            interfaz: estado, eventos, ciclo de cálculo (refresh), parámetros recordados
+  desktop.js         puente con Tauri (solo se usa dentro del .exe)
   model.js           tipos del modelo (Element, TextItem), MODES, MODE_NAME
   design.js          dibujo cargado → elementos en mm sobre la pieza
   demo.js            dibujo y texto de ejemplo
@@ -78,3 +83,4 @@ es un cambio de comportamiento que hay que justificar.
 3. Mover vectorizado y vaciado a un Web Worker.
 4. Simulación animada del recorrido.
 5. PWA instalable (manifest + service worker).
+6. Firmar el .exe (certificado de código) para que Windows no muestre la advertencia de SmartScreen.
