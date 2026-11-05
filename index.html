@@ -54,6 +54,7 @@
     <span class="brand-name">Mar<b>CNC</b></span>
     <span class="brand-tag">Del dibujo a la máquina</span>
   </div>
+  <label class="doc"><span class="sr-only">Nombre del proyecto</span><input type="text" id="docName" class="doc-name" placeholder="Sin título" maxlength="60" spellcheck="false" autocomplete="off"></label>
   <div class="actions">
     <button id="clear" type="button" class="ghost" title="Pieza vacía"><svg class="i"><use href="#i-new"/></svg><span class="lbl">Nuevo</span></button>
     <label class="btn ghost" title="Abrir SVG o imagen (Ctrl+O)"><svg class="i"><use href="#i-open"/></svg><span class="lbl">Abrir</span><input type="file" id="file" accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp"></label>
@@ -89,11 +90,14 @@
 
   <!-- centro de atención: la pieza -->
   <main class="work">
-    <div class="jobbar" aria-label="Parámetros del trabajo">
-      <button type="button" class="chip-btn" id="jobPiece" title="Pieza y tamaño del dibujo"><svg class="i"><use href="#i-plate"/></svg><span id="jobPieceTxt">Pieza</span></button>
-      <button type="button" class="chip-btn" id="jobTool" title="Herramienta y profundidad"><svg class="i"><use href="#i-bit"/></svg><span id="jobToolTxt">Herramienta</span></button>
-      <button type="button" class="chip-btn" id="jobFeeds" title="Velocidades y controlador"><svg class="i"><use href="#i-speed"/></svg><span id="jobFeedsTxt">Velocidades</span></button>
-      <label class="check jobbar-end"><input type="checkbox" id="showPath"> Recorrido</label>
+    <div class="specbar" aria-label="Parámetros del trabajo">
+      <div class="specs">
+        <button type="button" class="spec" id="jobPiece" title="Cambiar la pieza y el tamaño del dibujo"><span class="spec-k"><svg class="i"><use href="#i-plate"/></svg>Pieza</span><span class="spec-v" id="jobPieceTxt">—</span></button>
+        <button type="button" class="spec" id="jobTool" title="Cambiar la herramienta y la profundidad"><span class="spec-k"><svg class="i"><use href="#i-bit"/></svg>Herramienta</span><span class="spec-v" id="jobToolTxt">—</span></button>
+        <button type="button" class="spec" id="jobLine" title="Ancho que deja la herramienta a esa profundidad"><span class="spec-k">Línea</span><span class="spec-v strong" id="jobLineTxt">—</span></button>
+        <button type="button" class="spec" id="jobFeeds" title="Ajustes de máquina"><span class="spec-k"><svg class="i"><use href="#i-speed"/></svg>Máquina</span><span class="spec-v" id="jobFeedsTxt">—</span></button>
+      </div>
+      <label class="check spec-end"><input type="checkbox" id="showPath"> Ver recorrido</label>
     </div>
 
     <div class="sketchbar" id="sketchbar" hidden>
@@ -122,6 +126,7 @@
       <div class="drop" id="drop" hidden><svg class="i"><use href="#i-open"/></svg>Suelta el archivo para abrirlo</div>
     </div>
 
+    <div class="prodbar">
     <div class="playbar" role="group" aria-label="Simulación del recorrido">
       <button type="button" id="simPlay" class="primary-soft"><svg class="i"><use href="#i-play"/></svg><span>Simular</span></button>
       <button type="button" id="simStop" class="icon" aria-label="Terminar la simulación" title="Terminar la simulación" hidden><svg class="i"><use href="#i-stop"/></svg></button>
@@ -130,6 +135,7 @@
       <select id="simSpeed" aria-label="Velocidad de la simulación"><option value="1">1×</option><option value="5">5×</option><option value="20" selected>20×</option><option value="100">100×</option><option value="500">500×</option></select>
     </div>
     <div class="stats" id="stats" aria-label="Resumen del programa"></div>
+    </div>
     <div id="warns"></div>
   </main>
 
@@ -204,14 +210,16 @@
         <p class="hint">También puedes arrastrar el texto en la pieza.</p>
       </div>
 
-      <!-- archivo cargado -->
-      <div class="panel" id="svgOpts" hidden>
-        <div class="panel-head"><h3>SVG</h3></div>
-        <label class="field" for="svgQ">Calidad de curvas: <b id="svgQVal">Normal</b><input type="range" id="svgQ" min="1" max="5" step="1" value="3" list="svgQMarks"></label>
-        <datalist id="svgQMarks"><option value="1"></option><option value="2"></option><option value="3"></option><option value="4"></option><option value="5"></option></datalist>
-        <p class="hint">Más calidad sigue las curvas con más puntos. Borrador sirve para revisar rápido un dibujo pesado.</p>
+      <!-- lista de figuras -->
+      <div class="panel panel-list">
+        <div class="panel-head"><h3>En la pieza</h3><button type="button" id="textTool2" class="ghost"><svg class="i"><use href="#i-text"/></svg>Texto</button></div>
+        <div class="els" id="els"></div>
+        <div id="allModes"></div>
+        <p class="hint">Relleno vacía el área · Contorno sigue la orilla · Invertir graba la orilla y vacía los huecos · Línea sigue el trazo.</p>
+        <p class="hint err" id="loadErr" role="alert"></p>
       </div>
 
+      <!-- archivo cargado: debajo, es lo que menos se toca -->
       <div class="panel" id="imgOpts" hidden>
         <div class="panel-head"><h3>Imagen</h3>
           <div class="seg" role="group" aria-label="Qué mostrar">
@@ -242,13 +250,13 @@
         </details>
       </div>
 
-      <!-- lista de figuras -->
-      <div class="panel panel-list">
-        <div class="panel-head"><h3>En la pieza</h3><button type="button" id="textTool2" class="ghost"><svg class="i"><use href="#i-text"/></svg>Texto</button></div>
-        <div class="els" id="els"></div>
-        <div id="allModes"></div>
-        <p class="hint">Relleno vacía el área · Contorno sigue la orilla · Invertir graba la orilla y vacía los huecos · Línea sigue el trazo.</p>
-        <p class="hint err" id="loadErr" role="alert"></p>
+      <div class="panel" id="svgOpts" hidden>
+        <details class="more">
+          <summary>Archivo SVG · calidad de curvas</summary>
+          <label class="field" for="svgQ">Calidad de curvas: <b id="svgQVal">Normal</b><input type="range" id="svgQ" min="1" max="5" step="1" value="3" list="svgQMarks"></label>
+          <datalist id="svgQMarks"><option value="1"></option><option value="2"></option><option value="3"></option><option value="4"></option><option value="5"></option></datalist>
+          <p class="hint">Más calidad sigue las curvas con más puntos. Borrador sirve para revisar rápido un dibujo pesado.</p>
+        </details>
       </div>
     </section>
 
@@ -271,6 +279,7 @@
         </div>
         <div class="row2"><button id="copy" type="button"><svg class="i"><use href="#i-copy"/></svg>Copiar código</button></div>
       </div>
+
     </section>
   </aside>
 </div>

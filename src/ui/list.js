@@ -19,6 +19,7 @@ export function renderList(box, allBox, s) {
   elements.forEach((e, i) => {
     const row = document.createElement('div');
     row.className = 'el' + (i === selected ? ' sel' : '');
+    row.style.setProperty('--mc', `var(${MODE_COLOR[e.mode]})`); // franja del color de su modo
     row.tabIndex = 0;
     row.dataset.i = String(i);
 
@@ -62,7 +63,7 @@ export function renderList(box, allBox, s) {
       b.type = 'button';
       b.textContent = label;
       b.setAttribute('aria-pressed', String(e.mode === m));
-      if (e.mode === m) b.style.background = `var(${MODE_COLOR[m]})`;
+      b.style.setProperty('--mc', `var(${MODE_COLOR[m]})`);
       b.addEventListener('click', ev => { ev.stopPropagation(); onMode(i, m); });
       seg.append(b);
     });

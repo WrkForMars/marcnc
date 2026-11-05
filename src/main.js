@@ -246,7 +246,7 @@ function loadImage() {
 function openFile(f) {
   const isSvg = /svg/i.test(f.type) || /\.svg$/i.test(f.name);
   if (!isSvg && !/^image\//.test(f.type)) { $('loadErr').textContent = 'Ese archivo no es un SVG ni una imagen (PNG, JPG o WEBP).'; return; }
-  state.fileName = f.name.replace(/\.[^.]+$/, '');
+  state.fileName = f.name.replace(/\.[^.]+$/, ''); $('docName').value = state.fileName;
   // el ejemplo se ve a 1:1 porque está dibujado en mm; un archivo propio empieza ajustado a la pieza
   if (state.demoFit && $('fit').value === 'native') $('fit').value = 'fill';
   state.demoFit = false;
@@ -281,9 +281,10 @@ document.addEventListener('drop', ev => {
   const f = ev.dataTransfer.files[0];
   if (f) openFile(f);
 });
-$('demo').addEventListener('click', () => { state.lastImage = null; state.lastSvg = DEMO_SVG; state.fileName = ''; $('fit').value = 'native'; state.demoFit = true; loadSvg(); });
+$('demo').addEventListener('click', () => { state.lastImage = null; state.lastSvg = DEMO_SVG; state.fileName = 'Ejemplo'; $('docName').value = 'Ejemplo'; $('fit').value = 'native'; state.demoFit = true; loadSvg(); });
 $('clear').addEventListener('click', () => {
   Object.assign(state, { raw: null, design: [], texts: [], lastImage: null, lastSvg: '', designNote: '', fileName: '', designSize: [0, 0] });
+  $('docName').value = '';
   syncSize();
   sketch.clear(); // se puede deshacer con Ctrl+Z
   $('imgOpts').hidden = true; $('svgOpts').hidden = true; assemble(); select(-1); refresh();
@@ -481,8 +482,10 @@ function drawOverlay() {
   const w = cv.clientWidth, h = cv.clientHeight;
   if (ov.width !== Math.round(w * dpr) || ov.height !== Math.round(h * dpr)) { ov.width = Math.round(w * dpr); ov.height = Math.round(h * dpr); }
   ov.style.width = w + 'px'; ov.style.height = h + 'px';
-  octx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  octx.clearRect(0, 0, w, h);
+  // misma escala que el lienzo de abajo si cambió de ancho y aún no se redibuja
+  const sc = v.cssW ? w / v.cssW : 1;
+  octx.setTransform(dpr * sc, 0, 0, dpr * sc, 0, 0);
+  octx.clearRect(0, 0, w / sc, h / sc);
   const X = x => v.ox + x * v.k, Y = y => v.oy + (v.H - y) * v.k;
   sketch.draw(octx, X, Y, v.k, v.W, v.H);
   drawCodeHighlight(X, Y, v.k);
@@ -731,7 +734,7 @@ cv.addEventListener('pointerdown', ev => {
   const { mx, my } = evMM(ev);
   const mm = preview.toMM(mx, my);
   const sx = (preview.getView().cssW || cv.clientWidth) / (cv.clientWidth || 1); // lienzo estirado mientras no se redibuja
-  const dh = (sketch.tool === 'select' || sketch.tool === 'dim') && dimAt(state.dimHits, mx * sx, my);
+  const dh = (sketch.tool === 'select' || sketch.tool === 'dim') && dimAt(state.dimHits, mx * sx, my * sx);
   if (dh) { ev.preventDefault(); openDimEdit(dh); return; }
   capture(ev); // también para el recuadro de selección
   if (sketch.down(mm, pickTol(), ev.shiftKey || ev.ctrlKey || ev.metaKey)) {
@@ -861,7 +864,8 @@ function simResize() {
   if (simCv.width !== Math.round(w * dpr) || simCv.height !== Math.round(h * dpr)) {
     simCv.width = Math.round(w * dpr); simCv.height = Math.round(h * dpr); sim.drawnT = 0;
   }
-  sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const v = preview.getView(), sc = v.cssW ? w / v.cssW : 1;
+  sctx.setTransform(dpr * sc, 0, 0, dpr * sc, 0, 0);
 }
 /** Pinta el grabado hecho hasta t; solo agrega lo nuevo desde la última vez (si se regresa, empieza de cero). */
 function simPaint(t) {
@@ -966,7 +970,7 @@ $('sheetForm').addEventListener('submit', async ev => {
   const image = sheetImage({ elements: state.elements, W: p.W, H: p.H, toolWidth: state.plan.tl.w, css });
   $('sheet').innerHTML = sheetHTML({
     info, p, tl: state.plan.tl, g: state.lastG, ex: state.explained, elements: state.elements, image,
-    fileName: `${(state.fileName || 'grabado').replace(/[^\w\-]+/g, '_')}_GM.txt`, withProgram: $('shProgram').checked,
+    fileName: `${safeName(state.fileName)}_GM.txt`, withProgram: $('shProgram').checked,
   });
   // la imagen ya está en memoria; el tope evita quedarse esperando si el navegador no la decodifica (ventana oculta)
   await new Promise(r => { const im = $('sheet').querySelector('img'); if (!im || im.complete) r(); else { im.onload = r; im.onerror = r; setTimeout(r, 1500); } });
@@ -987,7 +991,7 @@ $('copy').addEventListener('click', () => {
 async function saveCode() {
   const t = $('toast');
   if (!state.gcode) { t.textContent = 'Todavía no hay código.'; return; }
-  const name = `${(state.fileName || 'grabado').replace(/[^\w\-]+/g, '_')}_GM.txt`;
+  const name = `${safeName(state.fileName)}_GM.txt`;
   if (isDesktop()) {
     try { const ruta = await saveTextDesktop(name, state.gcode); t.textContent = ruta ? `Guardado en ${ruta}` : 'Guardado cancelado.'; }
     catch (e) { t.textContent = ''; $('loadErr').textContent = `No se pudo guardar: ${e?.message || e}`; }
@@ -1015,7 +1019,12 @@ document.addEventListener('keydown', ev => {
   if (k === 's') { ev.preventDefault(); saveCode(); } else if (k === 'o') { ev.preventDefault(); $('file').click(); }
 });
 
+/** Nombre de archivo a partir del nombre del proyecto: sin acentos ni espacios raros. */
+const safeName = n => (n || 'grabado').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w\-]+/g, '_').replace(/^_+|_+$/g, '') || 'grabado';
 /* ---------- interfaz: pestañas, diálogos, resumen del trabajo ---------- */
+// el nombre del proyecto también nombra lo que se exporta
+$('docName').addEventListener('input', () => { state.fileName = $('docName').value.trim(); });
+$('docName').addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === 'Escape') $('docName').blur(); });
 function showTab(code) {
   $('tabFigBtn').setAttribute('aria-selected', String(!code)); $('tabCodeBtn').setAttribute('aria-selected', String(code));
   $('tabFig').hidden = code; $('tabCode').hidden = !code;
@@ -1029,14 +1038,16 @@ $('simPlay').addEventListener('click', () => showTab(true));
 function jobSummary() {
   const p = params(), tl = toolGeometry(p), n = v => String(+(+v).toFixed(3));
   sketch.setPiece(p.W, p.H);
-  const TOOL = { ball: 'Ball', flat: 'Plana', v: 'V-bit' }[p.toolType];
+  const TOOL = { ball: 'Ball mill', flat: 'Fresa plana', v: 'V-bit' }[p.toolType];
   $('jobPieceTxt').textContent = `${n(p.W)} × ${n(p.H)} mm`;
-  $('jobToolTxt').textContent = `T${p.toolNum} ${TOOL} Ø${n(p.dia)} · ${n(p.depth)} mm → línea ${tl.w.toFixed(2)}`;
-  $('jobFeedsTxt').textContent = `S${p.rpm} · F${p.fxy}/${p.fz} · ${p.dialect === 'fanuc' ? 'Fanuc' : 'GRBL'}`;
+  $('jobToolTxt').textContent = `T${p.toolNum} ${TOOL} Ø${n(p.dia)} · ${n(p.depth)} mm`;
+  $('jobLineTxt').textContent = `${tl.w.toFixed(2)} mm`;
+  $('jobFeedsTxt').textContent = `${p.dialect === 'fanuc' ? 'Fanuc' : 'GRBL'} · S${p.rpm} · F${p.fxy}`;
 }
 const openDlg = (id, focus) => { $(id).showModal(); if (focus) $(focus)?.scrollIntoView({ block: 'start' }); };
 $('jobPiece').addEventListener('click', () => openDlg('jobDlg', 'secPiece'));
 $('jobTool').addEventListener('click', () => openDlg('jobDlg', 'secTool'));
+$('jobLine').addEventListener('click', () => openDlg('jobDlg', 'secTool'));
 $('jobFeeds').addEventListener('click', () => openDlg('setDlg'));
 $('setBtn').addEventListener('click', () => openDlg('setDlg'));
 document.querySelectorAll('#jobDlg input, #jobDlg select, #setDlg input, #setDlg select').forEach(el => el.addEventListener('change', jobSummary));
@@ -1080,7 +1091,7 @@ new MutationObserver(() => { clearTimeout(toastT); if ($('toast').textContent) t
   setTool('select');
   if (sketch.entities.length) { assemble(); state.ready = true; await refresh(); return; } // hay un croquis guardado: se abre ese, sin el ejemplo
   $('fit').value = 'native'; state.demoFit = true;
-  state.lastSvg = DEMO_SVG;
+  state.lastSvg = DEMO_SVG; state.fileName = 'Ejemplo'; $('docName').value = 'Ejemplo';
   await loadShapes(() => parseSVG(DEMO_SVG, $('svghost'), SVG_QUALITY[+$('svgQ').value - 1][0]), false);
   Object.entries(DEMO_TEXT).forEach(([k, v]) => { const id = { text: 'tText', font: 'tFont', h: 'tH', sp: 'tSp', x: 'tX', y: 'tY' }[k]; $(id).value = v; });
   await addText(textFromForm({ id: ++state.textSeq }));

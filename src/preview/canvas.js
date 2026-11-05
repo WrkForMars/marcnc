@@ -24,10 +24,10 @@ export function createPreview(cv) {
   const ctx = cv.getContext('2d');
   let view = { k: 1, ox: 0, oy: 0, W: 90, H: 50 };
 
-  // si el lienzo cambió de ancho y todavía no se vuelve a dibujar, la imagen está estirada en X: se corrige aquí
+  // si el lienzo cambió de ancho y todavía no se vuelve a dibujar, se ve escalado (sin deformarse): se corrige aquí
   const toMM = (mx, my) => {
-    const sx = view.cssW && cv.clientWidth ? view.cssW / cv.clientWidth : 1;
-    return [(mx * sx - view.ox) / view.k, view.H - (my - view.oy) / view.k];
+    const s = view.cssW && cv.clientWidth ? view.cssW / cv.clientWidth : 1;
+    return [(mx * s - view.ox) / view.k, view.H - (my * s - view.oy) / view.k];
   };
 
   /**
@@ -43,7 +43,7 @@ export function createPreview(cv) {
     const k = Math.min((cssW - pL - pR) / W, (maxH - pT - pB) / H), cssH = H * k + pT + pB;
     const ox = pL + Math.max(0, (cssW - pL - pR - W * k) / 2);
     if (cv.width !== Math.round(cssW * dpr) || cv.height !== Math.round(cssH * dpr)) {
-      cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr); cv.style.height = cssH + 'px';
+      cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr); // alto automático: conserva la proporción
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     view = { k, ox, oy: pT, W, H, cssW };
