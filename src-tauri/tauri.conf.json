@@ -27,13 +27,32 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": "all",
     "category": "Utility",
     "shortDescription": "SVG e imágenes a código G y M para grabado CNC",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico", "icons/icon.icns"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.icns"
+    ],
     "windows": {
-      "webviewInstallMode": { "type": "downloadBootstrapper" },
-      "nsis": { "installMode": "currentUser", "languages": ["Spanish"] }
-    }
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "Spanish"
+        ]
+      }
+    },
+    "linux": {
+      "deb": {
+        "section": "graphics"
+      }
+    },
+    "longDescription": "Convierte SVG, imágenes y croquis en código G y M para grabado CNC, con modo de corte por figura, simulación y programa explicado línea por línea."
   }
 }

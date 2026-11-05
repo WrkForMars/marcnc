@@ -3,7 +3,7 @@
 App web que convierte un SVG o una imagen con fondo blanco en código G y M para grabado CNC.
 Cada figura detectada tiene su propio modo de corte (Relleno, Contorno, Invertir, Línea, Omitir),
 se pueden agregar textos y la vista previa simula el grabado con el ancho real de la herramienta.
-Se publica como web (GitHub Pages) y como .exe de Windows (Tauri, `src-tauri/`).
+Se publica como web (GitHub Pages) y como app de escritorio con Tauri (`src-tauri/`): .exe de Windows y .deb / AppImage de Linux.
 Público: estudiantes de ingeniería (ITL/TecNM) y talleres escolares. Toda la interfaz va en español.
 
 ## Comandos
@@ -12,11 +12,11 @@ Público: estudiantes de ingeniería (ITL/TecNM) y talleres escolares. Toda la i
 - `npm test` — pruebas (Vitest). Deben pasar antes de cada commit.
 - `npm run build` — build de producción en `dist/`
 - `npm run preview` — sirve `dist/` para probar el build
-- `npm run escritorio` / `npm run exe` — app de escritorio con Tauri (requiere Rust); el .exe de Windows lo compila CI
+- `npm run escritorio` / `npm run exe` — app de escritorio con Tauri (requiere Rust); los paquetes de Windows y Linux los compila CI
 
 ## Arquitectura
 
-Todo corre en el navegador; no hay backend. El .exe es la misma web dentro de WebView2: lo único nativo es
+Todo corre en el navegador; no hay backend. La app de escritorio es la misma web dentro de WebView2 (Windows) o WebKitGTK (Linux): lo único nativo es
 el diálogo de "Guardar como" (`src/desktop.js` → comando `guardar_texto` en `src-tauri/src/main.rs`).
 Las fuentes van empaquetadas (`@fontsource`) para que funcione sin internet; no cargar nada de CDNs.
 

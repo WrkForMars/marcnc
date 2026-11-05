@@ -1,6 +1,6 @@
 # GrabaCNC
 
-Convierte un SVG o una imagen con fondo blanco en código G y M para grabado CNC. Funciona en el navegador o como programa de Windows (.exe), sin internet.
+Convierte un SVG o una imagen con fondo blanco en código G y M para grabado CNC. Funciona en el navegador o como programa de Windows (.exe) y Linux (.deb / AppImage), sin internet.
 
 - **Croquis con coordenadas:** dibuja líneas, rectángulos, círculos, arcos y polígonos sobre la pieza con el ratón (imán a cuadrícula y a vértices, centros y puntos medios) o tecleando `x y`, `@dx dy` o `@distancia<ángulo`. Cada medida se puede corregir después; una figura cerrada dentro de otra queda como hueco. Atajos: V, L, R, C, A, P, Esc, Supr, Ctrl+Z / Ctrl+Y.
 - **Modo por figura:** cada figura detectada se graba con Relleno, Contorno, Invertir (orilla exterior + huecos vaciados), Línea u Omitir.
@@ -24,21 +24,45 @@ npm run build    # genera dist/
 Atajos: **Ctrl+O** abre un archivo, **Ctrl+S** guarda el código. También puedes arrastrar el archivo a la ventana.
 Los parámetros de la máquina se recuerdan entre sesiones; **Valores iniciales** los regresa a los de la tarea de referencia.
 
-## Programa de Windows (.exe)
+## Programa de escritorio (Windows y Linux)
 
-La misma app empaquetada con [Tauri](https://tauri.app): pesa unos 5–10 MB y usa WebView2, que ya viene en Windows 10 y 11.
+La misma app empaquetada con [Tauri](https://tauri.app). Usa el navegador del sistema (WebView2 en Windows, WebKitGTK en Linux), así que pesa poco y funciona sin internet.
 
-- **Sin compilar nada:** cada push a `main` corre `.github/workflows/escritorio.yml` y deja en *Actions → GrabaCNC-windows*
-  `GrabaCNC-portable.exe` (se abre directo, sin instalar ni permisos de administrador) y el instalador `GrabaCNC_x.y.z_x64-setup.exe`
-  (se instala solo para el usuario actual). Al subir una etiqueta `v0.3.0`, los publica como Release.
-- **Compilar en tu equipo** (requiere [Rust](https://rustup.rs) y, en Windows, las herramientas de C++ de Visual Studio):
+Cada push a `main` (y cada PR) corre `.github/workflows/escritorio.yml`, que deja en *Actions → (la corrida) → Artifacts*:
+
+- **GrabaCNC-windows:** `GrabaCNC-portable.exe` (se abre directo, sin instalar ni permisos de administrador) y el instalador `GrabaCNC_x.y.z_x64-setup.exe` (se instala solo para el usuario actual).
+- **GrabaCNC-linux:** `GrabaCNC_x.y.z_amd64.deb` y `GrabaCNC_x.y.z_amd64.AppImage`, compilados en Ubuntu 22.04 para que sirvan en Ubuntu 22.04/24.04 y Linux Mint 21/22.
+
+Al subir una etiqueta `v0.3.0` se publican todos como Release.
+
+### Instalar en Linux Mint / Ubuntu
+
+```bash
+sudo apt install ./GrabaCNC_0.3.0_amd64.deb
+```
+
+O doble clic al `.deb` y *Instalar paquete*. Queda en el menú como **GrabaCNC**. Para desinstalar: `sudo apt remove grabacnc`.
+
+El AppImage no se instala: dale permiso de ejecución (`chmod +x GrabaCNC_*.AppImage`) y ábrelo. En Ubuntu 22.04 / Mint 21 puede pedir `sudo apt install libfuse2`.
+
+### Windows
+
+El .exe no está firmado: la primera vez Windows puede mostrar "Windows protegió su PC" → *Más información* → *Ejecutar de todas formas*.
+
+### Compilar en tu equipo
+
+Requiere [Rust](https://rustup.rs). En Linux Mint / Ubuntu, además:
+
+```bash
+sudo apt install libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev build-essential patchelf file
+```
+
+En Windows hacen falta las herramientas de C++ de Visual Studio.
 
 ```bash
 npm run escritorio   # ventana de desarrollo con recarga en vivo
-npm run exe          # genera src-tauri/target/release/grabacnc.exe y el instalador
+npm run exe          # paquetes del sistema en el que compilas (src-tauri/target/release/bundle/)
 ```
-
-El .exe no está firmado: la primera vez Windows puede mostrar "Windows protegió su PC" → *Más información* → *Ejecutar de todas formas*.
 
 ## Publicar en GitHub Pages
 

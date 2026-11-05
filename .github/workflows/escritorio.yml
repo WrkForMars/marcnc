@@ -1,6 +1,7 @@
-name: App de escritorio (Windows)
+name: App de escritorio (Windows y Linux)
 
-# Compila GrabaCNC.exe (portable) y el instalador. Con una etiqueta v* (p. ej. v0.3.0) además publica un Release.
+# Compila GrabaCNC para Windows (.exe portable e instalador) y Linux (.deb y AppImage).
+# Con una etiqueta v* (p. ej. v0.3.0) además publica un Release con todos los archivos.
 on:
   push:
     branches: [main]
@@ -26,7 +27,7 @@ jobs:
           workspaces: src-tauri
       - run: npm ci
       - run: npm test
-      - run: npx tauri build
+      - run: npx tauri build --bundles nsis
       - name: Reunir archivos
         shell: pwsh
         run: |
@@ -37,10 +38,49 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: GrabaCNC-windows
-          path: salida/*.exe
+          path: salida/*
+
+  # Ubuntu 22.04: el paquete usa bibliotecas de esa versión y así funciona en Ubuntu 22.04/24.04 y Linux Mint 21/22
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bibliotecas de sistema para Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf file
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - run: npm test
+      - run: npx tauri build --bundles deb,appimage
+      - name: Reunir archivos
+        run: |
+          mkdir -p salida
+          cp src-tauri/target/release/bundle/deb/*.deb salida/
+          cp src-tauri/target/release/bundle/appimage/*.AppImage salida/
+          ls -l salida
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GrabaCNC-linux
+          path: salida/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: salida
+          merge-multiple: true
       - name: Publicar Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" salida/*.exe --title "GrabaCNC ${{ github.ref_name }}" --generate-notes
+        run: gh release create "${{ github.ref_name }}" salida/* --repo "${{ github.repository }}" --title "GrabaCNC ${{ github.ref_name }}" --generate-notes
