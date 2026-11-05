@@ -6,10 +6,10 @@ import { MAX_ELEMENTS } from './model.js';
  * @param {import('./input/svg.js').RawShape[] & {native?:{unit:number,h:number}}} raw
  * @param {{W:number, H:number, margin:number, fit:'fill'|'native', speck:number}} p
  * @param {import('./model.js').Element[]} [previous] para conservar los modos si la geometría no cambió de forma
- * @returns {{elements: import('./model.js').Element[], note: string}}
+ * @returns {{elements: import('./model.js').Element[], note: string, scale: number}} scale = mm por unidad de lienzo
  */
 export function buildDesign(raw, p, previous = []) {
-  const out = { elements: [], note: '' };
+  const out = { elements: [], note: '', scale: 0 };
   if (!raw) return out;
   const { W, H } = p;
   const M = Math.max(0, p.margin || 0);
@@ -29,6 +29,7 @@ export function buildDesign(raw, p, previous = []) {
   const k = Math.min((W - 2 * M) / bw, (H - 2 * M) / bh);
   const cx = (minx + maxx) / 2, cy = (miny + maxy) / 2;
   const native = p.fit === 'native' && raw.native;
+  out.scale = native ? 1 / raw.native.unit : k;
   // Y del lienzo crece hacia abajo; la máquina, hacia arriba
   const T = native
     ? ([x, y]) => [x / raw.native.unit, raw.native.h - y / raw.native.unit]

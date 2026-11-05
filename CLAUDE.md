@@ -27,8 +27,8 @@ src/
   model.js           tipos del modelo (Element, TextItem), MODES, MODE_NAME
   design.js          dibujo cargado → elementos en mm sobre la pieza
   demo.js            dibujo y texto de ejemplo
-  input/svg-path.js  lector de rutas SVG puro (sin DOM) — probado
-  input/svg.js       lee un SVG con estilos y transformaciones (usa DOM)
+  input/svg-path.js  lector de rutas SVG puro (sin DOM); curvas divididas por tolerancia — probado
+  input/svg.js       lee un SVG con estilos y transformaciones (usa DOM); niveles de calidad SVG_QUALITY
   input/image.js     imagen → contornos con ImageTracer, o línea central
   input/centerline.js  esqueletización (Zhang–Suen) → polilíneas por pieza, puro — probado
   geometry/clipper.js  envolturas de Clipper (offset, unión, resta, regiones)
@@ -56,6 +56,10 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
 - **Ancho de línea ≠ diámetro:** una ball mill solo corta con la punta. Toda la geometría usa `toolGeometry().w`.
 - **El vaciado se desplaza 0.98·r** a propósito, para entrar en ranuras del ancho exacto de la línea
   (como los huecos del logo de la placa). No "corregirlo" a 1.0·r.
+- **Cada vuelta del vaciado se simplifica a 5 µm** (`POCKET_TOL`) antes del siguiente desplazamiento: sin eso los
+  vértices se multiplican con cada vuelta y el cálculo es ~5× más lento. La cobertura no cambia.
+- **Calidad del SVG:** la tolerancia de las curvas va en unidades de lienzo (lado mayor = 1000), no en mm, porque la
+  escala final se conoce hasta `buildDesign` (que la devuelve en `scale`).
 - **G-code:**
   - Avance de Z (`fz`) en cada bajada; avance XY (`fxy`) en el primer corte después de cada bajada.
   - Nunca un `G00` en X-Y con la herramienta abajo; toda retracción va a `retract`.

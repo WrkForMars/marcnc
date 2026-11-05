@@ -66,6 +66,17 @@
     </div>
 
     <div class="col">
+      <section class="card" id="svgOpts" hidden aria-labelledby="hSvg">
+        <div class="card-head"><h2 id="hSvg">SVG</h2></div>
+        <div class="card-body">
+          <div class="params">
+            <label class="full" for="svgQ">Calidad de curvas: <b id="svgQVal">Normal</b><input type="range" id="svgQ" min="1" max="5" step="1" value="3" list="svgQMarks"></label>
+          </div>
+          <datalist id="svgQMarks"><option value="1"></option><option value="2"></option><option value="3"></option><option value="4"></option><option value="5"></option></datalist>
+          <p class="hint">Más calidad sigue las curvas más fielmente, con más puntos y un cálculo más lento. Normal basta para casi todo; Borrador sirve para revisar rápido un dibujo pesado.</p>
+        </div>
+      </section>
+
       <section class="card" id="imgOpts" hidden aria-labelledby="hImg">
         <div class="card-head"><h2 id="hImg">Imagen</h2></div>
         <div class="card-body">

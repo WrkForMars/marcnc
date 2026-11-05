@@ -1,5 +1,8 @@
 // Trayectorias del centro de la herramienta para cada elemento según su modo.
-import { area, fromC, offset } from '../geometry/clipper.js';
+import { area, fromC, offset, simplifyPaths } from '../geometry/clipper.js';
+
+// 5 µm: muy por debajo de lo que repite una máquina; reduce ~5× los vértices y el tiempo del vaciado
+const POCKET_TOL = 0.005;
 
 /**
  * Vaciado por desplazamientos concéntricos hacia adentro.
@@ -8,12 +11,12 @@ import { area, fromC, offset } from '../geometry/clipper.js';
 export function pocket(paths, tl) {
   const loops = [];
   const e = tl.r * 0.98; // 2 % de holgura para que entre en ranuras del mismo ancho que la línea
-  let cur = offset(paths, -e);
+  let cur = offset(simplifyPaths(paths, POCKET_TOL), -e);
   const lost = area(paths) - area(offset(cur, e));
   let guard = 0;
   while (cur.length && guard++ < 500) {
     cur.forEach(p => { const f = fromC(p); if (f.length > 2) loops.push({ pts: f, closed: true }); });
-    cur = offset(cur, -tl.step);
+    cur = offset(simplifyPaths(cur, POCKET_TOL), -tl.step);
   }
   return { loops, lost };
 }

@@ -6,7 +6,7 @@ import { generateGcode } from './cam/gcode.js';
 import { computePlan } from './cam/plan.js';
 import { isDesktop, saveTextDesktop } from './desktop.js';
 import { toolGeometry } from './cam/tool.js';
-import { parseSVG } from './input/svg.js';
+import { parseSVG, SVG_QUALITY } from './input/svg.js';
 import { traceImage } from './input/image.js';
 import { bbox, createPreview } from './preview/canvas.js';
 import { buildText, textElement, TEXT_FONTS } from './text/text.js';
@@ -17,7 +17,7 @@ const tick = () => new Promise(r => setTimeout(r, 0));
 
 const state = {
   raw: null, rawId: 0, design: [], designNote: '', texts: [], elements: [],
-  selected: -1, lastImage: null, fileName: '', gcode: '', plan: null, gen: 0, textSeq: 0,
+  selected: -1, lastImage: null, lastSvg: '', fileName: '', designScale: 0, gcode: '', plan: null, gen: 0, textSeq: 0,
   cache: new Map(),
 };
 const preview = createPreview($('cv'));
@@ -39,7 +39,8 @@ function params() {
 /* ---------- elementos ---------- */
 function rebuildDesign() {
   const r = buildDesign(state.raw, params(), state.design);
-  state.design = r.elements; state.designNote = r.note; state.cache.clear();
+  state.design = r.elements; state.designNote = r.note; state.designScale = r.scale; state.cache.clear();
+  svgQualityLabel();
 }
 function assemble() {
   state.elements = state.design.concat(state.texts.map(textElement).filter(Boolean));
@@ -152,12 +153,32 @@ async function loadShapes(fn, isImage) {
     state.design = [];
     rebuildDesign(); assemble();
     $('imgOpts').hidden = !isImage;
+    $('svgOpts').hidden = isImage;
     await refresh();
     $('toast').textContent = `Procesado en ${((performance.now() - t0) / 1000).toFixed(1)} s.`;
   } catch (err) {
     busy(null);
     $('loadErr').textContent = err.message || String(err);
   }
+}
+function loadSvg() {
+  if (!state.lastSvg) return;
+  const txt = state.lastSvg;
+  loadShapes(() => parseSVG(txt, $('svghost'), SVG_QUALITY[+$('svgQ').value - 1][0]), false);
+}
+/**
+ * "Normal · ±0.013 mm · 8 412 puntos": cuánto se aparta la curva en la pieza y cuántos puntos salieron.
+ * Mientras se arrastra el control (`moving`) los puntos todavía son los del nivel anterior: no se muestran.
+ */
+function svgQualityLabel(moving = false) {
+  const [tol, name] = SVG_QUALITY[+$('svgQ').value - 1];
+  let txt = name;
+  if (state.raw && !state.lastImage) {
+    if (state.designScale) txt += ` · ±${(tol * state.designScale).toFixed(3)} mm`;
+    const n = moving ? 0 : state.raw.reduce((a, s) => a + (s.kind === 'fill' ? s.rings : s.lines.map(l => l.pts)).reduce((b, r) => b + r.length, 0), 0);
+    if (n) txt += ` · ${n.toLocaleString('es-MX')} puntos`;
+  }
+  $('svgQVal').textContent = txt;
 }
 function loadImage() {
   if (!state.lastImage) return;
@@ -172,7 +193,7 @@ function openFile(f) {
   state.fileName = f.name.replace(/\.[^.]+$/, '');
   const rd = new FileReader();
   if (isSvg) {
-    rd.onload = () => { state.lastImage = null; const txt = String(rd.result); loadShapes(() => parseSVG(txt, $('svghost')), false); };
+    rd.onload = () => { state.lastImage = null; state.lastSvg = String(rd.result); loadSvg(); };
     rd.readAsText(f);
   } else {
     rd.onload = () => {
@@ -201,13 +222,15 @@ document.addEventListener('drop', ev => {
   const f = ev.dataTransfer.files[0];
   if (f) openFile(f);
 });
-$('demo').addEventListener('click', () => { state.lastImage = null; state.fileName = ''; $('fit').value = 'native'; loadShapes(() => parseSVG(DEMO_SVG, $('svghost')), false); });
+$('demo').addEventListener('click', () => { state.lastImage = null; state.lastSvg = DEMO_SVG; state.fileName = ''; $('fit').value = 'native'; loadSvg(); });
 $('clear').addEventListener('click', () => {
-  Object.assign(state, { raw: null, design: [], texts: [], lastImage: null, designNote: '', fileName: '' });
-  $('imgOpts').hidden = true; assemble(); select(-1); refresh();
+  Object.assign(state, { raw: null, design: [], texts: [], lastImage: null, lastSvg: '', designNote: '', fileName: '' });
+  $('imgOpts').hidden = true; $('svgOpts').hidden = true; assemble(); select(-1); refresh();
 });
 $('thr').addEventListener('input', () => { $('thrVal').textContent = $('thr').value; });
 $('thr').addEventListener('change', loadImage);
+$('svgQ').addEventListener('input', () => svgQualityLabel(true));
+$('svgQ').addEventListener('change', loadSvg);
 $('imgHow').addEventListener('change', loadImage);
 
 /* ---------- parámetros ---------- */
@@ -218,12 +241,12 @@ $('showPath').addEventListener('change', () => drawOnly());
 
 // los parámetros se recuerdan entre sesiones (cada taller tiene su máquina y su herramienta)
 const SAVED = ['pw', 'ph', 'margin', 'speck', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'depth', 'rpm', 'retract', 'fz', 'fxy',
-  'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs', 'imgHow', 'thr'];
+  'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs', 'imgHow', 'thr', 'svgQ'];
 const STORE = 'grabacnc:parametros';
 const getVal = id => ($(id).type === 'checkbox' ? $(id).checked : $(id).value);
 const setVal = (id, v) => { if ($(id).type === 'checkbox') $(id).checked = !!v; else $(id).value = v; };
 const DEFAULTS = Object.fromEntries(SAVED.map(id => [id, getVal(id)]));
-const syncLabels = () => { $('vAngLbl').hidden = $('vTipLbl').hidden = $('ttype').value !== 'v'; $('thrVal').textContent = $('thr').value; };
+const syncLabels = () => { $('vAngLbl').hidden = $('vTipLbl').hidden = $('ttype').value !== 'v'; $('thrVal').textContent = $('thr').value; svgQualityLabel(); };
 function storeParams() {
   try { localStorage.setItem(STORE, JSON.stringify(Object.fromEntries(SAVED.map(id => [id, getVal(id)])))); } catch { /* sin almacenamiento: no pasa nada */ }
 }
@@ -236,6 +259,7 @@ $('reset').addEventListener('click', () => {
   SAVED.forEach(id => setVal(id, DEFAULTS[id]));
   storeParams(); syncLabels();
   if (state.lastImage) { loadImage(); return; }
+  if (state.lastSvg) { loadSvg(); return; }
   rebuildDesign(); assemble(); refresh();
   $('toast').textContent = 'Parámetros de la tarea de referencia restablecidos.';
 });
@@ -368,7 +392,8 @@ document.addEventListener('keydown', ev => {
 (async () => {
   restoreParams();
   $('fit').value = 'native';
-  await loadShapes(() => parseSVG(DEMO_SVG, $('svghost')), false);
+  state.lastSvg = DEMO_SVG;
+  await loadShapes(() => parseSVG(DEMO_SVG, $('svghost'), SVG_QUALITY[+$('svgQ').value - 1][0]), false);
   Object.entries(DEMO_TEXT).forEach(([k, v]) => { const id = { text: 'tText', font: 'tFont', h: 'tH', sp: 'tSp', x: 'tX', y: 'tY' }[k]; $(id).value = v; });
   await addText(textFromForm({ id: ++state.textSeq }));
   select(-1);

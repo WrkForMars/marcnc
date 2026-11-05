@@ -18,6 +18,13 @@ describe('buildDesign', () => {
     expect((x0 + x1) / 2).toBeCloseTo(45, 2);
   });
 
+  it('informa cuántos mm mide una unidad de lienzo', () => {
+    const raw = [{ kind: 'fill', white: false, rule: 'nonzero', rings: [square(0, 0, 200)] }];
+    expect(buildDesign(raw, P).scale).toBeCloseTo(44 / 200, 9); // el alto limita: 50 − 2·3
+    const nat = Object.assign([{ kind: 'fill', white: false, rule: 'nonzero', rings: [square(0, 0, 200)] }], { native: { unit: 10, h: 50 } });
+    expect(buildDesign(nat, { ...P, fit: 'native' }).scale).toBe(0.1);
+  });
+
   it('a escala 1:1 respeta las unidades del SVG y voltea Y', () => {
     // 10 px por unidad; un cuadrado en (10,10)-(20,20) unidades de un viewBox de 50 de alto
     const raw = Object.assign([{ kind: 'fill', white: false, rule: 'nonzero', rings: [square(100, 100, 100)] }], { native: { unit: 10, h: 50 } });
