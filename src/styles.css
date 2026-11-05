@@ -12,18 +12,20 @@
 @import '@fontsource/ibm-plex-mono/latin-600.css';
 @import '@fontsource/ibm-plex-serif/latin-600.css';
 
-/* Roles de color. Paleta del logo: azul #2457c5 (acento) y blanco de las olas.
-   Contrastes verificados: tinta ≥ 14:1, tinta suave ≥ 6.7:1, texto de acento ≥ 6.5:1, texto sobre acento ≥ 6.4:1,
-   bordes de controles ≥ 3.5:1; en el banco: texto 8.7:1, placa contra banco 13:1, grabado sobre placa 12:1. */
+/* Roles de color, construidos en OKLCH a partir del azul del logo (tono 258–264): neutros pizarra con un toque de ese
+   azul y colores de modo con la misma luminosidad, para que ninguno pese más que otro.
+   Contrastes verificados — claro: tinta 16:1, tinta suave 6.3:1, texto de acento 6.7:1, acento contra fondo 5.6:1,
+   texto sobre acento 6:1, bordes 3.9:1, texto sobre cada modo ≥ 5.4:1. Oscuro: tinta 15:1, tinta suave 7.9:1, bordes 3.3:1,
+   texto sobre cada modo ≥ 7:1. Banco: texto 9:1, placa contra banco 13:1, grabado sobre placa 12:1. */
 :root{
-  --bg:#f3f5f7; --panel:#ffffff; --ink:#0f1820; --muted:#4b5763; --line:#d9dfe4; --line-strong:#7d8a96;
-  --accent:#2457c5; --on-accent:#ffffff; --accent-text:#1c4bb0; --accent-soft:#e3ebfb;
-  --warn:#a8480a; --warn-soft:#fcebdc; --ok:#22703f;
-  --m-fill:#2457c5; --m-contour:#0f7a72; --m-invert:#8a3fb3; --m-line:#a15c0e; --m-skip:#68737c; --on-mode:#ffffff;
+  --bg:#f4f7fc; --panel:#ffffff; --ink:#101b2b; --muted:#515c6c; --line:#dce2e9; --line-strong:#758193;
+  --accent:#2759d6; --on-accent:#ffffff; --accent-text:#1a48bc; --accent-soft:#e7effe;
+  --warn:#b6341f; --warn-soft:#ffeee8; --ok:#057743;
+  --m-fill:#2759d6; --m-contour:#007671; --m-invert:#9330ae; --m-line:#906106; --m-skip:#5d6775; --on-mode:#ffffff;
   /* banco de trabajo y placa: iguales en ambos temas (la placa siempre es metal claro) */
-  --stage:#0f1a2b; --stage-line:#2a3b55; --stage-text:#a9b9cf; --stage-strong:#e8eef6;
-  --plate:#dde3e9; --plate-edge:#8996a4; --plate-grid:#b7c1cb; --cut:#1b2532; --plate-accent:#2457c5; --plate-on:#ffffff; --plate-muted:#3a4654; --plate-warn:#a8480a;
-  --pm-fill:#2457c5; --pm-contour:#0f7a72; --pm-invert:#8a3fb3; --pm-line:#a15c0e; --pm-skip:#68737c;
+  --stage:#111d36; --stage-line:#27354f; --stage-text:#b0bfd5; --stage-strong:#ebeff4;
+  --plate:#dfe3e8; --plate-edge:#89939e; --plate-grid:#bec5cc; --cut:#192230; --plate-accent:#2759d6; --plate-on:#ffffff; --plate-muted:#434e5e; --plate-warn:#b6341f;
+  --pm-fill:#2759d6; --pm-contour:#007671; --pm-invert:#9330ae; --pm-line:#906106; --pm-skip:#5d6775;
   --sheet-ink:#000000; --sheet-muted:#444444; --sheet-line:#8c8c8c; --sheet-fill:#eeeeee;
   --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
   --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -31,17 +33,17 @@
   --t:160ms; --rail:72px; --inspector:384px; --bar:64px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#0e1317; --panel:#161d23; --ink:#e9eef2; --muted:#a3afb9; --line:#27313a; --line-strong:#66737f;
-  --accent:#7ea2ff; --on-accent:#0a1120; --accent-text:#a3bdff; --accent-soft:#1d2a45;
-  --warn:#f2a46b; --warn-soft:#38220f; --ok:#72cc96;
-  --m-fill:#7ea2ff; --m-contour:#4fc2b6; --m-invert:#c08ae0; --m-line:#e3a35a; --m-skip:#8a949c; --on-mode:#0a1120;
-  --stage:#080e17; --stage-line:#223047; --stage-text:#a3b3c8; --plate:#c9d1d9; --cut:#141c27; color-scheme:dark}}
+  --bg:#0b1017; --panel:#131a24; --ink:#ebeff4; --muted:#a6afbc; --line:#29313c; --line-strong:#626d7c;
+  --accent:#81a9fd; --on-accent:#090f1c; --accent-text:#9dbdff; --accent-soft:#1b2c51;
+  --warn:#fc9b6f; --warn-soft:#3e2015; --ok:#72d699;
+  --m-fill:#81a9fd; --m-contour:#59c5bf; --m-invert:#cf8de4; --m-line:#e6b55d; --m-skip:#979fab; --on-mode:#07101c;
+  --stage:#040915; --stage-line:#192437; --stage-text:#acb8cb; --plate:#c9ced4; --cut:#121b28; color-scheme:dark}}
 :root[data-theme="dark"]{
-  --bg:#0e1317; --panel:#161d23; --ink:#e9eef2; --muted:#a3afb9; --line:#27313a; --line-strong:#66737f;
-  --accent:#7ea2ff; --on-accent:#0a1120; --accent-text:#a3bdff; --accent-soft:#1d2a45;
-  --warn:#f2a46b; --warn-soft:#38220f; --ok:#72cc96;
-  --m-fill:#7ea2ff; --m-contour:#4fc2b6; --m-invert:#c08ae0; --m-line:#e3a35a; --m-skip:#8a949c; --on-mode:#0a1120;
-  --stage:#080e17; --stage-line:#223047; --stage-text:#a3b3c8; --plate:#c9d1d9; --cut:#141c27; color-scheme:dark}
+  --bg:#0b1017; --panel:#131a24; --ink:#ebeff4; --muted:#a6afbc; --line:#29313c; --line-strong:#626d7c;
+  --accent:#81a9fd; --on-accent:#090f1c; --accent-text:#9dbdff; --accent-soft:#1b2c51;
+  --warn:#fc9b6f; --warn-soft:#3e2015; --ok:#72d699;
+  --m-fill:#81a9fd; --m-contour:#59c5bf; --m-invert:#cf8de4; --m-line:#e6b55d; --m-skip:#979fab; --on-mode:#07101c;
+  --stage:#040915; --stage-line:#192437; --stage-text:#acb8cb; --plate:#c9ced4; --cut:#121b28; color-scheme:dark}
 
 *{box-sizing:border-box}
 [hidden]{display:none!important}
