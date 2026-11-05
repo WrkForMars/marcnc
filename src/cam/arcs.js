@@ -37,10 +37,10 @@ export function fitArcs(pts, tol) {
         }
         // cada tramo entre vértices también debe quedar sobre el arco: las esquinas de un rectángulo caen en una
         // circunferencia, pero sus lados rectos pasan lejos de ella (la flecha del arco sobre esa cuerda es grande).
-        // Se admite 2·tol: la polilínea ya se aparta hasta tol de la curva verdadera que aproxima.
+        // Se admite un 25 % más que tol: la polilínea ya aproxima la curva verdadera con tol.
         for (let k = i; k < j && ok; k++) {
           const ch = Math.hypot(pts[k + 1][0] - pts[k][0], pts[k + 1][1] - pts[k][1]);
-          if (c[2] - Math.sqrt(Math.max(0, c[2] * c[2] - ch * ch / 4)) > 2 * tol) ok = false;
+          if (c[2] - Math.sqrt(Math.max(0, c[2] * c[2] - ch * ch / 4)) > 1.25 * tol) ok = false;
         }
         let sweep = 0, pos = false, neg = false;
         for (let k = i; k < j; k++) {

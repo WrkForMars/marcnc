@@ -60,7 +60,7 @@ describe('fitArcs', () => {
     fitArcs(loop, 0.05).filter(m => m.arc).forEach(m => expect(m.c[2]).toBeLessThan(3)); // solo las esquinas (r = 2)
   });
 
-  it('cada arco queda cerca de la polilínea original también entre vértices (a 2·tol: la polilínea ya aproxima la curva)', () => {
+  it('cada arco queda cerca de la polilínea original también entre vértices (a 1.25·tol: la polilínea ya aproxima la curva)', () => {
     const pts = [...circlePts(0, 0, 20, 0, Math.PI / 3, 3), [30, 30], [40, 25]];
     const tol = 0.05;
     let i = 0;
@@ -68,7 +68,7 @@ describe('fitArcs', () => {
       const j = pts.indexOf(m.to);
       if (m.arc) for (let k = i; k < j; k++) {
         const ch = Math.hypot(pts[k + 1][0] - pts[k][0], pts[k + 1][1] - pts[k][1]);
-        expect(m.c[2] - Math.sqrt(m.c[2] ** 2 - ch * ch / 4)).toBeLessThanOrEqual(2 * tol);
+        expect(m.c[2] - Math.sqrt(m.c[2] ** 2 - ch * ch / 4)).toBeLessThanOrEqual(1.25 * tol);
       }
       i = j;
     });

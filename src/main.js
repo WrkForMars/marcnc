@@ -33,6 +33,22 @@ TEXT_FONTS.forEach(([v, label]) => { const o = document.createElement('option');
 
 /* ---------- parámetros del formulario ---------- */
 const num = (id, def) => { const v = parseFloat($(id).value); return Number.isFinite(v) ? v : def; };
+// un número fuera del rango del campo (min/max del HTML) se corrige en cuanto se escribe, antes de usarse
+document.addEventListener('change', ev => {
+  const el = ev.target;
+  if (!(el instanceof HTMLInputElement) || el.type !== 'number') return;
+  const v = parseFloat(el.value), lo = parseFloat(el.min), hi = parseFloat(el.max);
+  let fixed = v;
+  if (!Number.isFinite(v)) fixed = parseFloat(el.defaultValue);
+  else if (Number.isFinite(lo) && v < lo) fixed = lo;
+  else if (Number.isFinite(hi) && v > hi) fixed = hi;
+  if (fixed !== v && Number.isFinite(fixed)) {
+    el.value = String(fixed);
+    const name = el.closest('label')?.firstChild?.textContent?.trim() || 'Ese valor';
+    $('toast').textContent = `${name}: se ajustó a ${fixed}, el valor permitido más cercano.`;
+  }
+}, true);
+
 function params() {
   return {
     W: num('pw', 90), H: num('ph', 50), margin: num('margin', 3), fit: $('fit').value, drawW: num('dw', 0), speck: num('speck', 0.5),
@@ -511,6 +527,7 @@ const TOOL_KEYS = { v: 'select', l: 'line', r: 'rect', c: 'circle', a: 'arc', p:
 document.addEventListener('keydown', ev => {
   const t = ev.target;
   if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  if (document.querySelector('dialog[open]')) return; // con un diálogo abierto, las teclas son del diálogo
   const k = ev.key.toLowerCase();
   if ((ev.ctrlKey || ev.metaKey) && !ev.altKey) {
     if (k === 'z' && !ev.shiftKey) { ev.preventDefault(); sketch.undoOne(); } else if (k === 'y' || (k === 'z' && ev.shiftKey)) { ev.preventDefault(); sketch.redoOne(); }
@@ -857,6 +874,10 @@ $('txtClose').addEventListener('click', () => { state.textOpen = false; select(-
 $('emptyDraw').addEventListener('click', () => setTool('rect'));
 $('emptyOpen').addEventListener('click', () => $('file').click());
 $('emptyDemo').addEventListener('click', () => $('demo').click());
+
+// un error al abrir o procesar también sale flotando: la pestaña Figuras puede no estar a la vista
+new MutationObserver(() => { const m = $('loadErr').textContent; if (m) $('toast').textContent = m; })
+  .observe($('loadErr'), { childList: true, characterData: true, subtree: true });
 
 // los avisos flotantes se van solos
 let toastT;

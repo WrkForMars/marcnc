@@ -77,7 +77,9 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
   - Nunca un `G00` en X-Y con la herramienta abajo; toda retracción va a `retract`.
   - Comentarios en MAYÚSCULAS y sin acentos ni paréntesis anidados (muchos controladores no los aceptan).
   - Arcos solo con 2 o 3 decimales; el centro se recalcula sobre la mediatriz de los extremos ya
-    redondeados para que el radio inicial y final difieran < 0.01 mm (con 2 decimales).
+    redondeados; se prueban los redondeos vecinos de I y J para que los radios difieran ≤ 0.005 mm (lo que acepta GRBL).
+    Si ninguno cumple, o el arco se aparta más de la tolerancia, se escribe con rectas. Los arcos se ajustan sobre
+    la trayectoria densa (`path.dense`), no la simplificada. `tests/fuzz.test.js` vigila todo esto con piezas aleatorias.
   - Fanuc: `%`, `O####`, `T# M06`, `G28 G91 Z0`. GRBL: nada de eso (lo rechaza).
 - **No bloquear la página:** nada de `getPointAtLength` en bucles (era O(n) por punto y congelaba Chrome).
   Procesos largos van en `computePlan` con cesiones del hilo, o en un Web Worker.

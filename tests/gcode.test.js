@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateGcode } from '../src/cam/gcode.js';
+import { commentSafe, generateGcode } from '../src/cam/gcode.js';
 import { computePlan } from '../src/cam/plan.js';
 import { toolGeometry } from '../src/cam/tool.js';
 import { BALL_1_8, TAREA, hole, lineEl, parseMoves, regionEl, square } from './helpers.js';
@@ -97,5 +97,36 @@ describe('pasadas y controlador', () => {
     expect(t).not.toMatch(/^O\d/m);
     expect(t).not.toMatch(/M06|G28/);
     expect(t.trim().split('\n').at(-1)).toBe('M30');
+  });
+});
+
+describe('salvaguardas', () => {
+  it('una retracción en cero o negativa no deja rápidos a ras ni dentro de la pieza', async () => {
+    for (const retract of [0, -2, NaN]) {
+      const moves = parseMoves((await program(BALL_1_8, { retract })).text);
+      moves.filter(m => m.g === 0 && (m.to[0] !== m.from[0] || m.to[1] !== m.from[1])).forEach(m => expect(m.to[2]).toBeGreaterThanOrEqual(0.5));
+    }
+  });
+
+  it('un avance en cero se escribe como 1 mm/min, nunca F0', async () => {
+    const g = await program(BALL_1_8, { fz: 0, fxy: 0 });
+    expect(g.text).not.toMatch(/F0\b/);
+  });
+});
+
+describe('comentarios', () => {
+  it('quedan en mayúsculas ASCII, sin acentos, ñ, emoji ni paréntesis', () => {
+    expect(commentSafe('Niño (ñ) ¿qué? 😀 «x» \\ /')).toBe('NINO N QUE X /');
+    expect(commentSafe('Placa 3-B: aluminio')).toBe('PLACA 3-B: ALUMINIO');
+  });
+
+  it('ninguna línea del programa trae caracteres fuera de ASCII ni paréntesis anidados', async () => {
+    const elements = [{ src: 'text', type: 'line', mode: 'line', text: { text: 'Señal (ñ) ¿sí? 😀', h: 5 }, parts: [{ pts: [[5, 5], [20, 5]], closed: false }] }];
+    const plan = await computePlan(elements, toolGeometry(BALL_1_8), { tol: 0.05 });
+    const g = generateGcode(plan, elements, TAREA);
+    g.text.split('\n').forEach(l => {
+      expect(l).toMatch(/^[\x20-\x7e]*$/);
+      expect((l.match(/\(/g) || []).length).toBeLessThanOrEqual(1);
+    });
   });
 });

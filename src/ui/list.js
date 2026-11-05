@@ -54,7 +54,9 @@ export function renderList(box, allBox, s) {
     }
 
     const seg = document.createElement('div');
-    seg.className = 'seg';
+    seg.className = 'modes';
+    seg.setAttribute('role', 'group');
+    seg.setAttribute('aria-label', 'Modo de corte');
     MODES[e.type].forEach(([m, label]) => {
       const b = document.createElement('button');
       b.type = 'button';
@@ -74,14 +76,16 @@ export function renderList(box, allBox, s) {
   if (elements.filter(e => e.type === 'region').length > 1) {
     const lab = document.createElement('span');
     lab.className = 'hint';
-    lab.textContent = 'Todas las figuras:';
-    allBox.append(lab);
+    lab.textContent = 'Todas las figuras';
+    const g = document.createElement('div');
+    g.className = 'modes';
     MODES.region.forEach(([m, label]) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = label;
       b.addEventListener('click', () => onModeAll(m));
-      allBox.append(b);
+      g.append(b);
     });
+    allBox.append(lab, g);
   }
 }
