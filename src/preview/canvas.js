@@ -37,7 +37,7 @@ export function createPreview(cv) {
    *   simulating: no dibuja el grabado terminado (lo va dibujando la simulación), solo el recorrido pendiente
    */
   function draw(s) {
-    const { elements, selected, W, H, toolWidth, plan, showPath, dragging, simulating } = s;
+    const { elements, selected, hovered = -1, W, H, toolWidth, plan, showPath, dragging, simulating } = s;
     const dpr = window.devicePixelRatio || 1;
     // márgenes para las reglas (abajo y a la izquierda, donde está el cero) y altura máxima para piezas altas
     const cssW = cv.clientWidth || 900, pL = 40, pR = 12, pT = 12, pB = 32;
@@ -129,6 +129,10 @@ export function createPreview(cv) {
       ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
     }
 
+    // renglón de la lista bajo el cursor: su figura con un borde de acento punteado
+    if (hovered >= 0 && hovered !== selected && elements[hovered]) {
+      ctx.strokeStyle = css('--plate-accent'); ctx.lineWidth = 2; ctx.setLineDash([5, 3]); outline(elements[hovered]); ctx.setLineDash([]);
+    }
     if (selected >= 0 && elements[selected]) {
       const e = elements[selected];
       ctx.strokeStyle = css('--plate-accent'); ctx.lineWidth = 2; outline(e);

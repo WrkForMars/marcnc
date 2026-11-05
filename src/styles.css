@@ -195,6 +195,11 @@ canvas.overlay{position:absolute;left:var(--pad);top:var(--pad);pointer-events:n
 .empty-actions button:not(.primary){background:var(--plate-on);color:var(--cut);border-color:var(--plate-edge)}
 .empty-actions button.ghost{background:transparent;border-color:transparent;color:var(--plate-accent)}
 .empty-actions button.primary{background:var(--plate-accent);border-color:var(--plate-accent);color:var(--plate-on)}
+.templates{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center;margin-top:16px;padding-top:16px;border-top:1px solid var(--plate-edge)}
+.templates span{color:var(--plate-muted);font-size:14px}
+.templates button{min-height:36px;border-radius:999px;background:var(--plate-on);color:var(--cut);border-color:var(--plate-edge);font-weight:500}
+.templates button:hover{border-color:var(--plate-accent);color:var(--plate-accent)}
+@media (pointer:coarse){.templates button{min-height:44px}}
 
 /* ---------- barra de producción: simulación y números del programa ---------- */
 .prodbar{display:flex;align-items:center;gap:8px 24px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px}
@@ -376,3 +381,21 @@ dialog .params{margin:16px 0}
 .pm .panel-head{flex-wrap:nowrap}
 .pm .panel-head h3{min-width:0}
 dialog h2[tabindex]:focus{outline:none}
+/* ayuda en los campos */
+.lbl-row{display:inline-flex;align-items:center;gap:4px}
+button.help{width:20px;min-height:20px;height:20px;padding:0;border-radius:999px;font-size:12px;line-height:16px;font-weight:700;
+  color:var(--accent-text);background:var(--accent-soft);border:1px solid transparent;flex:none;position:relative}
+button.help::after{content:"";position:absolute;inset:-12px} /* área táctil de 44 px sin agrandar el botón */
+button.help:hover,button.help[aria-expanded="true"]{border-color:var(--accent)}
+.helppop{position:absolute;z-index:30;background:var(--panel);color:var(--ink);border:1px solid var(--line-strong);border-radius:8px;
+  padding:12px 16px;box-shadow:0 4px 12px rgb(0 0 0 / .12);font-size:14px;line-height:20px}
+.helppop[hidden]{display:none}
+.helppop b{display:block;margin-bottom:4px}
+.helppop p{margin:0;color:var(--muted)}
+/* miniatura de cada figura en la lista */
+.thumb{width:32px;height:32px;flex:none;border-radius:4px;background:var(--plate);border:1px solid var(--line)}
+.thumb .area{fill:var(--cut);fill-rule:evenodd;stroke:none}
+.thumb .stroke{fill:none;stroke:var(--cut);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+/* barra de dibujo: al seleccionar solo queda la indicación en gris; mantiene su alto para que la pieza no salte */
+.sketchbar.idle{background:transparent;border-color:transparent}
+.sketchbar.idle #skPrompt{color:var(--muted)}

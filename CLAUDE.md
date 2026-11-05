@@ -27,6 +27,7 @@ src/
   model.js           tipos del modelo (Element, TextItem), MODES, MODE_NAME
   design.js          dibujo cargado → elementos en mm sobre la pieza
   demo.js            dibujo y texto de ejemplo
+  templates.js       plantillas para empezar (llavero, placa, engrane) como croquis + textos — probado
   input/svg-path.js  lector de rutas SVG puro (sin DOM); curvas divididas por tolerancia — probado
   input/dxf.js       lector DXF puro (LINE, ARC, CIRCLE, LWPOLYLINE/POLYLINE con abombado, ELLIPSE, SPLINE, bloques),
                      $INSUNITS → mm, une tramos sueltos en contornos; entra al croquis a 1:1 — probado
@@ -47,12 +48,14 @@ src/
   cam/arcs.js        ajuste de arcos G02/G03 — probado
   cam/plan.js        cálculo con caché y orden de corte, cede el hilo cada ~30 ms
   cam/gcode.js       escritura del programa (función pura) — probado
+  cam/material.js    perfiles de material: avances sugeridos por carga de viruta con el husillo de la máquina y avisos — probado
   cam/simulate.js    línea de tiempo del programa (duración por avance, posición en cada instante) — probado
   cam/explain.js     explica cada línea del programa siguiendo su estado (posición, modo G, avance) — probado
   text/hershey.js    texto de una línea (fuentes Hershey, datos en hershey-data.json)
   text/text.js       textos rellenos (canvas → ImageTracer) y posición en la pieza
   preview/canvas.js  dibujo de la vista previa y selección con el puntero
-  ui/list.js         lista de figuras con los botones de modo
+  ui/list.js         lista de figuras con miniatura y botones de modo; al pasar el cursor se resalta en la pieza
+  ui/help.js         botón "?" con explicación corta en los campos que confunden (textos en HELP)
   ui/code-view.js    visor del programa: tocar una línea la explica y resalta su movimiento
   ui/sheet.js        hoja de entrega imprimible (#sheet, solo visible con @media print)
 tests/               Vitest en entorno node; helpers.js trae parseMoves() para leer G-code
@@ -112,9 +115,7 @@ es un cambio de comportamiento que hay que justificar.
 
 ## Pendiente (en orden de valor)
 
-1. Ayuda en cada campo (qué es paso de vaciado, retracción, V-bit…) y ejemplos para empezar (llavero, placa, engrane).
-2. Perfiles de máquina y material (avances sugeridos para aluminio, acrílico, MDF).
-3. Zoom con dos dedos en pantallas táctiles.
-4. Mover vectorizado y vaciado a un Web Worker.
-5. PWA instalable (manifest + service worker).
-6. Firmar el .exe (certificado de código) para que Windows no muestre la advertencia de SmartScreen.
+1. Perfiles de máquina (husillo máximo, recorrido) además de los de material.
+2. Mover vectorizado y vaciado a un Web Worker.
+3. PWA instalable (manifest + service worker).
+4. Firmar el .exe (certificado de código) para que Windows no muestre la advertencia de SmartScreen.

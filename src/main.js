@@ -14,6 +14,9 @@ import { dxfEntities, parseDxf } from './input/dxf.js';
 import { bbox, createPreview } from './preview/canvas.js';
 import { buildText, textElement, TEXT_FONTS } from './text/text.js';
 import { renderList } from './ui/list.js';
+import { attachHelp } from './ui/help.js';
+import { MATERIALS, feedRisks, suggestFeeds } from './cam/material.js';
+import { TEMPLATES } from './templates.js';
 import { KIND_NAME, markRow, renderCode } from './ui/code-view.js';
 import { sheetHTML, sheetImage } from './ui/sheet.js';
 import { renderSketchProps } from './ui/sketch-props.js';
@@ -47,7 +50,7 @@ document.addEventListener('change', ev => {
   else if (Number.isFinite(hi) && v > hi) fixed = hi;
   if (fixed !== v && Number.isFinite(fixed)) {
     el.value = String(fixed);
-    const name = el.closest('label')?.firstChild?.textContent?.trim() || 'Ese valor';
+    const name = el.closest('label')?.firstChild?.textContent?.replace(/\?$/, '').trim() || 'Ese valor';
     $('toast').textContent = `${name}: se ajustó a ${fixed}, el valor permitido más cercano.`;
   }
 }, true);
@@ -73,6 +76,7 @@ function rebuildSketch() {
 }
 function assemble() {
   state.elements = state.design.concat(state.sketchEls, state.texts.map(textElement).filter(Boolean));
+  state.hovered = -1; // los índices cambiaron
   if (state.selected >= state.elements.length) state.selected = -1;
 }
 const keyOf = e => (e.src === 'text' ? `t${e.text.id}:${e.text.x}:${e.text.y}:${e.text.rev}`
@@ -100,7 +104,7 @@ function busy(msg) { $('busy').hidden = !msg; if (msg) $('busyText').textContent
 function drawOnly(dragging = false) {
   const p = params();
   preview.draw({
-    elements: state.elements, selected: state.selected, W: p.W, H: p.H,
+    elements: state.elements, selected: state.selected, hovered: state.hovered ?? -1, W: p.W, H: p.H,
     toolWidth: state.plan ? state.plan.tl.w : toolGeometry(p).w, plan: state.plan, showPath: $('showPath').checked, dragging, simulating: sim.on,
   });
   if (sim.on) { simResize(); simPaint(sim.t); }
@@ -114,6 +118,7 @@ function renderAll() {
   renderList($('els'), $('allModes'), {
     elements: state.elements, selected: state.selected,
     onSelect: i => { select(i); renderAll(); },
+    onHover: i => { if (state.hovered !== i) { state.hovered = i; drawOnly(); } },
     onMode: (i, m) => { const e = state.elements[i]; e.mode = m; if (e.src === 'text') e.text.mode = m; if (e.src === 'sketch') { sketch.setMode(e.sketchId, m); storeSketch(); } select(i); refresh(); },
     onModeAll: m => { state.elements.forEach(e => { if (e.type === 'region') { e.mode = m; if (e.src === 'text') e.text.mode = m; if (e.src === 'sketch') sketch.setMode(e.sketchId, m); } }); storeSketch(); refresh(); },
   });
@@ -130,6 +135,7 @@ function warnings(p, plan) {
   const thin = state.elements.map((e, i) => (e.warn ? { e, i } : null)).filter(Boolean);
   const ws = [];
   if (state.designNote) ws.push(state.designNote);
+  ws.push(...feedRisks($('material').value, p));
   if (out.length) ws.push(`${out.join(', ')} se sale${out.length > 1 ? 'n' : ''} de la pieza; ajusta su tamaño o su posición.`);
   if (thin.length > 3) {
     const tot = thin.reduce((a, { e }) => a + (parseFloat(e.warn) || 0), 0);
@@ -429,7 +435,7 @@ $('dh').addEventListener('change', () => {
 $('showPath').addEventListener('change', () => drawOnly());
 
 // los parámetros se recuerdan entre sesiones (cada taller tiene su máquina y su herramienta)
-const SAVED = ['pw', 'ph', 'margin', 'speck', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'depth', 'rpm', 'retract', 'fz', 'fxy',
+const SAVED = ['material', 'pw', 'ph', 'margin', 'speck', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'depth', 'rpm', 'retract', 'fz', 'fxy',
   'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs', 'imgHow', 'thr', 'svgQ', 'dw', 'imgMode', 'imgClean', 'imgDetail', 'imgInvert'];
 const STORE = 'marcnc:parametros';
 const getVal = id => ($(id).type === 'checkbox' ? $(id).checked : $(id).value);
@@ -452,6 +458,36 @@ $('reset').addEventListener('click', () => {
   rebuildDesign(); assemble(); refresh();
   $('toast').textContent = 'Parámetros de la tarea de referencia restablecidos.';
 });
+
+/* ---------- material: avances sugeridos ---------- */
+$('material').addEventListener('change', () => {
+  const key = $('material').value, p = params(), s = suggestFeeds(key, { rpm: p.rpm, dia: p.dia });
+  if (!s) { refresh(); return; }
+  $('fxy').value = s.fxy; $('fz').value = s.fz; $('stepdown').value = s.stepdown;
+  storeParams(); refresh();
+  $('toast').textContent = `${MATERIALS[key].name} con S${p.rpm}: avance F${s.fxy}, en Z F${s.fz}, ${s.stepdown} mm por pasada.`;
+});
+
+/* ---------- plantillas ---------- */
+async function applyTemplate(key) {
+  const t = TEMPLATES[key];
+  if (!t) return;
+  $('clear').click(); // pieza vacía (Ctrl+Z recupera el croquis anterior)
+  $('pw').value = t.W; $('ph').value = t.H; storeParams();
+  setTool('select');
+  sketch.addMany(t.entities);
+  sketch.selection.forEach((e, i) => { if (t.modes[i]) sketch.setMode(e.id, t.modes[i]); });
+  sketch.select(null);
+  rebuildSketch(); storeSketch();
+  for (const x of t.texts) {
+    $('tText').value = x.text; $('tFont').value = 'futural'; $('tH').value = x.h; $('tSp').value = 0; $('tX').value = x.x; $('tY').value = x.y;
+    await addText(textFromForm({ id: ++state.textSeq }));
+  }
+  state.fileName = t.name; $('docName').value = t.name;
+  rebuildDesign(); assemble(); select(-1); await refresh();
+  $('toast').textContent = `${t.name}: pieza de ${t.W} × ${t.H} mm.${t.texts.length ? ' Toca un texto para cambiarlo.' : ''}`;
+}
+document.querySelectorAll('[data-template]').forEach(b => b.addEventListener('click', () => applyTemplate(b.dataset.template)));
 
 /* ---------- tema ---------- */
 $('theme').addEventListener('click', () => {
@@ -862,7 +898,41 @@ $('zoomFit').addEventListener('click', () => { if (preview.fit()) redrawView(); 
 const typing = t => t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.tagName === 'BUTTON' || t.isContentEditable);
 document.addEventListener('keydown', ev => { if (ev.key === ' ' && !typing(ev.target) && !document.querySelector('dialog[open]')) { ev.preventDefault(); spaceHeld = true; cv.classList.add('grab'); } });
 document.addEventListener('keyup', ev => { if (ev.key === ' ') { spaceHeld = false; cv.classList.remove('grab'); } });
+// dos dedos: pellizcar acerca o aleja y arrastrar desplaza; cancela lo que el primer dedo empezó (recuadro o arrastre)
+const touches = new Map();
+let pinch = null;
+const pinchState = () => {
+  const [a, b] = [...touches.values()];
+  return { d: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
+};
 cv.addEventListener('pointerdown', ev => {
+  if (ev.pointerType !== 'touch') return;
+  touches.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+  if (touches.size === 2) {
+    sketch.cancelGesture(); drag = null;
+    pinch = pinchState();
+    capture(ev);
+  }
+}, true);
+cv.addEventListener('pointermove', ev => {
+  if (!touches.has(ev.pointerId)) return;
+  touches.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+  if (!pinch || touches.size !== 2) return;
+  ev.stopImmediatePropagation();
+  const now = pinchState(), r = cv.getBoundingClientRect();
+  let changed = preview.pan(now.cx - pinch.cx, now.cy - pinch.cy);
+  if (pinch.d > 0 && preview.zoomAt(now.cx - r.left, now.cy - r.top, now.d / pinch.d)) changed = true;
+  pinch = now;
+  if (changed) redrawView();
+}, true);
+const touchEnd = ev => {
+  touches.delete(ev.pointerId);
+  if (pinch && touches.size < 2) { pinch = null; ev.stopImmediatePropagation(); }
+};
+cv.addEventListener('pointerup', touchEnd, true);
+cv.addEventListener('pointercancel', touchEnd, true);
+cv.addEventListener('pointerdown', ev => {
+  if (pinch) return; // el segundo dedo no dibuja ni selecciona
   if (ev.button === 1 || (ev.button === 0 && spaceHeld)) { ev.preventDefault(); panning = { x: ev.clientX, y: ev.clientY }; capture(ev); return; }
   if (ev.button !== 0) return; // el derecho abre el menú contextual
   ctxClose();
@@ -1280,6 +1350,7 @@ new MutationObserver(() => { clearTimeout(toastT); if ($('toast').textContent) t
   .observe($('toast'), { childList: true, characterData: true, subtree: true });
 
 /* ---------- inicio ---------- */
+attachHelp();
 (async () => {
   restoreParams();
   loadSketch();

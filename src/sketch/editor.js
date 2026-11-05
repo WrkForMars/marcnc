@@ -315,6 +315,8 @@ export function createSketchEditor(hooks) {
       return false;
     },
     dblclick() { if (S.tool === 'line') finishLine(); },
+    /** Deja sin efecto el recuadro o el arrastre en curso (cuando un segundo dedo empieza a pellizcar). */
+    cancelGesture() { S.box = null; S.drag = null; hooks.onRedraw(); },
     /** Clic derecho mientras se dibuja: termina la cadena de líneas o cancela lo que va a medias. @returns {boolean} si había algo en curso */
     endChain() {
       if (S.tool === 'line' && S.pts.length >= 2) { finishLine(); return true; }
