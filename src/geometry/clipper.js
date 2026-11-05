@@ -1,6 +1,7 @@
 // Operaciones de polígonos con Clipper. Clipper trabaja con enteros:
 // todas las coordenadas en mm se multiplican por S (1 unidad = 1 µm).
 import ClipperLib from 'clipper-lib';
+import { rdp } from './simplify.js';
 
 export const CL = ClipperLib;
 export const S = 1000;
@@ -21,6 +22,19 @@ export function offset(paths, d) {
   const out = new CL.Paths();
   co.Execute(out, d * S);
   return out;
+}
+
+/**
+ * Quita vértices de polígonos cerrados que se desvían menos de `tol` mm (RDP).
+ * Los desplazamientos con esquinas redondas multiplican los vértices; sin esto cada vuelta del vaciado es más cara que la anterior.
+ */
+export function simplifyPaths(paths, tol) {
+  const t = tol * S;
+  return paths.map(p => {
+    const a = rdp(p.map(q => [q.X, q.Y]).concat([[p[0].X, p[0].Y]]), t);
+    a.pop();
+    return a.map(([X, Y]) => ({ X, Y }));
+  }).filter(p => p.length > 2);
 }
 
 export function union(paths, fillType = CL.PolyFillType.pftNonZero) {

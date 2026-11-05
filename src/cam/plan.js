@@ -52,8 +52,13 @@ export async function computePlan(elements, tl, opts) {
     } else {
       const t = toolpaths(e, tl);
       e.warn = t.warn;
+      // pts: simplificada (vista previa, orden, rectas); dense: la original, para ajustar arcos sobre la curva real
       e.paths = t.paths
-        .map(p => ({ pts: simplify(p.pts, p.closed, tol), closed: p.closed }))
+        .map(p => {
+          const pts = simplify(p.pts, p.closed, tol);
+          const dense = p.closed ? simplify(p.pts, true, 0) : p.pts;
+          return dense.length > pts.length ? { pts, closed: p.closed, dense } : { pts, closed: p.closed };
+        })
         .filter(p => p.pts.length > 1);
       if (k && cache) cache.set(k, { paths: e.paths, warn: e.warn });
     }

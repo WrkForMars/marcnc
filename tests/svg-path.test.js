@@ -65,3 +65,25 @@ describe('shapeToD', () => {
     expect(shapeToD(fakeEl('polyline', { points: '0 0 4 0 4 4' }))).toBe('M0 0L4 0L4 4');
   });
 });
+
+describe('discretización por tolerancia', () => {
+  // distancia máxima de la curva real a la polilínea, muestreando la curva fina
+  const maxDev = (fine, pts) => Math.max(...fine.map(p => Math.min(...pts.slice(1).map((b, i) => {
+    const a = pts[i], L2 = (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2 || 1e-12;
+    const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / L2));
+    return Math.hypot(p[0] - a[0] - t * (b[0] - a[0]), p[1] - a[1] - t * (b[1] - a[1]));
+  }))));
+
+  it('ninguna curva se aleja más de la tolerancia', () => {
+    for (const d of ['M0 0 C0 40 60 40 60 0', 'M0 0 Q30 50 60 0', 'M0 0 A30 20 0 0 1 60 0']) {
+      const fine = parsePathD(d, 0.0005)[0].pts;
+      for (const tol of [1, 0.2, 0.05]) expect(maxDev(fine, parsePathD(d, tol)[0].pts)).toBeLessThanOrEqual(tol * 1.02);
+    }
+  });
+
+  it('menos tolerancia da más puntos, y un tramo recto escrito como curva da uno solo', () => {
+    const d = 'M0 0 C0 40 60 40 60 0';
+    expect(parsePathD(d, 0.05)[0].pts.length).toBeGreaterThan(parsePathD(d, 0.5)[0].pts.length);
+    expect(parsePathD('M0 0 C10 0 20 0 30 0', 0.01)[0].pts).toHaveLength(2);
+  });
+});

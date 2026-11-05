@@ -82,3 +82,19 @@ describe('contorno e invertir', () => {
     expect(toolpaths(regionEl(square(0, 0, 10), [], 'skip'), tl).paths).toHaveLength(0);
   });
 });
+
+describe('simplifyPaths', () => {
+  it('quita vértices sin alejarse más de la tolerancia', async () => {
+    const { simplifyPaths, fromC } = await import('../src/geometry/clipper.js');
+    const circle = Array.from({ length: 2000 }, (_, k) => [10 * Math.cos(k / 2000 * 2 * Math.PI), 10 * Math.sin(k / 2000 * 2 * Math.PI)]);
+    const [s] = simplifyPaths([toC(circle)], 0.005);
+    expect(s.length).toBeLessThan(200);
+    // cada cuerda de un círculo de 10 mm se aleja del arco como mucho la tolerancia
+    const pts = fromC(s);
+    pts.forEach((a, i) => {
+      const b = pts[(i + 1) % pts.length];
+      const mid = Math.hypot((a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+      expect(10 - mid).toBeLessThan(0.0055);
+    });
+  });
+});

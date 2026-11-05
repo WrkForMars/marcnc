@@ -20,16 +20,24 @@ function sanitize(svg) {
 
 /**
  * @typedef {{kind:'fill', white:boolean, rule:'evenodd'|'nonzero', rings:[number,number][][]}
- *          |{kind:'stroke', lines:{pts:[number,number][], closed:boolean}[]}} RawShape
+ *          |{kind:'stroke', group?:boolean, lines:{pts:[number,number][], closed:boolean}[]}} RawShape
+ * `group`: todas las líneas forman una sola figura (la línea central de una pieza de la imagen).
  * Las coordenadas salen en "unidades de lienzo": las del viewBox × `native.unit`.
  */
 
 /**
+ * Niveles del control "Calidad de curvas": desviación máxima entre la curva y la polilínea,
+ * en unidades de lienzo (el lado mayor del dibujo mide 1000).
+ */
+export const SVG_QUALITY = [[1, 'Borrador'], [0.4, 'Baja'], [0.15, 'Normal'], [0.05, 'Alta'], [0.015, 'Máxima']];
+
+/**
  * @param {string} text contenido del SVG
  * @param {HTMLElement} host contenedor oculto donde se monta temporalmente
+ * @param {number} [tol] desviación máxima de las curvas, en unidades de lienzo (ver SVG_QUALITY)
  * @returns {RawShape[] & {native:{unit:number,h:number}}}
  */
-export function parseSVG(text, host) {
+export function parseSVG(text, host, tol = 0.15) {
   const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
   const src = doc.documentElement;
   if (!src || src.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) {
@@ -64,7 +72,7 @@ export function parseSVG(text, host) {
     const fillOn = fl && fl !== 'none' && luminance(fl) >= 0 && parseFloat(cs.fillOpacity || 1) > 0 && tag !== 'line' && tag !== 'polyline';
     const strokeOn = st && st !== 'none' && luminance(st) >= 0 && parseFloat(cs.strokeWidth || 1) > 0;
     if (!fillOn && !strokeOn) return;
-    const subs = parsePathD(shapeToD(el), 1.2 / sc);
+    const subs = parsePathD(shapeToD(el), tol / sc);
     const T = ([x, y]) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f];
     const lines = subs.map(s => ({ pts: s.pts.map(T), closed: s.closed }));
     if (fillOn) {

@@ -4,12 +4,15 @@ import { MAX_ELEMENTS } from './model.js';
 
 /**
  * @param {import('./input/svg.js').RawShape[] & {native?:{unit:number,h:number}}} raw
- * @param {{W:number, H:number, margin:number, fit:'fill'|'native', speck:number}} p
+ * @param {{W:number, H:number, margin:number, fit:'fill'|'width'|'native', drawW?:number, speck:number}} p
+ *   fit: 'fill' ajusta a la pieza con margen, 'width' usa `drawW` mm de ancho (alto proporcional), 'native' 1:1;
+ *   en 'fill' y 'width' el dibujo queda centrado en la pieza
  * @param {import('./model.js').Element[]} [previous] para conservar los modos si la geometría no cambió de forma
- * @returns {{elements: import('./model.js').Element[], note: string}}
+ * @returns {{elements: import('./model.js').Element[], note: string, scale: number, size: [number, number]}}
+ *   scale = mm por unidad de lienzo; size = ancho y alto del dibujo en la pieza (mm)
  */
 export function buildDesign(raw, p, previous = []) {
-  const out = { elements: [], note: '' };
+  const out = { elements: [], note: '', scale: 0, size: [0, 0] };
   if (!raw) return out;
   const { W, H } = p;
   const M = Math.max(0, p.margin || 0);
@@ -26,9 +29,13 @@ export function buildDesign(raw, p, previous = []) {
   if (!isFinite(minx)) return out;
 
   const bw = Math.max(maxx - minx, 1e-6), bh = Math.max(maxy - miny, 1e-6);
-  const k = Math.min((W - 2 * M) / bw, (H - 2 * M) / bh);
+  const k = p.fit === 'width' && p.drawW > 0
+    ? p.drawW / bw
+    : Math.min((W - 2 * M) / bw, (H - 2 * M) / bh);
   const cx = (minx + maxx) / 2, cy = (miny + maxy) / 2;
   const native = p.fit === 'native' && raw.native;
+  out.scale = native ? 1 / raw.native.unit : k;
+  out.size = [bw * out.scale, bh * out.scale];
   // Y del lienzo crece hacia abajo; la máquina, hacia arriba
   const T = native
     ? ([x, y]) => [x / raw.native.unit, raw.native.h - y / raw.native.unit]
@@ -43,13 +50,14 @@ export function buildDesign(raw, p, previous = []) {
       if (s.white) list = list.map(r => (r.kind === 'fill' ? { ...r, paths: diff(r.paths, paths) } : r));
       else list.push({ kind: 'fill', paths });
     } else {
-      list.push({ kind: 'stroke', lines: s.lines.map(l => ({ pts: l.pts.map(T), closed: l.closed })) });
+      list.push({ kind: 'stroke', group: !!s.group, lines: s.lines.map(l => ({ pts: l.pts.map(T), closed: l.closed })) });
     }
   });
 
   let regs = [], lines = [];
   list.forEach(r => {
-    if (r.kind === 'stroke') lines.push(...r.lines);
+    // cada línea es una figura, salvo que vengan agrupadas (una pieza de la imagen = una figura)
+    if (r.kind === 'stroke') lines.push(...(r.group ? [r.lines] : r.lines.map(l => [l])));
     else regs.push(...regionsFromPaths(r.paths, minA));
   });
   if (regs.length + lines.length > MAX_ELEMENTS) {
@@ -60,7 +68,7 @@ export function buildDesign(raw, p, previous = []) {
     out.note = `El dibujo tiene ${before} figuras; se conservaron las ${MAX_ELEMENTS} más grandes. Sube el valor de "Ignorar manchas" o usa una imagen más limpia.`;
   }
   regs.forEach(r => out.elements.push({ src: 'design', type: 'region', parts: [{ outer: r.outer, holes: r.holes }], mode: 'fill' }));
-  lines.forEach(l => out.elements.push({ src: 'design', type: 'line', parts: [l], mode: 'line' }));
+  lines.forEach(g => out.elements.push({ src: 'design', type: 'line', parts: g, mode: 'line' }));
 
   if (previous.length === out.elements.length) {
     out.elements.forEach((e, i) => { if (previous[i].type === e.type) e.mode = previous[i].mode; });

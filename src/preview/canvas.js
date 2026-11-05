@@ -22,36 +22,75 @@ export function bbox(e) {
 
 export function createPreview(cv) {
   const ctx = cv.getContext('2d');
-  let view = { k: 1, ox: 0, oy: 0, H: 50 };
+  let view = { k: 1, ox: 0, oy: 0, W: 90, H: 50, ox0: 0, oy0: 0 };
+  // zoom y desplazamiento sobre el encuadre que ajusta la pieza (z = 1: pieza completa)
+  const nav = { z: 1, px: 0, py: 0, W: 0, H: 0 };
 
-  const toMM = (mx, my) => [(mx - view.ox) / view.k, view.H - (my - view.oy) / view.k];
+  // si el lienzo cambió de ancho y todavía no se vuelve a dibujar, se ve escalado (sin deformarse): se corrige aquí
+  const toMM = (mx, my) => {
+    const s = view.cssW && cv.clientWidth ? view.cssW / cv.clientWidth : 1;
+    return [(mx * s - view.ox) / view.k, view.H - (my * s - view.oy) / view.k];
+  };
 
   /**
-   * @param {{elements:any[], selected:number, W:number, H:number, toolWidth:number, plan:any, showPath:boolean, dragging?:boolean}} s
+   * @param {{elements:any[], selected:number, W:number, H:number, toolWidth:number, plan:any, showPath:boolean, dragging?:boolean, simulating?:boolean}} s
+   *   simulating: no dibuja el grabado terminado (lo va dibujando la simulación), solo el recorrido pendiente
    */
   function draw(s) {
-    const { elements, selected, W, H, toolWidth, plan, showPath, dragging } = s;
+    const { elements, selected, hovered = -1, W, H, toolWidth, plan, showPath, dragging, simulating } = s;
     const dpr = window.devicePixelRatio || 1;
-    const cssW = cv.clientWidth || 900, pad = 18;
-    const k = (cssW - 2 * pad) / W, cssH = H * k + 2 * pad;
+    // márgenes para las reglas (abajo y a la izquierda, donde está el cero) y altura máxima para piezas altas
+    const cssW = cv.clientWidth || 900, pL = 40, pR = 12, pT = 12, pB = 32;
+    const maxH = Math.max(240, (window.innerHeight || 800) * 0.62);
+    const k0 = Math.min((cssW - pL - pR) / W, (maxH - pT - pB) / H), cssH = H * k0 + pT + pB;
+    const ox0 = pL + Math.max(0, (cssW - pL - pR - W * k0) / 2);
+    if (W !== nav.W || H !== nav.H) { nav.z = 1; nav.px = nav.py = 0; nav.W = W; nav.H = H; } // pieza nueva: vista completa
+    const k = k0 * nav.z, ox = ox0 + nav.px, oy = pT + nav.py;
     if (cv.width !== Math.round(cssW * dpr) || cv.height !== Math.round(cssH * dpr)) {
-      cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr); cv.style.height = cssH + 'px';
+      cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr); // alto automático: conserva la proporción
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    view = { k, ox: pad, oy: pad, H };
-    const X = x => pad + x * k, Y = y => pad + (H - y) * k;
+    view = { k, ox, oy, W, H, cssW, ox0, oy0: pT };
+    const X = x => ox + x * k, Y = y => oy + (H - y) * k;
     ctx.clearRect(0, 0, cssW, cssH);
 
-    // pieza y cuadrícula de 10 mm
-    ctx.fillStyle = css('--plate'); ctx.strokeStyle = css('--plate-edge'); ctx.lineWidth = 1;
-    ctx.fillRect(X(0), Y(H), W * k, H * k);
-    ctx.strokeRect(X(0) + 0.5, Y(H) + 0.5, W * k - 1, H * k - 1);
-    ctx.globalAlpha = 0.35; ctx.beginPath();
-    for (let x = 10; x < W; x += 10) { ctx.moveTo(X(x), Y(0)); ctx.lineTo(X(x), Y(H)); }
-    for (let y = 10; y < H; y += 10) { ctx.moveTo(X(0), Y(y)); ctx.lineTo(X(W), Y(y)); }
-    ctx.stroke(); ctx.globalAlpha = 1;
-    ctx.fillStyle = css('--muted'); ctx.font = '11px "IBM Plex Mono", monospace';
-    ctx.fillText('X0 Y0', X(0) + 3, Y(0) + 13);
+    // reglas en mm sobre el banco: marcas cada 1, 5 y 10 mm y números sin encimarse
+    const rulerText = css('--stage-text');
+    ctx.strokeStyle = rulerText; ctx.fillStyle = rulerText; ctx.lineWidth = 1;
+    ctx.font = '500 11px "IBM Plex Mono", monospace';
+    const every = 10 * Math.max(1, Math.ceil(32 / (10 * k)));
+    ctx.beginPath();
+    for (let x = 0; x <= W + 1e-9; x += 1) {
+      const len = x % 10 === 0 ? 8 : x % 5 === 0 ? 5 : 3;
+      if (len === 3 && k < 4) continue;
+      const px = Math.round(X(x)) + 0.5; ctx.moveTo(px, Y(0) + 4); ctx.lineTo(px, Y(0) + 4 + len);
+    }
+    for (let y = 0; y <= H + 1e-9; y += 1) {
+      const len = y % 10 === 0 ? 8 : y % 5 === 0 ? 5 : 3;
+      if (len === 3 && k < 4) continue;
+      const py = Math.round(Y(y)) + 0.5; ctx.moveTo(X(0) - 4, py); ctx.lineTo(X(0) - 4 - len, py);
+    }
+    ctx.stroke();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (let x = 0; x <= W + 1e-9; x += every) ctx.fillText(String(x), X(x), Y(0) + 14);
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for (let y = 0; y <= H + 1e-9; y += every) ctx.fillText(String(y), X(0) - 14, Y(y));
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+
+    // la placa con su cuadrícula de 10 mm
+    ctx.fillStyle = css('--plate'); ctx.fillRect(X(0), Y(H), W * k, H * k);
+    ctx.strokeStyle = css('--plate-grid'); ctx.beginPath();
+    for (let x = 10; x < W; x += 10) { ctx.moveTo(Math.round(X(x)) + 0.5, Y(0)); ctx.lineTo(Math.round(X(x)) + 0.5, Y(H)); }
+    for (let y = 10; y < H; y += 10) { ctx.moveTo(X(0), Math.round(Y(y)) + 0.5); ctx.lineTo(X(W), Math.round(Y(y)) + 0.5); }
+    ctx.stroke();
+    ctx.strokeStyle = css('--plate-edge'); ctx.strokeRect(X(0) + 0.5, Y(H) + 0.5, W * k - 1, H * k - 1);
+    // cero de la pieza: punto y ejes cortos
+    const acc = css('--plate-accent');
+    ctx.strokeStyle = acc; ctx.fillStyle = acc; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(0) + 22, Y(0)); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(0), Y(0) - 22); ctx.stroke();
+    ctx.beginPath(); ctx.arc(X(0), Y(0), 4, 0, 2 * Math.PI); ctx.fill();
+    ctx.font = '600 10px "IBM Plex Mono", monospace'; ctx.fillText('X', X(0) + 25, Y(0) - 3); ctx.fillText('Y', X(0) + 4, Y(0) - 26);
+    ctx.lineWidth = 1;
 
     const path = (pts, closed) => {
       ctx.beginPath();
@@ -62,17 +101,23 @@ export function createPreview(cv) {
     const isDragged = e => dragging && e === elements[selected];
 
     // omitidos y elemento arrastrado: solo borde punteado
-    ctx.setLineDash([4, 3]); ctx.strokeStyle = css('--muted'); ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]); ctx.strokeStyle = css('--plate-muted'); ctx.lineWidth = 1;
     elements.forEach(e => { if (e.mode === 'skip' || isDragged(e)) outline(e); });
-    ctx.setLineDash([]);
+    // lo que no se omitió pero no deja ningún corte (más fino que la herramienta): contorno en color de aviso
+    ctx.strokeStyle = css('--plate-warn'); ctx.lineWidth = 1.5;
+    elements.forEach(e => { if (e.mode !== 'skip' && !isDragged(e) && e.paths && !e.paths.length) outline(e); });
+    ctx.setLineDash([]); ctx.lineWidth = 1;
 
     // grabado simulado: cada trayectoria con el ancho real de la línea
     ctx.strokeStyle = css('--cut'); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.lineWidth = Math.max(1, toolWidth * k);
-    elements.forEach(e => { if (!isDragged(e)) (e.paths || []).forEach(p => { path(p.pts, false); ctx.stroke(); }); });
+    if (simulating) {
+      ctx.lineWidth = 1; ctx.strokeStyle = css('--plate-edge');
+      elements.forEach(e => (e.paths || []).forEach(p => { path(p.pts, false); ctx.stroke(); }));
+    } else elements.forEach(e => { if (!isDragged(e)) (e.paths || []).forEach(p => { path(p.pts, false); ctx.stroke(); }); });
 
-    if (plan && showPath && !dragging) {
-      ctx.lineWidth = 1; ctx.strokeStyle = css('--accent'); ctx.globalAlpha = 0.9;
+    if (plan && showPath && !dragging && !simulating) {
+      ctx.lineWidth = 1; ctx.strokeStyle = css('--plate-accent'); ctx.globalAlpha = 0.9;
       elements.forEach(e => (e.paths || []).forEach(p => { path(p.pts, false); ctx.stroke(); }));
       ctx.setLineDash([3, 4]); ctx.globalAlpha = 0.6;
       let pos = [0, 0];
@@ -84,11 +129,15 @@ export function createPreview(cv) {
       ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
     }
 
+    // renglón de la lista bajo el cursor: su figura con un borde de acento punteado
+    if (hovered >= 0 && hovered !== selected && elements[hovered]) {
+      ctx.strokeStyle = css('--plate-accent'); ctx.lineWidth = 2; ctx.setLineDash([5, 3]); outline(elements[hovered]); ctx.setLineDash([]);
+    }
     if (selected >= 0 && elements[selected]) {
       const e = elements[selected];
-      ctx.strokeStyle = css('--accent'); ctx.lineWidth = 2; outline(e);
+      ctx.strokeStyle = css('--plate-accent'); ctx.lineWidth = 2; outline(e);
       if (e.type === 'region') {
-        ctx.fillStyle = css('--accent'); ctx.globalAlpha = 0.12; ctx.beginPath();
+        ctx.fillStyle = css('--plate-accent'); ctx.globalAlpha = 0.12; ctx.beginPath();
         e.parts.forEach(p => [p.outer, ...p.holes].forEach(q => fromC(q).forEach(([x, y], j) => (j ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y))))));
         ctx.fill('evenodd'); ctx.globalAlpha = 1;
       }
@@ -102,11 +151,11 @@ export function createPreview(cv) {
       const tx = X(bb[2]) - 2, ty = Y(bb[3]) - 3;
       const lbl = e.src === 'text' ? 'T' : String(i + 1);
       const w = ctx.measureText(lbl).width + 8;
-      ctx.fillStyle = css(MODE_COLOR[e.mode]);
+      ctx.fillStyle = css(MODE_COLOR[e.mode].replace('--m-', '--pm-')); // la placa es clara en ambos temas
       ctx.beginPath();
       if (ctx.roundRect) ctx.roundRect(tx - w / 2, ty - 12, w, 15, 3); else ctx.rect(tx - w / 2, ty - 12, w, 15);
       ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.fillText(lbl, tx - w / 2 + 4, ty - 1);
+      ctx.fillStyle = css('--plate-on'); ctx.fillText(lbl, tx - w / 2 + 4, ty - 1);
     });
   }
 
@@ -137,5 +186,34 @@ export function createPreview(cv) {
     return best;
   }
 
-  return { draw, hit, toMM };
+  /** Escala actual: px por mm (k), desplazamiento y tamaño de la pieza, para dibujar capas encima. */
+  const getView = () => view;
+
+  const cssScale = () => (view.cssW && cv.clientWidth ? view.cssW / cv.clientWidth : 1);
+  /**
+   * Acerca o aleja dejando fijo el punto bajo el cursor (como la rueda en un CAD). Se vuelve a dibujar después.
+   * @returns {boolean} si cambió
+   */
+  function zoomAt(mx, my, f) {
+    const s = cssScale(), x = mx * s, y = my * s;
+    const z = Math.min(50, Math.max(1, nav.z * f)), r = z / nav.z;
+    if (Math.abs(r - 1) < 1e-9) return false;
+    nav.z = z;
+    if (z === 1) { nav.px = nav.py = 0; return true; }
+    nav.px = x - (x - view.ox) * r - view.ox0;
+    nav.py = y - (y - view.oy) * r - view.oy0;
+    return true;
+  }
+  /** Desplaza la vista (px de pantalla); solo con zoom, la vista completa no se mueve. */
+  function pan(dx, dy) {
+    if (nav.z === 1) return false;
+    const s = cssScale();
+    nav.px += dx * s; nav.py += dy * s;
+    return true;
+  }
+  /** Zoom para ajustar: la pieza completa. @returns {boolean} si cambió */
+  function fit() { const was = nav.z !== 1; nav.z = 1; nav.px = nav.py = 0; return was; }
+  const zoom = () => nav.z;
+
+  return { draw, hit, toMM, getView, zoomAt, pan, fit, zoom };
 }
