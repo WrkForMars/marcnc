@@ -238,7 +238,7 @@
         <div class="panel-head"><h3>En la pieza</h3></div>
         <div class="els" id="els"></div>
         <div id="allModes"></div>
-        <p class="hint">Relleno vacía el área · Contorno sigue la orilla · Invertir graba la orilla y vacía los huecos · Línea sigue el trazo.</p>
+        <p class="hint" id="modeLegend">Relleno vacía el área · Contorno sigue la orilla · Invertir graba la orilla y vacía los huecos · Línea sigue el trazo.</p>
         <p class="hint err" id="loadErr" role="alert"></p>
       </div>
 
@@ -312,8 +312,8 @@
 
 <!-- parámetros del trabajo: cambian con cada pieza -->
 <dialog id="jobDlg" aria-labelledby="jobTitle">
-  <form method="dialog">
-    <div class="dlg-head"><h2 id="jobTitle">Parámetros del trabajo</h2><button type="submit" class="icon ghost" aria-label="Cerrar"><svg class="i"><use href="#i-close"/></svg></button></div>
+  <form method="dialog" novalidate>
+    <div class="dlg-head"><h2 id="jobTitle" tabindex="-1" autofocus>Parámetros del trabajo</h2><button type="submit" class="icon ghost" aria-label="Cerrar"><svg class="i"><use href="#i-close"/></svg></button></div>
     <div class="params">
       <h3 id="secPiece">Pieza</h3>
       <label>Ancho (mm)<input type="number" id="pw" value="90" min="5" step="1"></label>
@@ -342,8 +342,8 @@
 
 <!-- ajustes de máquina: se configuran una vez por taller -->
 <dialog id="setDlg" aria-labelledby="setTitle">
-  <form method="dialog">
-    <div class="dlg-head"><h2 id="setTitle">Ajustes de máquina</h2><button type="submit" class="icon ghost" aria-label="Cerrar"><svg class="i"><use href="#i-close"/></svg></button></div>
+  <form method="dialog" novalidate>
+    <div class="dlg-head"><h2 id="setTitle" tabindex="-1" autofocus>Ajustes de máquina</h2><button type="submit" class="icon ghost" aria-label="Cerrar"><svg class="i"><use href="#i-close"/></svg></button></div>
     <p class="hint">Se guardan en este equipo. Los valores iniciales son los de la tarea de referencia (T3, S2200, F60/F130, Z3).</p>
     <div class="params">
       <h3>Máquina</h3>
@@ -367,11 +367,11 @@
 
 <!-- exportar -->
 <dialog id="exportDlg" aria-labelledby="exportTitle">
-  <form method="dialog">
+  <form method="dialog" novalidate>
     <div class="dlg-head"><h2 id="exportTitle">Exportar</h2><button type="submit" class="icon ghost" aria-label="Cerrar"><svg class="i"><use href="#i-close"/></svg></button></div>
     <p class="export-sum" id="exportSum"></p>
     <div class="export-opts">
-      <button type="button" class="export-opt primary-opt" id="save"><svg class="i"><use href="#i-save"/></svg><span><b>Guardar código</b><small>Archivo .txt para la máquina (Ctrl+S)</small></span></button>
+      <button type="button" class="export-opt primary-opt" id="save" autofocus><svg class="i"><use href="#i-save"/></svg><span><b>Guardar código</b><small>Archivo .txt para la máquina (Ctrl+S)</small></span></button>
       <button type="button" class="export-opt" id="sheetBtn"><svg class="i"><use href="#i-sheet"/></svg><span><b>Hoja de entrega</b><small>PDF con datos, dibujo acotado y programa explicado</small></span></button>
       <button type="button" class="export-opt" id="copy2"><svg class="i"><use href="#i-copy"/></svg><span><b>Copiar código</b><small>Para pegarlo en el control o en un simulador</small></span></button>
     </div>
@@ -379,7 +379,7 @@
 </dialog>
 
 <dialog id="sheetDlg" aria-labelledby="sheetTitle">
-  <form method="dialog" id="sheetForm">
+  <form method="dialog" novalidate id="sheetForm">
     <div class="dlg-head"><h2 id="sheetTitle">Hoja de entrega</h2><button type="button" id="shCancel" class="icon ghost" aria-label="Cancelar"><svg class="i"><use href="#i-close"/></svg></button></div>
     <p class="hint">Sale una hoja con estos datos, los parámetros de corte, el dibujo sobre cuadrícula y el programa explicado. En el diálogo de impresión elige “Guardar como PDF” si la vas a enviar.</p>
     <div class="params">

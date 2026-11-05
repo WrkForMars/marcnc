@@ -69,7 +69,7 @@ button:focus-visible,.btn:focus-within,select:focus-visible,input:focus-visible,
 .btn input{position:absolute;width:1px;height:1px;opacity:0}
 input[type=number],select,input[type=text]{font:inherit;font-family:var(--f-mono);font-size:16px;line-height:24px;color:var(--ink);background:var(--bg);
   border:1px solid var(--line-strong);border-radius:8px;padding:0 12px;min-height:44px;width:100%;min-width:0}
-input[type=text]{font-family:var(--f-body)}
+input[type=text],select{font-family:var(--f-body)}
 input[type=range]{width:100%;min-height:44px;accent-color:var(--accent);margin:0}
 input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent);margin:0;flex:none}
 .check{display:flex;align-items:center;gap:8px;min-height:44px;cursor:pointer;color:var(--ink);font-weight:500}
@@ -375,3 +375,4 @@ dialog .params{margin:16px 0}
 
 .pm .panel-head{flex-wrap:nowrap}
 .pm .panel-head h3{min-width:0}
+dialog h2[tabindex]:focus{outline:none}

@@ -109,6 +109,7 @@ function drawOnly(dragging = false) {
 function renderAll() {
   drawOnly();
   $('elCount').textContent = state.elements.length ? String(state.elements.length) : '';
+  $('modeLegend').hidden = !state.elements.length;
   $('empty').hidden = !state.ready || state.elements.length > 0 || sketch.tool !== 'select';
   renderList($('els'), $('allModes'), {
     elements: state.elements, selected: state.selected,
@@ -213,7 +214,7 @@ async function loadShapes(fn, isImage) {
 function loadSvg() {
   if (!state.lastSvg) return;
   const txt = state.lastSvg;
-  loadShapes(() => parseSVG(txt, $('svghost'), SVG_QUALITY[+$('svgQ').value - 1][0]), false);
+  return loadShapes(() => parseSVG(txt, $('svghost'), SVG_QUALITY[+$('svgQ').value - 1][0]), false);
 }
 /**
  * "Normal · ±0.013 mm · 8 412 puntos": cuánto se aparta la curva en la pieza y cuántos puntos salieron.
@@ -308,7 +309,16 @@ document.addEventListener('drop', ev => {
   const f = ev.dataTransfer.files[0];
   if (f) openFile(f);
 });
-$('demo').addEventListener('click', () => { state.lastImage = null; state.lastSvg = DEMO_SVG; state.fileName = 'Ejemplo'; $('docName').value = 'Ejemplo'; $('fit').value = 'native'; state.demoFit = true; loadSvg(); });
+/** El texto del ejemplo ("LADO B"), si la pieza no tiene textos. */
+async function addDemoText() {
+  if (state.texts.length) return;
+  Object.entries(DEMO_TEXT).forEach(([k, v]) => { const id = { text: 'tText', font: 'tFont', h: 'tH', sp: 'tSp', x: 'tX', y: 'tY' }[k]; $(id).value = v; });
+  await addText(textFromForm({ id: ++state.textSeq }));
+}
+$('demo').addEventListener('click', async () => {
+  state.lastImage = null; state.lastSvg = DEMO_SVG; state.fileName = 'Ejemplo'; $('docName').value = 'Ejemplo'; $('fit').value = 'native'; state.demoFit = true;
+  await loadSvg(); await addDemoText(); select(-1); refresh();
+});
 $('clear').addEventListener('click', () => {
   Object.assign(state, { raw: null, design: [], texts: [], lastImage: null, lastSvg: '', designNote: '', fileName: '', designSize: [0, 0] });
   $('docName').value = '';
@@ -1095,6 +1105,7 @@ function simFrame(now) {
 }
 function simButtons() {
   document.querySelector('.playbar').hidden = !state.explained.length; // sin programa no hay nada que simular
+  document.querySelector('.prodbar').hidden = !state.explained.length;
   if (!state.explained.length) $('simTime').textContent = '0:00 / 0:00';
   $('simPlay').setAttribute('aria-pressed', String(sim.playing));
   $('simPlay').querySelector('use').setAttribute('href', sim.playing ? '#i-pause' : '#i-play');
@@ -1277,8 +1288,7 @@ new MutationObserver(() => { clearTimeout(toastT); if ($('toast').textContent) t
   $('fit').value = 'native'; state.demoFit = true;
   state.lastSvg = DEMO_SVG; state.fileName = 'Ejemplo'; $('docName').value = 'Ejemplo';
   await loadShapes(() => parseSVG(DEMO_SVG, $('svghost'), SVG_QUALITY[+$('svgQ').value - 1][0]), false);
-  Object.entries(DEMO_TEXT).forEach(([k, v]) => { const id = { text: 'tText', font: 'tFont', h: 'tH', sp: 'tSp', x: 'tX', y: 'tY' }[k]; $(id).value = v; });
-  await addText(textFromForm({ id: ++state.textSeq }));
+  await addDemoText();
   select(-1);
   state.ready = true;
   await refresh();
