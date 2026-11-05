@@ -290,7 +290,7 @@ $('showPath').addEventListener('change', () => drawOnly());
 // los parámetros se recuerdan entre sesiones (cada taller tiene su máquina y su herramienta)
 const SAVED = ['pw', 'ph', 'margin', 'speck', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'depth', 'rpm', 'retract', 'fz', 'fxy',
   'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs', 'imgHow', 'thr', 'svgQ', 'dw'];
-const STORE = 'grabacnc:parametros';
+const STORE = 'marcnc:parametros';
 const getVal = id => ($(id).type === 'checkbox' ? $(id).checked : $(id).value);
 const setVal = (id, v) => { if ($(id).type === 'checkbox') $(id).checked = !!v; else $(id).value = v; };
 const DEFAULTS = Object.fromEntries(SAVED.map(id => [id, getVal(id)]));
@@ -317,7 +317,7 @@ $('theme').addEventListener('click', () => {
   const root = document.documentElement;
   const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
   root.dataset.theme = dark ? 'light' : 'dark';
-  try { localStorage.setItem('grabacnc:tema', root.dataset.theme); } catch { /* solo esta sesión */ }
+  try { localStorage.setItem('marcnc:tema', root.dataset.theme); } catch { /* solo esta sesión */ }
   drawOnly();
 });
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => drawOnly());
@@ -366,7 +366,7 @@ const sketch = createSketchEditor({
   },
   css: v => getComputedStyle(document.documentElement).getPropertyValue(v).trim(),
 });
-const SKETCH_STORE = 'grabacnc:croquis';
+const SKETCH_STORE = 'marcnc:croquis';
 function storeSketch() { try { localStorage.setItem(SKETCH_STORE, JSON.stringify(sketch.save())); } catch { /* solo esta sesión */ } }
 function loadSketch() { try { sketch.load(JSON.parse(localStorage.getItem(SKETCH_STORE) || 'null')); } catch { /* croquis vacío */ } rebuildSketch(); }
 
@@ -656,7 +656,7 @@ $('simSeek').addEventListener('input', () => {
 });
 
 /* ---------- hoja de entrega ---------- */
-const SHEET_STORE = 'grabacnc:entrega';
+const SHEET_STORE = 'marcnc:entrega';
 const SHEET_FIELDS = { name: 'shName', id: 'shId', group: 'shGroup', practice: 'shPractice', teacher: 'shTeacher', material: 'shMaterial' };
 $('sheetBtn').addEventListener('click', () => {
   if (!state.gcode) { $('toast').textContent = 'Todavía no hay código para entregar.'; return; }

@@ -1,4 +1,4 @@
-# GrabaCNC
+# MarCNC
 
 Convierte un SVG o una imagen con fondo blanco en código G y M para grabado CNC. Funciona en el navegador o como programa de Windows (.exe) y Linux (.deb / AppImage), sin internet.
 
@@ -30,20 +30,20 @@ La misma app empaquetada con [Tauri](https://tauri.app). Usa el navegador del si
 
 Cada push a `main` (y cada PR) corre `.github/workflows/escritorio.yml`, que deja en *Actions → (la corrida) → Artifacts*:
 
-- **GrabaCNC-windows:** `GrabaCNC-portable.exe` (se abre directo, sin instalar ni permisos de administrador) y el instalador `GrabaCNC_x.y.z_x64-setup.exe` (se instala solo para el usuario actual).
-- **GrabaCNC-linux:** `GrabaCNC_x.y.z_amd64.deb` y `GrabaCNC_x.y.z_amd64.AppImage`, compilados en Ubuntu 22.04 para que sirvan en Ubuntu 22.04/24.04 y Linux Mint 21/22.
+- **MarCNC-windows:** `MarCNC-portable.exe` (se abre directo, sin instalar ni permisos de administrador) y el instalador `MarCNC_x.y.z_x64-setup.exe` (se instala solo para el usuario actual).
+- **MarCNC-linux:** `MarCNC_x.y.z_amd64.deb` y `MarCNC_x.y.z_amd64.AppImage`, compilados en Ubuntu 22.04 para que sirvan en Ubuntu 22.04/24.04 y Linux Mint 21/22.
 
 Al subir una etiqueta `v0.3.0` se publican todos como Release.
 
 ### Instalar en Linux Mint / Ubuntu
 
 ```bash
-sudo apt install ./GrabaCNC_0.3.0_amd64.deb
+sudo apt install ./MarCNC_0.3.0_amd64.deb
 ```
 
-O doble clic al `.deb` y *Instalar paquete*. Queda en el menú como **GrabaCNC**. Para desinstalar: `sudo apt remove grabacnc`.
+O doble clic al `.deb` y *Instalar paquete*. Queda en el menú como **MarCNC**. Para desinstalar: `sudo apt remove marcnc`.
 
-El AppImage no se instala: dale permiso de ejecución (`chmod +x GrabaCNC_*.AppImage`) y ábrelo. En Ubuntu 22.04 / Mint 21 puede pedir `sudo apt install libfuse2`.
+El AppImage no se instala: dale permiso de ejecución (`chmod +x MarCNC_*.AppImage`) y ábrelo. En Ubuntu 22.04 / Mint 21 puede pedir `sudo apt install libfuse2`.
 
 ### Windows
 

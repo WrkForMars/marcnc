@@ -13,5 +13,5 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![guardar_texto])
         .run(tauri::generate_context!())
-        .expect("no se pudo iniciar GrabaCNC");
+        .expect("no se pudo iniciar MarCNC");
 }

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "GrabaCNC",
+  "productName": "MarCNC",
   "version": "0.3.0",
-  "identifier": "mx.grabacnc.app",
+  "identifier": "mx.marcnc.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "GrabaCNC",
+        "title": "MarCNC",
         "width": 1320,
         "height": 860,
         "minWidth": 720,

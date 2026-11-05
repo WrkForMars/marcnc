@@ -1,4 +1,4 @@
-# GrabaCNC
+# MarCNC
 
 App web que convierte un SVG o una imagen con fondo blanco en código G y M para grabado CNC.
 Cada figura detectada tiene su propio modo de corte (Relleno, Contorno, Invertir, Línea, Omitir),
@@ -54,7 +54,7 @@ tests/               Vitest en entorno node; helpers.js trae parseMoves() para l
 ```
 
 El croquis no pasa por `buildDesign`: ya está en mm de la pieza y `sketchElements` da los elementos directo.
-Se guarda en localStorage (`grabacnc:croquis`); si hay uno guardado, la app abre con él en vez del ejemplo.
+Se guarda en localStorage (`marcnc:croquis`); si hay uno guardado, la app abre con él en vez del ejemplo.
 
 Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y hacia arriba) → elementos
 → `computePlan` (trayectorias del centro de la herramienta + orden) → `generateGcode`.

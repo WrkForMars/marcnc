@@ -35,7 +35,7 @@ export function generateGcode(plan, elements, o) {
   for (let p = 1; p <= passes; p++) zs.push(-Math.min(tl.depth, p * tl.depth / passes));
 
   const L = [];
-  if (o.dialect === 'fanuc') L.push('%', `O${String(o.prog || 1).padStart(4, '0')} (GRABACNC - PIEZA ${o.W}X${o.H})`);
+  if (o.dialect === 'fanuc') L.push('%', `O${String(o.prog || 1).padStart(4, '0')} (MARCNC - PIEZA ${o.W}X${o.H})`);
   L.push(`(PIEZA ${o.W} X ${o.H} MM - CERO EN ESQUINA INFERIOR IZQUIERDA - Z0 EN CARA SUPERIOR)`);
   L.push(`(T${o.toolNum} ${TOOL_NAME[tl.type]} D${f(tl.D)} - ANCHO DE LINEA ${f(tl.w)} MM - PROF. ${f(tl.depth)} MM EN ${passes} PASADA${passes > 1 ? 'S' : ''})`);
   L.push('G21 G90 G17 G40 G49 G80');

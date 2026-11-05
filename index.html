@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>GrabaCNC</title>
+<title>MarCNC</title>
 <meta name="description" content="Convierte SVG e imágenes en código G y M para grabado CNC, con modo de corte por figura y simulación.">
 <link rel="icon" type="image/svg+xml" href="./icon.svg">
 <script>
   // tema elegido antes de pintar, para que no parpadee
-  try { const t = localStorage.getItem('grabacnc:tema'); if (t) document.documentElement.dataset.theme = t; } catch {}
+  try { const t = localStorage.getItem('marcnc:tema'); if (t) document.documentElement.dataset.theme = t; } catch {}
 </script>
 </head>
 <body>
@@ -38,7 +38,7 @@
 
 <header class="topbar">
   <div class="topbar-in">
-    <div class="brand"><img src="./icon.svg" alt="" width="32" height="32"><span>Graba<b>CNC</b></span></div>
+    <div class="brand"><img src="./icon.svg" alt="" width="32" height="32"><span>Mar<b>CNC</b></span></div>
     <div class="actions">
       <label class="btn" title="Abrir archivo (Ctrl+O)"><svg class="i"><use href="#i-open"/></svg><span>Abrir<span class="label"> SVG o imagen</span></span><input type="file" id="file" accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp"></label>
       <button id="demo" type="button" class="ghost">Ejemplo</button>
