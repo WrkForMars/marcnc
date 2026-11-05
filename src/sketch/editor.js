@@ -16,15 +16,15 @@ const toLine = (p, a, b) => { const L = dist(a, b) || 1e-9; return Math.abs((b[0
 
 /** Qué pide cada herramienta en cada paso. */
 const PROMPTS = {
-  select: () => 'Toca una figura (Shift suma) o arrastra un recuadro. Clic derecho: menú · rueda: zoom · Enter: repite el último comando.',
-  line: n => (n ? 'Siguiente punto. Enter o doble clic termina; tocar el primer punto cierra la figura.' : 'Primer punto de la línea.'),
+  select: () => 'Toca una figura o arrastra un recuadro (Shift suma). Clic derecho: más opciones.',
+  line: n => (n ? 'Siguiente punto. Enter, doble clic o clic derecho termina; el primer punto cierra la figura.' : 'Primer punto de la línea.'),
   rect: n => (n ? 'Esquina opuesta, o @ancho alto.' : 'Primera esquina del rectángulo.'),
   crect: n => (n ? 'Una esquina, o @medio ancho medio alto.' : 'Centro del rectángulo.'),
   circle: n => (n ? 'Un punto del borde, o escribe el radio.' : 'Centro del círculo.'),
   arc: n => ['Centro del arco.', 'Inicio del arco, o escribe el radio.', 'Final del arco (antihorario), o escribe el ángulo final en grados.'][n],
   poly: n => (n ? 'Un vértice, o escribe el radio.' : 'Centro del polígono.'),
   slot: n => ['Centro del primer extremo de la ranura.', 'Centro del otro extremo, o @largo<ángulo.', 'Ancho: un punto en la orilla, o escribe el ancho.'][n],
-  dim: n => (n ? 'Toca un espacio vacío (o la misma figura) para su tamaño, otra figura para la distancia entre ambas, o un borde de la pieza.' : 'Cota inteligente: toca la figura que quieres acotar.'),
+  dim: n => (n ? 'Toca un lugar libre para su tamaño, otra figura para la distancia entre ambas, o un borde de la pieza.' : 'Toca la figura que quieres acotar.'),
 };
 const DRAW_TOOLS = ['line', 'rect', 'crect', 'circle', 'arc', 'poly', 'slot'];
 

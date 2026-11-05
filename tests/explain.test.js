@@ -46,6 +46,11 @@ describe('explainProgram', () => {
     expect(ex[6].from).toEqual([20, 15, -0.1]);
   });
 
+  it('explica una sola vez que el modo de movimiento sigue activo', () => {
+    const ex = explainProgram('G01 X10 F100\nX20\nX30\nG01 X40\nX50');
+    expect(ex.map(e => /sigue activo/.test(e.text))).toEqual([false, true, false, false, true]);
+  });
+
   it('marca como peligro un rápido con la herramienta abajo', () => {
     const ex = explainProgram('G01 Z-1 F60\nG00 X10 Y10');
     expect(ex[1].kind).toBe('danger');

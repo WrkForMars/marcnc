@@ -44,6 +44,7 @@ export function explainProgram(text) {
   const lines = text.replace(/\n$/, '').split('\n');
   const out = [];
   let x = 0, y = 0, z = 0, g = null, f = null, abs = true, block = '', percent = 0;
+  let modalSaid = false; // la nota de "G01 sigue activo" va solo en la primera línea que lo aprovecha
 
   lines.forEach((code, idx) => {
     const n = idx + 1;
@@ -102,7 +103,7 @@ export function explainProgram(text) {
     const motion = gs.find(v => v >= 0 && v <= 3);
     const X = get('X'), Y = get('Y'), Z = get('Z'), I = get('I'), J = get('J'), F = get('F');
     const moves = X !== undefined || Y !== undefined || Z !== undefined;
-    if (motion !== undefined) g = motion;
+    if (motion !== undefined) { g = motion; modalSaid = false; }
     if (F !== undefined) f = F;
 
     if (moves && g !== null) {
@@ -111,7 +112,8 @@ export function explainProgram(text) {
       const ny = Y === undefined ? y : abs ? Y : y + Y;
       const nz = Z === undefined ? z : abs ? Z : z + Z;
       const xy = nx !== x || ny !== y, dz = nz - z;
-      const modal = motion === undefined ? ` (G0${g} sigue activo de antes: no hace falta repetirlo)` : '';
+      const modal = motion === undefined && !modalSaid ? ` (G0${g} sigue activo de antes: no hace falta repetirlo)` : '';
+      if (modal) modalSaid = true;
       const feed = F !== undefined ? ` a ${F} mm/min` : '';
       let txt = '';
       if (g === 0) {

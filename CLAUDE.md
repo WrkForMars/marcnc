@@ -89,6 +89,12 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
   izquierdo; inspector a la derecha con pestañas Figuras / Código G que muestra solo lo seleccionado. **Parámetros del
   trabajo** (pieza, herramienta, profundidad) en `#jobDlg`, resumidos en la barra de arriba de la pieza; **ajustes de
   máquina** (controlador, velocidades, formato) en `#setDlg`. Un solo botón principal: Exportar.
+- **El croquis se maneja como SolidWorks** (sin copiar su aspecto), para que lo aprendido allá sirva aquí: orden de
+  herramientas de su pestaña Croquis, Cota inteligente, PropertyManager con vista previa y ✓ / ✕ (Enter / Esc), "Para
+  construcción" en Opciones, azul = insuficientemente definido, clic derecho termina la cadena o abre el menú, rueda =
+  zoom en el cursor, botón central = desplazar, F = ajustar, Enter = repetir el último comando. Usar sus nombres en español.
+- **Textos:** cada cosa se dice una vez y en el lugar donde se usa. Los atajos van en el `title` de los botones, no en
+  párrafos de ayuda; los mensajes de estado dicen qué falta, no repiten la leyenda de colores.
 - **Lo que se dibuja sobre la placa** usa los tokens `--plate-*` y `--pm-*`, que no cambian con el tema: la placa es metal
   claro en ambos, y el acento del tema oscuro no se vería sobre ella.
 - **Interfaz:** textos en español, tono directo. Estilo visual: alto contraste, un solo color de acento,
@@ -106,8 +112,8 @@ es un cambio de comportamiento que hay que justificar.
 
 1. Ayuda en cada campo (qué es paso de vaciado, retracción, V-bit…) y ejemplos para empezar (llavero, placa, engrane).
 2. Perfiles de máquina y material (avances sugeridos para aluminio, acrílico, MDF).
-3. Croquis: cotas visibles en el dibujo, mover con flechas, zoom y paneo de la vista previa.
-4. Importar DXF (lo que exporta SolidWorks).
+3. Importar DXF (lo que exporta SolidWorks).
+4. Zoom con dos dedos en pantallas táctiles.
 5. Mover vectorizado y vaciado a un Web Worker.
 6. PWA instalable (manifest + service worker).
 7. Firmar el .exe (certificado de código) para que Windows no muestre la advertencia de SmartScreen.

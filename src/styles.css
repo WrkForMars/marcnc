@@ -116,7 +116,7 @@ input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent);margin:0;
 .app{display:grid;grid-template-columns:var(--rail) minmax(0,1fr) var(--inspector);min-height:calc(100vh - var(--bar))}
 .rail{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:8px;padding:12px 6px;scrollbar-width:thin;
   position:sticky;top:var(--bar);height:calc(100vh - var(--bar));overflow:auto}
-.rail-group{display:flex;flex-direction:column;gap:4px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.rail-group{display:flex;flex-direction:column;gap:2px;padding-bottom:8px;border-bottom:1px solid var(--line)}
 .rail-group:last-child{border-bottom:0;padding-bottom:0}
 .rail button{flex-direction:column;gap:2px;min-height:52px;width:100%;padding:4px 2px;text-align:center;border-color:transparent;background:transparent;
   font-size:11px;line-height:14px;font-weight:500;color:var(--muted)}

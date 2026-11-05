@@ -529,7 +529,7 @@ function currentDims() {
 /** Campo flotante sobre la etiqueta de la cota para escribir el valor nuevo. */
 function openDimEdit(hit) {
   const info = state.dims, d = info.list[hit.i];
-  if (!info.editable) { $('toast').textContent = 'Las figuras del archivo se acomodan con Tamaño del dibujo. Para moverla libre, cópiala (Ctrl+C) y pégala (Ctrl+V) como croquis.'; return; }
+  if (!info.editable) { $('toast').textContent = 'Esta figura viene del archivo y se acomoda con Tamaño del dibujo. Para moverla libre, cópiala y pégala (Ctrl+C, Ctrl+V).'; return; }
   let inp = $('dimEdit');
   if (!inp) { inp = document.createElement('input'); inp.id = 'dimEdit'; inp.type = 'text'; inp.inputMode = 'decimal'; inp.className = 'dim-edit'; inp.setAttribute('aria-label', 'Valor de la cota en mm'); $('stage').append(inp); }
   const cv = $('cv');
@@ -570,16 +570,16 @@ let propsFor = null;
 function renderSketchProps2() {
   const list = sketch.selection, e = sketch.selected;
   $('skProps').hidden = !list.length;
-  $('consBtn').setAttribute('aria-pressed', String(!!list.length && list.every(x => x.construction)));
   pmSync();
   if (!list.length) { propsFor = null; return; }
   // estado de definición: qué cotas le faltan (como el azul/negro de un croquis de CAD)
   const def = sketch.defined();
   const st = list.map(x => def.get(x.id)).filter(Boolean);
   const full = st.every(s => s.full), cons = list.every(x => x.construction);
-  $('skState').textContent = cons ? 'Construcción: sirve de referencia y no se graba.'
-    : full ? 'Completamente definida: todas sus medidas y su posición están acotadas.'
-      : list.length === 1 ? `Insuficientemente definida. Falta: ${st[0].missing.join(', ')}. Toca una cota sugerida o usa Cota inteligente (D).` : 'Insuficientemente definidas: algunas figuras tienen medidas libres.';
+  const one = list.length === 1;
+  $('skState').textContent = cons ? 'Construcción: no se graba.'
+    : full ? (one ? 'Completamente definida.' : 'Completamente definidas.')
+      : one ? `Falta acotar: ${st[0].missing.join(', ')}. Toca una cota sugerida para fijarla.` : 'Algunas figuras tienen medidas sin acotar.';
   $('skState').className = `def-state ${cons ? 'cons' : full ? 'full' : 'under'}`;
   $('skCons').checked = cons;
   const sig = JSON.stringify(list) + JSON.stringify(sketch.dims);
@@ -587,6 +587,7 @@ function renderSketchProps2() {
   propsFor = sig;
   if (e) $('skTitle').textContent = renderSketchProps($('skFields'), e, patch => sketch.update(e.id, patch));
   else { $('skTitle').textContent = `${list.length} figuras`; $('skFields').textContent = ''; }
+  $('skParamsH').hidden = !e;
 }
 /** ¿El elemento viene de esa figura del croquis (como exterior o como hueco)? */
 const hasEntity = (x, id) => x.src === 'sketch' && (x.sketchId === id || new RegExp(`"id":${id}[,}]`).test(x.sig));
@@ -621,7 +622,6 @@ function toggleConstruction() {
   if (!list.length) { $('toast').textContent = 'Elige primero las figuras que serán de construcción.'; return; }
   sketch.setConstruction(!list.every(x => x.construction));
 }
-$('consBtn').addEventListener('click', toggleConstruction);
 
 /* ---------- PropertyManager: simetría y matrices con vista previa, Aceptar y Cancelar ---------- */
 const PM_TITLE = { mirror: 'Simetría de entidades', linear: 'Matriz lineal de croquis', circular: 'Matriz circular de croquis' };
@@ -635,6 +635,7 @@ function pmOp() {
 }
 /** Centro de la matriz circular y eje de simetría sugeridos: los de la selección (a la derecha / arriba de ella). */
 function pmDefaults() {
+  $('mirCLbl').textContent = $('mirAxis').value === 'x' ? 'Eje en X (mm)' : 'Eje en Y (mm)';
   const b = sketch.selectionBox();
   if (!b) return;
   $('pcCx').value = +((b[0] + b[2]) / 2).toFixed(2); $('pcCy').value = +((b[1] + b[3]) / 2).toFixed(2);
@@ -642,7 +643,7 @@ function pmDefaults() {
 }
 function pmPreview() {
   const n = sketch.selection.length;
-  $('pmSel').textContent = n ? `Entidades: ${n} seleccionada${n > 1 ? 's' : ''}. Toca otras en la pieza para cambiarlas (Shift suma).` : 'Entidades: ninguna. Toca en la pieza las figuras que quieres usar (Shift suma).';
+  $('pmSel').textContent = n ? `${n} figura${n > 1 ? 's' : ''}. Toca otras en la pieza para cambiar cuáles (Shift suma).` : 'Toca en la pieza las figuras que quieres usar (Shift suma).';
   $('pmSel').classList.toggle('err', !n);
   $('pmOk').disabled = !n;
   sketch.previewOp(n ? pmOp() : null);
@@ -1225,7 +1226,6 @@ function openText() {
   $('txtPanel').hidden = false; $('tText').focus(); $('tText').select();
 }
 $('textTool').addEventListener('click', openText);
-$('textTool2').addEventListener('click', openText);
 $('txtClose').addEventListener('click', () => { state.textOpen = false; select(-1); renderAll(); });
 
 $('emptyDraw').addEventListener('click', () => setTool('rect'));

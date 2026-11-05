@@ -30,7 +30,6 @@
   <symbol id="i-mirror" viewBox="0 0 24 24"><path d="M12 3v18" stroke-dasharray="2 2"/><path d="M9 7 4 17h5zM15 7l5 10h-5z"/></symbol>
   <symbol id="i-plin" viewBox="0 0 24 24"><rect x="3" y="9" width="5" height="6" rx="1"/><rect x="10" y="9" width="5" height="6" rx="1"/><rect x="17" y="9" width="4" height="6" rx="1"/></symbol>
   <symbol id="i-pcirc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" stroke-dasharray="2 3"/><circle cx="12" cy="5" r="1.5"/><circle cx="18.1" cy="15.5" r="1.5"/><circle cx="5.9" cy="15.5" r="1.5"/></symbol>
-  <symbol id="i-cons" viewBox="0 0 24 24"><path d="M4 20 20 4" stroke-dasharray="4 2 1 2"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
   <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
@@ -100,7 +99,6 @@
       <button type="button" data-op="mirror" aria-pressed="false" title="Simetría de entidades"><svg class="i"><use href="#i-mirror"/></svg><span>Simetría</span></button>
       <button type="button" data-op="linear" aria-pressed="false" title="Matriz lineal de croquis"><svg class="i"><use href="#i-plin"/></svg><span>Matriz lineal</span></button>
       <button type="button" data-op="circular" aria-pressed="false" title="Matriz circular de croquis"><svg class="i"><use href="#i-pcirc"/></svg><span>Matriz circular</span></button>
-      <button type="button" id="consBtn" aria-pressed="false" title="Geometría de construcción: la selección sirve de referencia y no se graba (Q)"><svg class="i"><use href="#i-cons"/></svg><span>Construcción</span></button>
     </div>
   </nav>
 
@@ -196,10 +194,10 @@
           <label>Centro Y (mm)<input type="number" id="pcCy" value="25" step="0.5"></label>
         </div>
         <div class="params" data-pm="mirror">
-          <label>Eje<select id="mirAxis"><option value="x">Vertical (x = …)</option><option value="y">Horizontal (y = …)</option></select></label>
-          <label>Posición (mm)<input type="number" id="mirC" value="45" step="0.5"></label>
+          <label>Eje<select id="mirAxis"><option value="x">Vertical</option><option value="y">Horizontal</option></select></label>
+          <label><span id="mirCLbl">Eje en X (mm)</span><input type="number" id="mirC" value="45" step="0.5"></label>
         </div>
-        <p class="hint">La vista previa va punteada. Enter acepta, Esc cancela.</p>
+        <p class="hint">Lo punteado es la vista previa.</p>
       </div>
 
       <!-- figura del croquis seleccionada -->
@@ -211,11 +209,11 @@
           </div>
         </div>
         <p class="def-state" id="skState" role="status"></p>
-        <h4 class="pm-sec">Parámetros</h4>
+        <h4 class="pm-sec" id="skParamsH">Parámetros</h4>
         <div class="params" id="skFields"></div>
         <h4 class="pm-sec">Opciones</h4>
-        <label class="check"><input type="checkbox" id="skCons"> Para construcción (referencia, no se graba)</label>
-        <p class="hint">Azul: insuficientemente definida · Negro: completamente definida · Punteada: construcción. Medidas en mm desde el origen (esquina inferior izquierda); ángulos antihorario desde la derecha.</p>
+        <label class="check"><input type="checkbox" id="skCons"> Para construcción (de referencia, no se graba)</label>
+        <p class="hint">Medidas en mm desde el origen (esquina inferior izquierda). Ángulos antihorario desde la derecha. Azul: falta acotar · Negro: definida.</p>
       </div>
 
       <!-- texto: aparece con la herramienta Texto o al elegir un texto -->
@@ -237,7 +235,7 @@
 
       <!-- lista de figuras -->
       <div class="panel panel-list">
-        <div class="panel-head"><h3>En la pieza</h3><button type="button" id="textTool2" class="ghost"><svg class="i"><use href="#i-text"/></svg>Texto</button></div>
+        <div class="panel-head"><h3>En la pieza</h3></div>
         <div class="els" id="els"></div>
         <div id="allModes"></div>
         <p class="hint">Relleno vacía el área · Contorno sigue la orilla · Invertir graba la orilla y vacía los huecos · Línea sigue el trazo.</p>
