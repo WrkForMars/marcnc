@@ -7,6 +7,7 @@
  *   kind:'comment'|'setup'|'tool'|'spindle'|'rapid'|'plunge'|'retract'|'cut'|'arc'|'end'|'danger'|'other',
  *   text:string,                                  // qué hace la línea
  *   from?:[number,number,number], to?:[number,number,number],
+ *   g?:number, f?:number|null,                    // modo de movimiento y avance vigentes (mm/min) en las líneas que mueven
  *   arc?:{c:[number,number], r:number, ccw:boolean},
  *   block?:string,                                // figura o texto a la que pertenece (del comentario anterior)
  * }} Explained
@@ -142,7 +143,7 @@ export function explainProgram(text) {
           txt = `Corta un arco en sentido ${ccw ? 'antihorario' : 'horario'} hasta ${pt(nx, ny)}${R !== undefined ? ` con radio ${fx(R)} mm` : ''}${feed}${modal}.`;
         }
       }
-      e.from = from; e.to = [nx, ny, nz];
+      e.from = from; e.to = [nx, ny, nz]; e.g = g; e.f = f;
       x = nx; y = ny; z = nz;
       parts.push(txt);
     } else if (motion !== undefined) {

@@ -1,6 +1,7 @@
 // Escritura del programa G y M. Función pura: no toca el DOM.
 import { MODE_NAME } from '../model.js';
 import { fitArcs } from './arcs.js';
+import { RAPID_MM_MIN } from './simulate.js';
 
 /**
  * @typedef {{
@@ -100,6 +101,6 @@ export function generateGcode(plan, elements, o) {
   if (o.dialect === 'fanuc') L.push('G28 G91 Z0', 'G90', 'M30', '%');
   else L.push('M30');
 
-  const mins = cutLen / fxy + plunges * (tl.depth / passes + R) / fz + rapLen / 1500;
+  const mins = cutLen / fxy + plunges * (tl.depth / passes + R) / fz + rapLen / RAPID_MM_MIN;
   return { text: L.join('\n') + '\n', lines: L.length, cutLen, mins, plunges, arcsN, passes };
 }

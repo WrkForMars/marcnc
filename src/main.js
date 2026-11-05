@@ -4,6 +4,7 @@ import { buildDesign } from './design.js';
 import { DEMO_SVG, DEMO_TEXT } from './demo.js';
 import { explainProgram } from './cam/explain.js';
 import { generateGcode } from './cam/gcode.js';
+import { buildTimeline, clock, positionAt, segAt, segPoint, timeOfLine } from './cam/simulate.js';
 import { computePlan } from './cam/plan.js';
 import { isDesktop, saveTextDesktop } from './desktop.js';
 import { toolGeometry } from './cam/tool.js';
@@ -80,8 +81,9 @@ function drawOnly(dragging = false) {
   const p = params();
   preview.draw({
     elements: state.elements, selected: state.selected, W: p.W, H: p.H,
-    toolWidth: state.plan ? state.plan.tl.w : toolGeometry(p).w, plan: state.plan, showPath: $('showPath').checked, dragging,
+    toolWidth: state.plan ? state.plan.tl.w : toolGeometry(p).w, plan: state.plan, showPath: $('showPath').checked, dragging, simulating: sim.on,
   });
+  if (sim.on) { simResize(); simPaint(sim.t); }
   drawOverlay();
 }
 function renderAll() {
@@ -117,6 +119,8 @@ function warnings(p, plan) {
 }
 
 async function refresh() {
+  if (sim.on) simEnd();
+  sim.tl = null;
   const my = ++state.gen;
   busy('Calculando trayectorias…');
   await tick();
@@ -141,6 +145,7 @@ async function refresh() {
     const g = generateGcode(plan, state.elements, p);
     state.gcode = g.text; state.lastG = g;
     state.explained = explainProgram(g.text);
+    $('simTime').textContent = `0:00 / ${clock(simTimeline().total)}`;
     if (state.codeSel > state.explained.length) state.codeSel = 0;
     showCode();
     $('stats').textContent = '';
@@ -151,6 +156,7 @@ async function refresh() {
     if (ws.length) { const d = document.createElement('div'); d.className = 'warnbox'; d.textContent = ws.join(' '); $('warns').append(d); }
   }
   busy(null);
+  simButtons();
   renderAll();
   $('eff').textContent = `Ancho de línea a ${tl.depth} mm: ${tl.w.toFixed(2)} mm${tl.type === 'ball' ? ' (la bola solo corta con la punta)' : tl.type === 'v' ? ' (depende de la profundidad)' : ''}`;
 }
@@ -512,6 +518,7 @@ function selectLine(n) {
   if (!max) return;
   state.codeSel = Math.max(1, Math.min(max, n));
   markRow($('code'), state.codeSel);
+  if (sim.on) { simPause(); sim.t = Math.max(0, timeOfLine(simTimeline(), state.codeSel) - 1e-6); simUpdate(); return; }
   showLine();
 }
 $('code').addEventListener('click', ev => { const r = ev.target.closest('.row'); if (r) { selectLine(+r.dataset.n); $('code').focus({ preventScroll: true }); } });
@@ -530,17 +537,19 @@ function drawCodeHighlight(X, Y, k) {
   const e = state.explained[state.codeSel - 1];
   if (!e || !e.to) return;
   const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-  const [x0, y0] = e.from, [x1, y1, z1] = e.to;
+  const [x0, y0] = e.from;
+  const [x1, y1, z1] = sim.on && state.simPos ? state.simPos : e.to; // en la simulación, donde va la herramienta
   const col = css(e.kind === 'danger' ? '--warn' : '--accent');
   octx.save();
   octx.strokeStyle = col; octx.lineWidth = 3; octx.lineCap = 'round';
   if (e.kind === 'rapid' || e.kind === 'retract' || e.kind === 'danger') octx.setLineDash([6, 5]);
   octx.beginPath();
+  const [ex, ey] = e.to;
   if (e.arc) {
     // en pantalla Y crece hacia abajo: el sentido antihorario de la máquina es horario en el lienzo
     const [cx, cy] = e.arc.c;
-    octx.arc(X(cx), Y(cy), e.arc.r * k, -Math.atan2(y0 - cy, x0 - cx), -Math.atan2(y1 - cy, x1 - cx), e.arc.ccw);
-  } else { octx.moveTo(X(x0), Y(y0)); octx.lineTo(X(x1), Y(y1)); }
+    octx.arc(X(cx), Y(cy), e.arc.r * k, -Math.atan2(y0 - cy, x0 - cx), -Math.atan2(ey - cy, ex - cx), e.arc.ccw);
+  } else { octx.moveTo(X(x0), Y(y0)); octx.lineTo(X(ex), Y(ey)); }
   octx.stroke(); octx.setLineDash([]);
   const tw = state.plan ? state.plan.tl.w : 1;
   const r = Math.max(6, (tw * k) / 2);
@@ -554,6 +563,97 @@ function drawCodeHighlight(X, Y, k) {
   octx.fillStyle = css('--ink'); octx.fillText(txt, lx + 4, Y(y1) + 4);
   octx.restore();
 }
+
+/* ---------- simulación del recorrido ---------- */
+const sim = { on: false, playing: false, t: 0, drawnT: 0, tl: null, raf: 0, last: 0 };
+const simCv = $('sim'), sctx = simCv.getContext('2d');
+const simTimeline = () => sim.tl || (sim.tl = buildTimeline(state.explained));
+/** La capa de simulación copia el tamaño de la vista previa; si cambia, se vuelve a pintar desde cero. */
+function simResize() {
+  const cv = $('cv'), dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  simCv.style.width = w + 'px'; simCv.style.height = h + 'px';
+  if (simCv.width !== Math.round(w * dpr) || simCv.height !== Math.round(h * dpr)) {
+    simCv.width = Math.round(w * dpr); simCv.height = Math.round(h * dpr); sim.drawnT = 0;
+  }
+  sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+/** Pinta el grabado hecho hasta t; solo agrega lo nuevo desde la última vez (si se regresa, empieza de cero). */
+function simPaint(t) {
+  const tl = simTimeline(), v = preview.getView();
+  if (t < sim.drawnT || sim.drawnT === 0) { sctx.clearRect(0, 0, simCv.width, simCv.height); sim.drawnT = 0; }
+  const X = x => v.ox + x * v.k, Y = y => v.oy + (v.H - y) * v.k;
+  sctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--cut').trim();
+  sctx.lineWidth = Math.max(1, (state.plan ? state.plan.tl.w : 1) * v.k); sctx.lineCap = 'round'; sctx.lineJoin = 'round';
+  const i0 = Math.max(0, segAt(tl, sim.drawnT)), i1 = segAt(tl, t);
+  for (let i = i0; i <= i1 && i < tl.segs.length; i++) {
+    const s = tl.segs[i];
+    if (!(s.to[2] < 0 && s.from[2] < 0) && !(s.kind === 'plunge' && s.to[2] < 0)) continue; // solo lo que corta
+    const u0 = Math.max(0, (sim.drawnT - s.t0) / s.dur), u1 = Math.min(1, (t - s.t0) / s.dur);
+    if (u1 < u0) continue;
+    const steps = s.arc ? Math.max(1, Math.ceil(Math.abs(s.arc.sweep) * s.arc.r * v.k * (u1 - u0) / 3)) : 1;
+    sctx.beginPath();
+    for (let j = 0; j <= steps; j++) {
+      const p = segPoint(s, u0 + (u1 - u0) * j / steps);
+      if (j) sctx.lineTo(X(p[0]), Y(p[1])); else sctx.moveTo(X(p[0]), Y(p[1]));
+    }
+    if (steps === 1 && s.kind === 'plunge') sctx.lineTo(X(s.to[0]) + 0.01, Y(s.to[1])); // la bajada deja un punto
+    sctx.stroke();
+  }
+  sim.drawnT = t;
+}
+function simUpdate() {
+  const tl = simTimeline();
+  simPaint(sim.t);
+  const pos = positionAt(tl, sim.t);
+  state.simPos = pos ? pos.p : null;
+  if (pos && pos.seg.n !== state.codeSel) { state.codeSel = pos.seg.n; markRow($('code'), state.codeSel); }
+  showLine();
+  $('simSeek').value = String(tl.total ? Math.round((sim.t / tl.total) * 1000) : 0);
+  $('simTime').textContent = `${clock(sim.t)} / ${clock(tl.total)}`;
+}
+function simFrame(now) {
+  const tl = simTimeline();
+  sim.t = Math.min(tl.total, sim.t + ((now - sim.last) / 1000) * +$('simSpeed').value);
+  sim.last = now;
+  simUpdate();
+  if (sim.t >= tl.total) simPause(); else sim.raf = requestAnimationFrame(simFrame);
+}
+function simButtons() {
+  $('simPlay').setAttribute('aria-pressed', String(sim.playing));
+  $('simPlay').querySelector('use').setAttribute('href', sim.playing ? '#i-pause' : '#i-play');
+  $('simPlay').querySelector('span').textContent = sim.playing ? 'Pausa' : sim.on ? 'Seguir' : 'Simular';
+  $('simStop').hidden = !sim.on; $('simSeek').disabled = !state.explained.length;
+}
+function simBegin() {
+  if (!state.explained.length || sim.on) return;
+  sim.on = true; sim.drawnT = 0;
+  drawOnly();
+}
+function simPlay() {
+  simBegin();
+  if (!sim.on) return;
+  if (sim.t >= simTimeline().total) { sim.t = 0; sim.drawnT = 0; }
+  sim.playing = true; sim.last = performance.now();
+  cancelAnimationFrame(sim.raf); sim.raf = requestAnimationFrame(simFrame);
+  simButtons();
+}
+function simPause() { sim.playing = false; cancelAnimationFrame(sim.raf); simButtons(); }
+function simEnd() {
+  simPause();
+  sim.on = false; sim.t = 0; sim.drawnT = 0; state.simPos = null;
+  sctx.clearRect(0, 0, simCv.width, simCv.height);
+  $('simSeek').value = '0'; $('simTime').textContent = `0:00 / ${clock(state.explained.length ? simTimeline().total : 0)}`;
+  simButtons(); drawOnly(); showLine();
+}
+$('simPlay').addEventListener('click', () => (sim.playing ? simPause() : simPlay()));
+$('simStop').addEventListener('click', simEnd);
+$('simSeek').addEventListener('input', () => {
+  simBegin();
+  if (!sim.on) return;
+  simPause();
+  sim.t = (+$('simSeek').value / 1000) * simTimeline().total;
+  simUpdate();
+});
 
 /* ---------- hoja de entrega ---------- */
 const SHEET_STORE = 'grabacnc:entrega';

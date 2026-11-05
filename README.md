@@ -8,6 +8,7 @@ Convierte un SVG o una imagen con fondo blanco en código G y M para grabado CNC
 - **Simulación real:** la vista previa dibuja el grabado con el ancho que de verdad deja la herramienta a esa profundidad (una ball mill de 1/8" a 0.1 mm corta 1.11 mm, no 3.175 mm) y avisa cuando un detalle no cabe o algo se sale de la pieza.
 - **Línea central:** las imágenes de trazos delgados (letras a mano, dibujos de línea) se pueden grabar en una sola pasada por el centro de cada trazo.
 - **Aprende a leer el código:** toca cualquier línea del programa y te dice qué hace en español ("baja la herramienta 0.10 mm a 60 mm/min", "arco horario con centro en…") y resalta ese movimiento en la vista previa; con ↑ ↓ lo recorres paso a paso.
+- **Simulación del recorrido:** el grabado aparece poco a poco con el ancho real de la herramienta, a 1×–500×, con barra para adelantar o regresar; el visor del código va narrando cada línea y al tocar una salta a ese momento.
 - **Hoja de entrega:** con tus datos (alumno, número de control, práctica, profesor, material) sale una hoja imprimible o en PDF con los parámetros de corte, el dibujo sobre cuadrícula con coordenadas, las líneas de cada figura y el programa explicado.
 - **Código legible:** comentarios por figura, arcos `G02`/`G03`, pasadas múltiples, formato Fanuc/Haas o GRBL.
 

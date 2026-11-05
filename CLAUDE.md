@@ -42,6 +42,7 @@ src/
   cam/arcs.js        ajuste de arcos G02/G03 — probado
   cam/plan.js        cálculo con caché y orden de corte, cede el hilo cada ~30 ms
   cam/gcode.js       escritura del programa (función pura) — probado
+  cam/simulate.js    línea de tiempo del programa (duración por avance, posición en cada instante) — probado
   cam/explain.js     explica cada línea del programa siguiendo su estado (posición, modo G, avance) — probado
   text/hershey.js    texto de una línea (fuentes Hershey, datos en hershey-data.json)
   text/text.js       textos rellenos (canvas → ImageTracer) y posición en la pieza
@@ -92,11 +93,10 @@ es un cambio de comportamiento que hay que justificar.
 
 ## Pendiente (en orden de valor)
 
-1. Simulación animada del recorrido (el visor ya resalta una línea a la vez).
-2. Ayuda en cada campo (qué es paso de vaciado, retracción, V-bit…) y ejemplos para empezar (llavero, placa, engrane).
-3. Perfiles de máquina y material (avances sugeridos para aluminio, acrílico, MDF).
-4. Croquis: cotas visibles en el dibujo, mover con flechas, zoom y paneo de la vista previa.
-5. Importar DXF (lo que exporta SolidWorks).
-6. Mover vectorizado y vaciado a un Web Worker.
-7. PWA instalable (manifest + service worker).
-8. Firmar el .exe (certificado de código) para que Windows no muestre la advertencia de SmartScreen.
+1. Ayuda en cada campo (qué es paso de vaciado, retracción, V-bit…) y ejemplos para empezar (llavero, placa, engrane).
+2. Perfiles de máquina y material (avances sugeridos para aluminio, acrílico, MDF).
+3. Croquis: cotas visibles en el dibujo, mover con flechas, zoom y paneo de la vista previa.
+4. Importar DXF (lo que exporta SolidWorks).
+5. Mover vectorizado y vaciado a un Web Worker.
+6. PWA instalable (manifest + service worker).
+7. Firmar el .exe (certificado de código) para que Windows no muestre la advertencia de SmartScreen.

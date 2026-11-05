@@ -27,10 +27,11 @@ export function createPreview(cv) {
   const toMM = (mx, my) => [(mx - view.ox) / view.k, view.H - (my - view.oy) / view.k];
 
   /**
-   * @param {{elements:any[], selected:number, W:number, H:number, toolWidth:number, plan:any, showPath:boolean, dragging?:boolean}} s
+   * @param {{elements:any[], selected:number, W:number, H:number, toolWidth:number, plan:any, showPath:boolean, dragging?:boolean, simulating?:boolean}} s
+   *   simulating: no dibuja el grabado terminado (lo va dibujando la simulación), solo el recorrido pendiente
    */
   function draw(s) {
-    const { elements, selected, W, H, toolWidth, plan, showPath, dragging } = s;
+    const { elements, selected, W, H, toolWidth, plan, showPath, dragging, simulating } = s;
     const dpr = window.devicePixelRatio || 1;
     const cssW = cv.clientWidth || 900, pad = 18;
     const k = (cssW - 2 * pad) / W, cssH = H * k + 2 * pad;
@@ -69,9 +70,12 @@ export function createPreview(cv) {
     // grabado simulado: cada trayectoria con el ancho real de la línea
     ctx.strokeStyle = css('--cut'); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.lineWidth = Math.max(1, toolWidth * k);
-    elements.forEach(e => { if (!isDragged(e)) (e.paths || []).forEach(p => { path(p.pts, false); ctx.stroke(); }); });
+    if (simulating) {
+      ctx.lineWidth = 1; ctx.strokeStyle = css('--plate-edge');
+      elements.forEach(e => (e.paths || []).forEach(p => { path(p.pts, false); ctx.stroke(); }));
+    } else elements.forEach(e => { if (!isDragged(e)) (e.paths || []).forEach(p => { path(p.pts, false); ctx.stroke(); }); });
 
-    if (plan && showPath && !dragging) {
+    if (plan && showPath && !dragging && !simulating) {
       ctx.lineWidth = 1; ctx.strokeStyle = css('--accent'); ctx.globalAlpha = 0.9;
       elements.forEach(e => (e.paths || []).forEach(p => { path(p.pts, false); ctx.stroke(); }));
       ctx.setLineDash([3, 4]); ctx.globalAlpha = 0.6;
