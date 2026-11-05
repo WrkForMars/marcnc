@@ -453,7 +453,13 @@ export function createSketchEditor(hooks) {
       // selección: tiradores en los puntos notables
       const sl = S.entities.filter(e => S.sel.has(e.id) || S.dimFirst === e.id).map(off);
       ctx.fillStyle = css('--plate-on'); ctx.strokeStyle = css('--plate-accent'); ctx.lineWidth = 1.5;
-      sl.forEach(e => snapPoints(e).forEach(({ p }) => { ctx.fillRect(X(p[0]) - 3, Y(p[1]) - 3, 6, 6); ctx.strokeRect(X(p[0]) - 3, Y(p[1]) - 3, 6, 6); }));
+      // una polilínea larga (de un DXF o un archivo) muestra tiradores solo en su caja, no en cada punto de los arcos
+      const handles = e => {
+        if (e.type !== 'line' || e.pts.length <= 12) return snapPoints(e).map(q => q.p);
+        const [x0, y0, x1, y1] = entityBox(e), xm = (x0 + x1) / 2, ym = (y0 + y1) / 2;
+        return [[x0, y0], [xm, y0], [x1, y0], [x1, ym], [x1, y1], [xm, y1], [x0, y1], [x0, ym]];
+      };
+      sl.forEach(e => handles(e).forEach(p => { ctx.fillRect(X(p[0]) - 3, Y(p[1]) - 3, 6, 6); ctx.strokeRect(X(p[0]) - 3, Y(p[1]) - 3, 6, 6); }));
       if (S.drag && (S.drag.dx || S.drag.dy)) label(ctx, css, X(S.drag.start[0]) + 12, Y(S.drag.start[1]) - 12, `Δ ${fmt(S.drag.dx)}, ${fmt(S.drag.dy)}`);
 
       // recuadro de selección: continuo = dentro, punteado = lo que toque

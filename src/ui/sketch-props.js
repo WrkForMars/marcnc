@@ -1,5 +1,5 @@
 // Propiedades de la figura del croquis seleccionada: cada medida es un campo editable.
-import { ENTITY_NAME } from '../sketch/geometry.js';
+import { entityName } from '../sketch/geometry.js';
 
 const FIELDS = {
   rect: [['x', 'Esquina X (mm)'], ['y', 'Esquina Y (mm)'], ['w', 'Ancho (mm)', 'pos'], ['h', 'Alto (mm)', 'pos'], ['rr', 'Radio de esquinas (mm)', 'nonneg']],
@@ -48,7 +48,7 @@ export function renderSketchProps(box, e, onPatch) {
     );
     const n = document.createElement('p');
     n.className = 'hint full';
-    n.textContent = `${e.pts.length} puntos${e.closed ? ', cerrada' : ''}. Muévela con las flechas o arrastrándola.`;
+    n.textContent = 'Muévela con las flechas o arrastrándola.';
     box.append(n);
   } else if (e.type === 'line') {
     e.pts.forEach((p, i) => {
@@ -67,5 +67,5 @@ export function renderSketchProps(box, e, onPatch) {
   } else {
     FIELDS[e.type].forEach(([k, label, check]) => box.append(field(label, numInput(e[k], v => onPatch({ [k]: v }), check))));
   }
-  return ENTITY_NAME[e.type];
+  return entityName(e);
 }

@@ -68,7 +68,7 @@
     <button type="button" id="skRedo" class="icon ghost" aria-label="Rehacer (Ctrl+Y)" title="Rehacer (Ctrl+Y)"><svg class="i"><use href="#i-redo"/></svg></button>
     <span class="sep" aria-hidden="true"></span>
     <button id="clear" type="button" class="ghost" title="Pieza vacía"><svg class="i"><use href="#i-new"/></svg><span class="lbl">Nuevo</span></button>
-    <label class="btn ghost" title="Abrir SVG o imagen (Ctrl+O)"><svg class="i"><use href="#i-open"/></svg><span class="lbl">Abrir</span><input type="file" id="file" accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp"></label>
+    <label class="btn ghost" title="Abrir SVG, DXF o imagen (Ctrl+O)"><svg class="i"><use href="#i-open"/></svg><span class="lbl">Abrir</span><input type="file" id="file" accept=".svg,image/svg+xml,.dxf,image/vnd.dxf,application/dxf,image/png,image/jpeg,image/webp"></label>
     <button id="demo" type="button" class="ghost">Ejemplo</button>
     <span class="sep" aria-hidden="true"></span>
     <button id="setBtn" type="button" class="icon ghost" aria-label="Ajustes de máquina" title="Ajustes de máquina"><svg class="i"><use href="#i-gear"/></svg></button>
@@ -130,10 +130,10 @@
       <div class="empty" id="empty" hidden>
         <svg class="empty-logo" viewBox="0 0 64 64" aria-hidden="true"><use href="#i-wave"/></svg>
         <h2>Empieza tu pieza</h2>
-        <p>Dibuja con medidas exactas, o trae un logo, un SVG o la foto de un dibujo.</p>
+        <p>Dibuja con medidas exactas, o trae un DXF de SolidWorks, un SVG, un logo o la foto de un dibujo.</p>
         <div class="empty-actions">
           <button type="button" id="emptyDraw" class="primary"><svg class="i"><use href="#i-rect"/></svg>Dibujar</button>
-          <button type="button" id="emptyOpen"><svg class="i"><use href="#i-open"/></svg>Abrir imagen o SVG</button>
+          <button type="button" id="emptyOpen"><svg class="i"><use href="#i-open"/></svg>Abrir archivo</button>
           <button type="button" id="emptyDemo" class="ghost">Ver un ejemplo</button>
         </div>
       </div>

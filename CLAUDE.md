@@ -28,6 +28,8 @@ src/
   design.js          dibujo cargado → elementos en mm sobre la pieza
   demo.js            dibujo y texto de ejemplo
   input/svg-path.js  lector de rutas SVG puro (sin DOM); curvas divididas por tolerancia — probado
+  input/dxf.js       lector DXF puro (LINE, ARC, CIRCLE, LWPOLYLINE/POLYLINE con abombado, ELLIPSE, SPLINE, bloques),
+                     $INSUNITS → mm, une tramos sueltos en contornos; entra al croquis a 1:1 — probado
   input/svg.js       lee un SVG con estilos y transformaciones (usa DOM); niveles de calidad SVG_QUALITY
   input/detect.js    qué píxeles son dibujo: Otsu, adaptativo para fotos con sombra, por color del fondo, limpieza — probado
   input/image.js     imagen (recorte, detalle) → detect.js → contornos con ImageTracer, o línea central
@@ -103,7 +105,7 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
 
 ## Pruebas
 
-Cualquier cambio en `cam/`, `geometry/`, `input/svg-path.js`, `input/centerline.js`, `design.js` o `text/hershey.js` lleva su prueba.
+Cualquier cambio en `cam/`, `geometry/`, `input/svg-path.js`, `input/dxf.js`, `input/centerline.js`, `design.js` o `text/hershey.js` lleva su prueba.
 Las pruebas de `tests/gcode.test.js` fijan los parámetros de la tarea de referencia (pieza 90 × 50 mm,
 T3 ball mill 1/8", S2200, F60 en Z, F130 en XY, retracción Z3, profundidad 0.1 mm): si una cambia,
 es un cambio de comportamiento que hay que justificar.
@@ -112,8 +114,7 @@ es un cambio de comportamiento que hay que justificar.
 
 1. Ayuda en cada campo (qué es paso de vaciado, retracción, V-bit…) y ejemplos para empezar (llavero, placa, engrane).
 2. Perfiles de máquina y material (avances sugeridos para aluminio, acrílico, MDF).
-3. Importar DXF (lo que exporta SolidWorks).
-4. Zoom con dos dedos en pantallas táctiles.
-5. Mover vectorizado y vaciado a un Web Worker.
-6. PWA instalable (manifest + service worker).
-7. Firmar el .exe (certificado de código) para que Windows no muestre la advertencia de SmartScreen.
+3. Zoom con dos dedos en pantallas táctiles.
+4. Mover vectorizado y vaciado a un Web Worker.
+5. PWA instalable (manifest + service worker).
+6. Firmar el .exe (certificado de código) para que Windows no muestre la advertencia de SmartScreen.

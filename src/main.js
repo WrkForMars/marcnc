@@ -10,6 +10,7 @@ import { isDesktop, saveTextDesktop } from './desktop.js';
 import { toolGeometry } from './cam/tool.js';
 import { parseSVG, SVG_QUALITY } from './input/svg.js';
 import { traceImage } from './input/image.js';
+import { dxfEntities, parseDxf } from './input/dxf.js';
 import { bbox, createPreview } from './preview/canvas.js';
 import { buildText, textElement, TEXT_FONTS } from './text/text.js';
 import { renderList } from './ui/list.js';
@@ -244,9 +245,15 @@ function loadImage() {
 
 /* ---------- archivos ---------- */
 function openFile(f) {
-  const isSvg = /svg/i.test(f.type) || /\.svg$/i.test(f.name);
-  if (!isSvg && !/^image\//.test(f.type)) { $('loadErr').textContent = 'Ese archivo no es un SVG ni una imagen (PNG, JPG o WEBP).'; return; }
+  const isSvg = /svg/i.test(f.type) || /\.svg$/i.test(f.name), isDxf = /\.dxf$/i.test(f.name);
+  if (!isSvg && !isDxf && !/^image\//.test(f.type)) { $('loadErr').textContent = 'Ese archivo no es un SVG, un DXF ni una imagen (PNG, JPG o WEBP).'; return; }
   state.fileName = f.name.replace(/\.[^.]+$/, ''); $('docName').value = state.fileName;
+  if (isDxf) {
+    const rd = new FileReader();
+    rd.onload = () => importDxf(String(rd.result));
+    rd.readAsText(f);
+    return;
+  }
   // el ejemplo se ve a 1:1 porque está dibujado en mm; un archivo propio empieza ajustado a la pieza
   if (state.demoFit && $('fit').value === 'native') $('fit').value = 'fill';
   state.demoFit = false;
@@ -263,6 +270,26 @@ function openFile(f) {
     };
     rd.readAsDataURL(f);
   }
+}
+/**
+ * DXF → figuras del croquis a escala 1:1: quedan elegidas para moverlas, acotarlas o elegir su modo.
+ * Se agregan a lo que ya hay (Ctrl+Z las quita).
+ */
+function importDxf(text) {
+  let r;
+  try { r = parseDxf(text); } catch (err) { $('loadErr').textContent = err.message; return; }
+  const p = params(), o = dxfEntities(r, p.W, p.H);
+  if (!o.entities.length) { $('loadErr').textContent = 'Ese DXF no tiene líneas, arcos ni círculos que grabar.'; return; }
+  $('loadErr').textContent = '';
+  setTool('select');
+  sketch.addMany(o.entities);
+  const n = (v, d = 1) => +v.toFixed(d);
+  const big = o.size[0] > p.W + 1e-6 || o.size[1] > p.H + 1e-6;
+  const sk = Object.entries(r.skipped).map(([k, v]) => `${v} ${k}`).join(', ');
+  $('toast').textContent = `DXF a 1:1: ${o.entities.length} figura${o.entities.length > 1 ? 's' : ''}, ${n(o.size[0])} × ${n(o.size[1])} mm`
+    + (r.unitName !== 'mm' ? ` (venía en ${r.unitName})` : '') + (o.moved ? ', centrado en la pieza' : '') + '.'
+    + (big ? ` No cabe en la pieza de ${n(p.W)} × ${n(p.H)} mm: agrándala en Pieza.` : '')
+    + (sk ? ` Se ignoró: ${sk}.` : '');
 }
 $('file').addEventListener('change', ev => {
   const f = ev.target.files[0];

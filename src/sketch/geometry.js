@@ -17,6 +17,8 @@ import { distSeg, pointInPolygon } from '../geometry/simplify.js';
  */
 
 export const ENTITY_NAME = { line: 'Línea', rect: 'Rectángulo', circle: 'Círculo', arc: 'Arco', poly: 'Polígono', slot: 'Ranura' };
+/** Nombre para mostrar: una línea cerrada (un contorno de un DXF, por ejemplo) es un perfil. */
+export const entityName = e => (e.type === 'line' && e.closed && e.pts.length > 2 ? 'Perfil' : ENTITY_NAME[e.type]);
 
 const RAD = Math.PI / 180;
 const fmt = v => String(+v.toFixed(2));
@@ -217,7 +219,11 @@ export function describe(e) {
       let L = 0;
       e.pts.forEach((p, i) => { if (i) L += Math.hypot(p[0] - e.pts[i - 1][0], p[1] - e.pts[i - 1][1]); });
       if (e.closed && e.pts.length > 2) L += Math.hypot(e.pts[0][0] - e.pts.at(-1)[0], e.pts[0][1] - e.pts.at(-1)[1]);
-      return `${e.pts.length} puntos · ${fmt(L)} mm${e.closed ? ' · cerrada' : ''}`;
+      if (e.closed && e.pts.length > 2) {
+        const xs = e.pts.map(p => p[0]), ys = e.pts.map(p => p[1]);
+        return `${fmt(Math.max(...xs) - Math.min(...xs))} × ${fmt(Math.max(...ys) - Math.min(...ys))} mm`;
+      }
+      return `${fmt(L)} mm de largo`;
     }
   }
   return '';
@@ -237,10 +243,13 @@ export function sketchElements(entities, modes = {}) {
   entities = entities.filter(e => !e.construction); // la geometría de construcción es solo de referencia
   const closed = entities.filter(isClosed).map(e => {
     const pts = entityPts(e).pts;
-    return { e, pts, a: Math.abs(signedArea(pts)) };
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    pts.forEach(([x, y]) => { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; });
+    return { e, pts, a: Math.abs(signedArea(pts)), b: [x0, y0, x1, y1] };
   }).filter(c => c.pts.length > 2 && c.a > 1e-9);
-  // padre = la figura cerrada más chica que contiene a esta por completo
-  const inside = (c, o) => o !== c && o.a > c.a && c.pts.every(p => pointInPolygon(p, o.pts));
+  // padre = la figura cerrada más chica que contiene a esta por completo (la caja descarta rápido, útil con DXF grandes)
+  const boxIn = (c, o) => c.b[0] >= o.b[0] && c.b[1] >= o.b[1] && c.b[2] <= o.b[2] && c.b[3] <= o.b[3];
+  const inside = (c, o) => o !== c && o.a > c.a && boxIn(c, o) && c.pts.every(p => pointInPolygon(p, o.pts));
   closed.forEach(c => {
     c.parent = null;
     closed.forEach(o => { if (inside(c, o) && (!c.parent || o.a < c.parent.a)) c.parent = o; });
@@ -258,7 +267,7 @@ export function sketchElements(entities, modes = {}) {
     out.push({
       src: 'sketch', type: 'region', sketchId: c.e.id, mode: get(c.e.id) || 'fill',
       parts: regs.map(r => ({ outer: r.outer, holes: r.holes })),
-      label: ENTITY_NAME[c.e.type], detail: describe(c.e) + (nh ? ` · ${nh} hueco${nh > 1 ? 's' : ''}` : ''),
+      label: entityName(c.e), detail: describe(c.e) + (nh ? ` · ${nh} hueco${nh > 1 ? 's' : ''}` : ''),
       sig: JSON.stringify([c.e, ...holes.map(h => h.e)]),
     });
   });
@@ -267,7 +276,7 @@ export function sketchElements(entities, modes = {}) {
     if (lp.pts.length < 2) return;
     out.push({
       src: 'sketch', type: 'line', sketchId: e.id, mode: get(e.id) || 'line', parts: [lp],
-      label: ENTITY_NAME[e.type], detail: describe(e), sig: JSON.stringify(e),
+      label: entityName(e), detail: describe(e), sig: JSON.stringify(e),
     });
   });
   return out;
