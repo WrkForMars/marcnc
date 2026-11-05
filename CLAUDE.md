@@ -81,6 +81,12 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
   - Fanuc: `%`, `O####`, `T# M06`, `G28 G91 Z0`. GRBL: nada de eso (lo rechaza).
 - **No bloquear la página:** nada de `getPointAtLength` en bucles (era O(n) por punto y congelaba Chrome).
   Procesos largos van en `computePlan` con cesiones del hilo, o en un Web Worker.
+- **Distribución de la interfaz:** la pieza es el centro (banco oscuro `--stage` con reglas en mm). Herramientas en el riel
+  izquierdo; inspector a la derecha con pestañas Figuras / Código G que muestra solo lo seleccionado. **Parámetros del
+  trabajo** (pieza, herramienta, profundidad) en `#jobDlg`, resumidos en la barra de arriba de la pieza; **ajustes de
+  máquina** (controlador, velocidades, formato) en `#setDlg`. Un solo botón principal: Exportar.
+- **Lo que se dibuja sobre la placa** usa los tokens `--plate-*` y `--pm-*`, que no cambian con el tema: la placa es metal
+  claro en ambos, y el acento del tema oscuro no se vería sobre ella.
 - **Interfaz:** textos en español, tono directo. Estilo visual: alto contraste, un solo color de acento,
   tema claro y oscuro con tokens CSS en `:root`, mobile first, espaciado en múltiplos de 4 px,
   bordes en lugar de sombras, contraste accesible. Todos los colores salen de tokens en `src/styles.css`.

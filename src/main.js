@@ -24,7 +24,7 @@ const tick = () => new Promise(r => setTimeout(r, 0));
 
 const state = {
   raw: null, rawId: 0, design: [], designNote: '', texts: [], elements: [],
-  selected: -1, lastImage: null, imgCrop: null, imgMask: null, imgInfo: null, imgView: 'mask', lastSvg: '', fileName: '', designScale: 0, designSize: [0, 0], demoFit: false, gcode: '', plan: null, gen: 0, textSeq: 0,
+  selected: -1, textOpen: false, ready: false, lastImage: null, imgCrop: null, imgMask: null, imgInfo: null, imgView: 'mask', lastSvg: '', fileName: '', designScale: 0, designSize: [0, 0], demoFit: false, gcode: '', plan: null, gen: 0, textSeq: 0,
   cache: new Map(), sketchEls: [], explained: [], codeSel: 0, lastG: null,
 };
 const preview = createPreview($('cv'));
@@ -65,6 +65,7 @@ function select(i) {
   const isText = !!(e && e.src === 'text');
   $('txtTitle').textContent = isText ? 'Editar texto' : 'Agregar texto';
   $('tAdd').hidden = isText; $('tDel').hidden = !isText; $('tNew').hidden = !isText;
+  $('txtPanel').hidden = !(isText || state.textOpen);
   // una figura del croquis muestra sus medidas para editarlas
   // (si ya está elegido un hueco de esa figura, se queda el hueco)
   if (e && e.src === 'sketch') { if (!sketch.selected || !hasEntity(e, sketch.selected.id)) sketch.select(e.sketchId); } else if (sketch.selected) sketch.select(null);
@@ -88,7 +89,8 @@ function drawOnly(dragging = false) {
 }
 function renderAll() {
   drawOnly();
-  $('elCount').textContent = state.elements.length ? `${state.elements.length} en la pieza` : '';
+  $('elCount').textContent = state.elements.length ? String(state.elements.length) : '';
+  $('empty').hidden = !state.ready || state.elements.length > 0 || sketch.tool !== 'select';
   renderList($('els'), $('allModes'), {
     elements: state.elements, selected: state.selected,
     onSelect: i => { select(i); renderAll(); },
@@ -149,7 +151,7 @@ async function refresh() {
     if (state.codeSel > state.explained.length) state.codeSel = 0;
     showCode();
     $('stats').textContent = '';
-    [['Líneas', g.lines], ['Arcos', g.arcsN], ['Corte', `${g.cutLen.toFixed(0)} mm`], ['Pasadas', g.passes], ['Tiempo aprox.', `${Math.max(1, Math.round(g.mins))} min`]]
+    [['Tiempo aprox.', `${Math.max(1, Math.round(g.mins))} min`], ['Corte', `${g.cutLen.toFixed(0)} mm`], ['Líneas', g.lines], ['Pasadas', g.passes]]
       .forEach(([a, b]) => { const s = document.createElement('span'); s.append(a + ' '); const bb = document.createElement('b'); bb.textContent = b; s.append(bb); $('stats').append(s); });
     const ws = warnings(p, plan);
     $('warns').textContent = '';
@@ -157,6 +159,7 @@ async function refresh() {
   }
   busy(null);
   simButtons();
+  jobSummary();
   renderAll();
   $('eff').textContent = `Ancho de línea a ${tl.depth} mm: ${tl.w.toFixed(2)} mm${tl.type === 'ball' ? ' (la bola solo corta con la punta)' : tl.type === 'v' ? ' (depende de la profundidad)' : ''}`;
 }
@@ -430,7 +433,7 @@ $('tDel').addEventListener('click', () => {
   if (!e || e.src !== 'text') return;
   state.texts = state.texts.filter(t => t !== e.text); assemble(); select(-1); refresh();
 });
-$('tNew').addEventListener('click', () => { select(-1); renderAll(); $('tText').focus(); });
+$('tNew').addEventListener('click', () => { state.textOpen = true; select(-1); renderAll(); $('tText').focus(); });
 
 /* ---------- croquis ---------- */
 const sketch = createSketchEditor({
@@ -482,8 +485,9 @@ function setTool(t) {
   sketch.setTool(t);
   document.querySelectorAll('#skTools button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === t)));
   $('skSidesLbl').hidden = t !== 'poly';
+  $('sketchbar').hidden = t === 'select';
   $('skPrompt').classList.remove('err');
-  if (t !== 'select') { state.selected = -1; renderAll(); }
+  if (t !== 'select') { state.selected = -1; renderAll(); } else $('empty').hidden = !state.ready || state.elements.length > 0;
 }
 document.querySelectorAll('#skTools button').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
 $('skGrid').addEventListener('change', () => sketch.setOptions({ grid: +$('skGrid').value }));
@@ -514,6 +518,7 @@ document.addEventListener('keydown', ev => {
   }
   if (ev.altKey) return;
   if (TOOL_KEYS[k] && !ev.shiftKey) { setTool(TOOL_KEYS[k]); return; }
+  if (k === 't' && !ev.shiftKey) { ev.preventDefault(); openText(); return; }
   if (sketch.key(ev.key)) { ev.preventDefault(); if (sketch.tool === 'select') setTool('select'); }
 });
 
@@ -615,7 +620,7 @@ function drawCodeHighlight(X, Y, k) {
   const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
   const [x0, y0] = e.from;
   const [x1, y1, z1] = sim.on && state.simPos ? state.simPos : e.to; // en la simulación, donde va la herramienta
-  const col = css(e.kind === 'danger' ? '--warn' : '--accent');
+  const col = css(e.kind === 'danger' ? '--plate-warn' : '--plate-accent');
   octx.save();
   octx.strokeStyle = col; octx.lineWidth = 3; octx.lineCap = 'round';
   if (e.kind === 'rapid' || e.kind === 'retract' || e.kind === 'danger') octx.setLineDash([6, 5]);
@@ -695,6 +700,8 @@ function simFrame(now) {
   if (sim.t >= tl.total) simPause(); else sim.raf = requestAnimationFrame(simFrame);
 }
 function simButtons() {
+  document.querySelector('.playbar').hidden = !state.explained.length; // sin programa no hay nada que simular
+  if (!state.explained.length) $('simTime').textContent = '0:00 / 0:00';
   $('simPlay').setAttribute('aria-pressed', String(sim.playing));
   $('simPlay').querySelector('use').setAttribute('href', sim.playing ? '#i-pause' : '#i-play');
   $('simPlay').querySelector('span').textContent = sim.playing ? 'Pausa' : sim.on ? 'Seguir' : 'Simular';
@@ -735,6 +742,7 @@ $('simSeek').addEventListener('input', () => {
 const SHEET_STORE = 'marcnc:entrega';
 const SHEET_FIELDS = { name: 'shName', id: 'shId', group: 'shGroup', practice: 'shPractice', teacher: 'shTeacher', material: 'shMaterial' };
 $('sheetBtn').addEventListener('click', () => {
+  $('exportDlg').close();
   if (!state.gcode) { $('toast').textContent = 'Todavía no hay código para entregar.'; return; }
   let info = {};
   try { info = JSON.parse(localStorage.getItem(SHEET_STORE) || '{}'); } catch { /* vacío */ }
@@ -795,25 +803,79 @@ async function saveCode() {
   t.textContent = `Descargado como ${name}.`;
 }
 $('save').addEventListener('click', saveCode);
-$('save2').addEventListener('click', saveCode);
+$('save').addEventListener('click', () => $('exportDlg').close());
 document.addEventListener('keydown', ev => {
   if (!(ev.ctrlKey || ev.metaKey) || ev.altKey || ev.shiftKey) return;
   const k = ev.key.toLowerCase();
   if (k === 's') { ev.preventDefault(); saveCode(); } else if (k === 'o') { ev.preventDefault(); $('file').click(); }
 });
 
+/* ---------- interfaz: pestañas, diálogos, resumen del trabajo ---------- */
+function showTab(code) {
+  $('tabFigBtn').setAttribute('aria-selected', String(!code)); $('tabCodeBtn').setAttribute('aria-selected', String(code));
+  $('tabFig').hidden = code; $('tabCode').hidden = !code;
+}
+$('tabFigBtn').addEventListener('click', () => showTab(false));
+$('tabCodeBtn').addEventListener('click', () => showTab(true));
+// al tocar el código o simular, el inspector muestra el programa
+$('simPlay').addEventListener('click', () => showTab(true));
+
+/** Un renglón con lo que define el trabajo: pieza, herramienta y velocidades. Tocarlo abre dónde se cambia. */
+function jobSummary() {
+  const p = params(), tl = toolGeometry(p), n = v => String(+(+v).toFixed(3));
+  const TOOL = { ball: 'Ball', flat: 'Plana', v: 'V-bit' }[p.toolType];
+  $('jobPieceTxt').textContent = `${n(p.W)} × ${n(p.H)} mm`;
+  $('jobToolTxt').textContent = `T${p.toolNum} ${TOOL} Ø${n(p.dia)} · ${n(p.depth)} mm → línea ${tl.w.toFixed(2)}`;
+  $('jobFeedsTxt').textContent = `S${p.rpm} · F${p.fxy}/${p.fz} · ${p.dialect === 'fanuc' ? 'Fanuc' : 'GRBL'}`;
+}
+const openDlg = (id, focus) => { $(id).showModal(); if (focus) $(focus)?.scrollIntoView({ block: 'start' }); };
+$('jobPiece').addEventListener('click', () => openDlg('jobDlg', 'secPiece'));
+$('jobTool').addEventListener('click', () => openDlg('jobDlg', 'secTool'));
+$('jobFeeds').addEventListener('click', () => openDlg('setDlg'));
+$('setBtn').addEventListener('click', () => openDlg('setDlg'));
+document.querySelectorAll('#jobDlg input, #jobDlg select, #setDlg input, #setDlg select').forEach(el => el.addEventListener('change', jobSummary));
+
+function openExport() {
+  if (!state.gcode) { $('toast').textContent = 'Todavía no hay nada que exportar: dibuja o abre algo primero.'; return; }
+  const g = state.lastG, p = params();
+  $('exportSum').textContent = `${g.lines} líneas · ~${Math.max(1, Math.round(g.mins))} min · ${p.dialect === 'fanuc' ? 'Fanuc / Haas' : 'GRBL'}`;
+  $('exportDlg').showModal();
+}
+$('exportBtn').addEventListener('click', openExport);
+$('save2').addEventListener('click', openExport);
+$('copy2').addEventListener('click', () => { $('exportDlg').close(); $('copy').click(); });
+
+/** Panel de texto: aparece con la herramienta Texto o al elegir un texto. */
+function openText() {
+  state.textOpen = true; setTool('select'); select(-1); showTab(false); renderAll();
+  $('txtPanel').hidden = false; $('tText').focus(); $('tText').select();
+}
+$('textTool').addEventListener('click', openText);
+$('textTool2').addEventListener('click', openText);
+$('txtClose').addEventListener('click', () => { state.textOpen = false; select(-1); renderAll(); });
+
+$('emptyDraw').addEventListener('click', () => setTool('rect'));
+$('emptyOpen').addEventListener('click', () => $('file').click());
+$('emptyDemo').addEventListener('click', () => $('demo').click());
+
+// los avisos flotantes se van solos
+let toastT;
+new MutationObserver(() => { clearTimeout(toastT); if ($('toast').textContent) toastT = setTimeout(() => { $('toast').textContent = ''; }, 4000); })
+  .observe($('toast'), { childList: true, characterData: true, subtree: true });
+
 /* ---------- inicio ---------- */
 (async () => {
   restoreParams();
   loadSketch();
   setTool('select');
-  if (sketch.entities.length) { assemble(); await refresh(); return; } // hay un croquis guardado: se abre ese, sin el ejemplo
+  if (sketch.entities.length) { assemble(); state.ready = true; await refresh(); return; } // hay un croquis guardado: se abre ese, sin el ejemplo
   $('fit').value = 'native'; state.demoFit = true;
   state.lastSvg = DEMO_SVG;
   await loadShapes(() => parseSVG(DEMO_SVG, $('svghost'), SVG_QUALITY[+$('svgQ').value - 1][0]), false);
   Object.entries(DEMO_TEXT).forEach(([k, v]) => { const id = { text: 'tText', font: 'tFont', h: 'tH', sp: 'tSp', x: 'tX', y: 'tY' }[k]; $(id).value = v; });
   await addText(textFromForm({ id: ++state.textSeq }));
   select(-1);
+  state.ready = true;
   await refresh();
   $('toast').textContent = '';
 })();

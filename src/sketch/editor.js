@@ -222,14 +222,14 @@ export function createSketchEditor(hooks) {
       }
 
       // todas las figuras del croquis, finas, para verlas aunque estén omitidas o tapadas por el grabado
-      ctx.lineWidth = 1; ctx.strokeStyle = css('--accent'); ctx.globalAlpha = drawing ? 0.8 : 0.45;
+      ctx.lineWidth = 1; ctx.strokeStyle = css('--plate-accent'); ctx.globalAlpha = drawing ? 0.8 : 0.45;
       S.entities.forEach(e => { if (!S.drag || e.id !== S.drag.id) shape(e, tol); });
       ctx.globalAlpha = 1;
 
       const sel = api.selected;
       if (sel) {
         const e = S.drag ? translate(sel, S.drag.dx, S.drag.dy) : sel;
-        ctx.lineWidth = 2; ctx.strokeStyle = css('--accent'); shape(e, tol);
+        ctx.lineWidth = 2; ctx.strokeStyle = css('--plate-accent'); shape(e, tol);
         ctx.fillStyle = css('--panel');
         snapPoints(e).forEach(({ p }) => { ctx.fillRect(X(p[0]) - 3, Y(p[1]) - 3, 6, 6); ctx.strokeRect(X(p[0]) - 3, Y(p[1]) - 3, 6, 6); });
         if (S.drag && (S.drag.dx || S.drag.dy)) label(ctx, css, X(S.drag.start[0]) + 12, Y(S.drag.start[1]) - 12, `Δ ${fmt(S.drag.dx)}, ${fmt(S.drag.dy)}`);
@@ -237,7 +237,7 @@ export function createSketchEditor(hooks) {
 
       const rb = rubber();
       if (rb) {
-        ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = css('--accent'); shape(rb, tol); ctx.setLineDash([]);
+        ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = css('--plate-accent'); shape(rb, tol); ctx.setLineDash([]);
         const h = S.hover.p, P = S.pts;
         const o = P[P.length - 1];
         let txt = '';
@@ -247,14 +247,14 @@ export function createSketchEditor(hooks) {
         else if (S.tool === 'arc') txt = `${fmt(arcSweep(rb))}°`;
         if (txt) label(ctx, css, X(h[0]) + 12, Y(h[1]) + 22, txt);
       }
-      S.pts.forEach(p => { ctx.fillStyle = css('--accent'); ctx.fillRect(X(p[0]) - 2.5, Y(p[1]) - 2.5, 5, 5); });
+      S.pts.forEach(p => { ctx.fillStyle = css('--plate-accent'); ctx.fillRect(X(p[0]) - 2.5, Y(p[1]) - 2.5, 5, 5); });
 
       if (drawing && S.hover) {
         const [x, y] = S.hover.p, px = X(x), py = Y(y);
-        ctx.strokeStyle = css('--ink'); ctx.lineWidth = 1; ctx.beginPath();
+        ctx.strokeStyle = css('--cut'); ctx.lineWidth = 1; ctx.beginPath();
         ctx.moveTo(px - 8, py + 0.5); ctx.lineTo(px + 8, py + 0.5); ctx.moveTo(px + 0.5, py - 8); ctx.lineTo(px + 0.5, py + 8); ctx.stroke();
         if (S.hover.kind && S.hover.kind !== 'cuadrícula') {
-          ctx.strokeStyle = css('--accent'); ctx.lineWidth = 2; ctx.strokeRect(px - 5, py - 5, 10, 10);
+          ctx.strokeStyle = css('--plate-accent'); ctx.lineWidth = 2; ctx.strokeRect(px - 5, py - 5, 10, 10);
           label(ctx, css, px + 12, py - 10, S.hover.kind);
         }
       }

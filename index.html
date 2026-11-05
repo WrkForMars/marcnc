@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MarCNC</title>
-<meta name="description" content="Convierte SVG e imágenes en código G y M para grabado CNC, con modo de corte por figura y simulación.">
+<meta name="description" content="Dibuja o abre un SVG o una imagen y conviértelo en código G y M para grabado CNC, con simulación y el programa explicado línea por línea.">
 <link rel="icon" type="image/svg+xml" href="./icon.svg">
 <script>
   // tema elegido antes de pintar, para que no parpadee
@@ -24,6 +24,7 @@
   <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 12h.01"/></symbol>
   <symbol id="i-arc" viewBox="0 0 24 24"><path d="M4 18a8 8 0 0 1 16 0"/><path d="M12 18h.01"/></symbol>
   <symbol id="i-poly" viewBox="0 0 24 24"><path d="M12 3l8 5v8l-8 5-8-5V8z"/></symbol>
+  <symbol id="i-text" viewBox="0 0 24 24"><path d="M5 6V4h14v2M12 4v16M9 20h6"/></symbol>
   <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
   <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></symbol>
   <symbol id="i-sheet" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h7"/></symbol>
@@ -34,233 +35,282 @@
   <symbol id="i-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
   <symbol id="i-dup" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V5a1 1 0 0 1 1-1h11"/></symbol>
   <symbol id="i-del" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
+  <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6"/></symbol>
+  <symbol id="i-new" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M12 10v6M9 13h6"/></symbol>
+  <symbol id="i-plate" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="1"/><path d="M3 10h18"/></symbol>
+  <symbol id="i-bit" viewBox="0 0 24 24"><path d="M9 3h6v8l-3 10-3-10z"/><path d="M9 7h6"/></symbol>
+  <symbol id="i-speed" viewBox="0 0 24 24"><path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l4-5"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-wave" viewBox="0 0 64 64"><path d="M9.5 27c5-8 10-8 15 0s10 8 15 0 10-8 15 0"/><path d="M9.5 42c5-8 10-8 15 0s10 8 15 0 10-8 15 0" opacity=".55"/></symbol>
 </svg>
 
 <header class="topbar">
-  <div class="topbar-in">
-    <div class="brand"><img src="./icon.svg" alt="" width="32" height="32"><span>Mar<b>CNC</b></span></div>
-    <div class="actions">
-      <label class="btn" title="Abrir archivo (Ctrl+O)"><svg class="i"><use href="#i-open"/></svg><span>Abrir<span class="label"> SVG o imagen</span></span><input type="file" id="file" accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp"></label>
-      <button id="demo" type="button" class="ghost">Ejemplo</button>
-      <button id="clear" type="button" class="ghost">Pieza vacía</button>
-      <button id="theme" type="button" class="icon ghost" aria-label="Cambiar entre tema claro y oscuro" title="Tema claro u oscuro"><svg class="i"><use href="#i-theme"/></svg></button>
-    </div>
+  <div class="brand">
+    <img src="./icon.svg" alt="" width="32" height="32">
+    <span class="brand-name">Mar<b>CNC</b></span>
+    <span class="brand-tag">Del dibujo a la máquina</span>
+  </div>
+  <div class="actions">
+    <button id="clear" type="button" class="ghost" title="Pieza vacía"><svg class="i"><use href="#i-new"/></svg><span class="lbl">Nuevo</span></button>
+    <label class="btn ghost" title="Abrir SVG o imagen (Ctrl+O)"><svg class="i"><use href="#i-open"/></svg><span class="lbl">Abrir</span><input type="file" id="file" accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp"></label>
+    <button id="demo" type="button" class="ghost">Ejemplo</button>
+    <span class="sep" aria-hidden="true"></span>
+    <button id="setBtn" type="button" class="icon ghost" aria-label="Ajustes de máquina" title="Ajustes de máquina"><svg class="i"><use href="#i-gear"/></svg></button>
+    <button id="theme" type="button" class="icon ghost" aria-label="Cambiar entre tema claro y oscuro" title="Tema claro u oscuro"><svg class="i"><use href="#i-theme"/></svg></button>
+    <button id="exportBtn" type="button" class="primary topbar-export"><svg class="i"><use href="#i-export"/></svg>Exportar</button>
   </div>
 </header>
 
-<main class="wrap">
-  <p class="lede">Dibuja en la pieza con coordenadas exactas, o abre un SVG o una imagen con fondo blanco (también puedes arrastrarla). Elige cómo se corta cada figura y guarda el código G y M.</p>
+<div class="app">
+  <!-- herramientas de dibujo -->
+  <nav class="rail" aria-label="Herramientas">
+    <div class="rail-group" id="skTools">
+      <button type="button" data-tool="select" aria-pressed="true" title="Seleccionar y mover (V)"><svg class="i"><use href="#i-select"/></svg><span>Mover</span></button>
+      <button type="button" data-tool="line" aria-pressed="false" title="Línea (L)"><svg class="i"><use href="#i-line"/></svg><span>Línea</span></button>
+      <button type="button" data-tool="rect" aria-pressed="false" title="Rectángulo (R)"><svg class="i"><use href="#i-rect"/></svg><span>Rect.</span></button>
+      <button type="button" data-tool="circle" aria-pressed="false" title="Círculo (C)"><svg class="i"><use href="#i-circle"/></svg><span>Círculo</span></button>
+      <button type="button" data-tool="arc" aria-pressed="false" title="Arco (A)"><svg class="i"><use href="#i-arc"/></svg><span>Arco</span></button>
+      <button type="button" data-tool="poly" aria-pressed="false" title="Polígono (P)"><svg class="i"><use href="#i-poly"/></svg><span>Polígono</span></button>
+    </div>
+    <div class="rail-group">
+      <button type="button" id="textTool" title="Agregar texto (T)"><svg class="i"><use href="#i-text"/></svg><span>Texto</span></button>
+    </div>
+    <div class="rail-group rail-end">
+      <button type="button" id="skUndo" aria-label="Deshacer (Ctrl+Z)" title="Deshacer (Ctrl+Z)"><svg class="i"><use href="#i-undo"/></svg><span>Deshacer</span></button>
+      <button type="button" id="skRedo" aria-label="Rehacer (Ctrl+Y)" title="Rehacer (Ctrl+Y)"><svg class="i"><use href="#i-redo"/></svg><span>Rehacer</span></button>
+    </div>
+  </nav>
 
-  <div class="grid">
-    <div class="col">
-      <section class="card" aria-labelledby="hPrev">
-        <div class="card-head"><h2 id="hPrev"><span class="step">1</span>Vista previa</h2>
-          <label class="check"><input type="checkbox" id="showPath"> Ver recorrido</label>
-        </div>
-        <div class="sketchbar" role="toolbar" aria-label="Croquis">
-          <div class="tools" id="skTools">
-            <button type="button" data-tool="select" aria-pressed="true" title="Seleccionar y mover (V)"><svg class="i"><use href="#i-select"/></svg><span>Seleccionar</span></button>
-            <button type="button" data-tool="line" aria-pressed="false" title="Línea (L)"><svg class="i"><use href="#i-line"/></svg><span>Línea</span></button>
-            <button type="button" data-tool="rect" aria-pressed="false" title="Rectángulo (R)"><svg class="i"><use href="#i-rect"/></svg><span>Rectángulo</span></button>
-            <button type="button" data-tool="circle" aria-pressed="false" title="Círculo (C)"><svg class="i"><use href="#i-circle"/></svg><span>Círculo</span></button>
-            <button type="button" data-tool="arc" aria-pressed="false" title="Arco (A)"><svg class="i"><use href="#i-arc"/></svg><span>Arco</span></button>
-            <button type="button" data-tool="poly" aria-pressed="false" title="Polígono (P)"><svg class="i"><use href="#i-poly"/></svg><span>Polígono</span></button>
-          </div>
-          <div class="sk-row">
-            <label class="sk-coord">Coordenada o medida<input type="text" id="skInput" placeholder="x y  ·  @dx dy  ·  @d&lt;ángulo" autocomplete="off" spellcheck="false"></label>
-            <label id="skSidesLbl" class="sk-small" hidden>Lados<input type="number" id="skSides" value="6" min="3" max="64" step="1"></label>
-            <label class="sk-small">Cuadrícula<select id="skGrid"><option value="0.5">0.5 mm</option><option value="1" selected>1 mm</option><option value="2">2 mm</option><option value="5">5 mm</option><option value="10">10 mm</option></select></label>
-            <label class="check"><input type="checkbox" id="skSnap" checked> Imán</label>
-            <div class="sk-undo">
-              <button type="button" id="skUndo" class="icon" aria-label="Deshacer (Ctrl+Z)" title="Deshacer (Ctrl+Z)"><svg class="i"><use href="#i-undo"/></svg></button>
-              <button type="button" id="skRedo" class="icon" aria-label="Rehacer (Ctrl+Y)" title="Rehacer (Ctrl+Y)"><svg class="i"><use href="#i-redo"/></svg></button>
-            </div>
-          </div>
-          <div class="sk-status"><span id="skPrompt" role="status"></span><span id="skCursor"></span></div>
-        </div>
-        <div class="stage" id="stage">
-          <canvas id="cv" width="900" height="500" aria-label="Vista previa de la pieza con el grabado simulado"></canvas>
-          <canvas id="sim" class="overlay" aria-hidden="true"></canvas>
-          <canvas id="ov" class="overlay" aria-hidden="true"></canvas>
-          <div class="busy" id="busy" hidden><span id="busyText">Procesando…</span></div>
-          <div class="drop" id="drop" hidden><svg class="i"><use href="#i-open"/></svg>Suelta el archivo para abrirlo</div>
-        </div>
-        <div class="legend">
-          <span><i style="background:var(--cut)"></i>Grabado con el ancho real de la herramienta</span>
-          <span><i style="background:var(--accent)"></i>Seleccionado</span>
-          <span><i style="border:1px dashed var(--muted)"></i>Omitido</span>
-        </div>
-        <div class="simbar" role="group" aria-label="Simulación del recorrido">
-          <button type="button" id="simPlay" class="primary-soft"><svg class="i"><use href="#i-play"/></svg><span>Simular</span></button>
-          <button type="button" id="simStop" class="icon" aria-label="Terminar la simulación" title="Terminar la simulación" hidden><svg class="i"><use href="#i-stop"/></svg></button>
-          <input type="range" id="simSeek" min="0" max="1000" value="0" step="1" aria-label="Avance de la simulación" disabled>
-          <span id="simTime" class="sim-time">0:00 / 0:00</span>
-          <label class="sk-small">Velocidad<select id="simSpeed"><option value="1">1× (real)</option><option value="5">5×</option><option value="20" selected>20×</option><option value="100">100×</option><option value="500">500×</option></select></label>
-        </div>
-        <div class="card-body" style="padding-top:0"><div class="stats" id="stats"></div><div id="warns"></div></div>
-      </section>
-
-      <section class="card" aria-labelledby="hCode">
-        <div class="card-head"><h2 id="hCode"><span class="step">3</span>Código G y M</h2>
-          <div class="actions">
-            <button id="copy" type="button"><svg class="i"><use href="#i-copy"/></svg>Copiar</button>
-            <button id="sheetBtn" type="button" title="Hoja para entregar: datos, dibujo en cuadrícula y programa explicado"><svg class="i"><use href="#i-sheet"/></svg>Hoja de entrega</button>
-            <button class="primary" id="save" type="button" title="Guardar (Ctrl+S)"><svg class="i"><use href="#i-save"/></svg>Guardar código</button>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="code-head">
-            <p class="hint">Toca una línea para ver qué hace; con las flechas ↑ ↓ recorres el programa paso a paso.</p>
-            <label class="check"><input type="checkbox" id="explainAll"> Explicar todas</label>
-          </div>
-          <div class="code" id="code" tabindex="0" role="listbox" aria-label="Programa G y M"></div>
-          <div class="explain" id="explain" hidden>
-            <div class="explain-head"><span class="chip" id="exKind"></span><b id="exWhere"></b>
-              <div class="explain-nav">
-                <button type="button" id="exPrev" class="icon" aria-label="Línea anterior"><svg class="i"><use href="#i-up"/></svg></button>
-                <button type="button" id="exNext" class="icon" aria-label="Línea siguiente"><svg class="i"><use href="#i-down"/></svg></button>
-              </div>
-            </div>
-            <code id="exCode"></code>
-            <p id="exText"></p>
-          </div>
-          <div class="toast" id="toast" role="status"></div>
-        </div>
-      </section>
+  <!-- centro de atención: la pieza -->
+  <main class="work">
+    <div class="jobbar" aria-label="Parámetros del trabajo">
+      <button type="button" class="chip-btn" id="jobPiece" title="Pieza y tamaño del dibujo"><svg class="i"><use href="#i-plate"/></svg><span id="jobPieceTxt">Pieza</span></button>
+      <button type="button" class="chip-btn" id="jobTool" title="Herramienta y profundidad"><svg class="i"><use href="#i-bit"/></svg><span id="jobToolTxt">Herramienta</span></button>
+      <button type="button" class="chip-btn" id="jobFeeds" title="Velocidades y controlador"><svg class="i"><use href="#i-speed"/></svg><span id="jobFeedsTxt">Velocidades</span></button>
+      <label class="check jobbar-end"><input type="checkbox" id="showPath"> Recorrido</label>
     </div>
 
-    <div class="col">
-      <section class="card" id="skProps" hidden aria-labelledby="skTitle">
-        <div class="card-head"><h2 id="skTitle">Figura</h2>
+    <div class="sketchbar" id="sketchbar" hidden>
+      <label class="sk-coord"><span>Coordenada o medida</span><input type="text" id="skInput" placeholder="x y  ·  @dx dy  ·  @d&lt;ángulo" autocomplete="off" spellcheck="false"></label>
+      <label id="skSidesLbl" class="sk-small" hidden><span>Lados</span><input type="number" id="skSides" value="6" min="3" max="64" step="1"></label>
+      <label class="sk-small"><span>Cuadrícula</span><select id="skGrid"><option value="0.5">0.5 mm</option><option value="1" selected>1 mm</option><option value="2">2 mm</option><option value="5">5 mm</option><option value="10">10 mm</option></select></label>
+      <label class="check"><input type="checkbox" id="skSnap" checked> Imán</label>
+      <p class="sk-status"><span id="skPrompt" role="status"></span><span id="skCursor"></span></p>
+    </div>
+
+    <div class="stage" id="stage">
+      <canvas id="cv" width="900" height="500" aria-label="Vista previa de la pieza con el grabado simulado"></canvas>
+      <canvas id="sim" class="overlay" aria-hidden="true"></canvas>
+      <canvas id="ov" class="overlay" aria-hidden="true"></canvas>
+      <div class="empty" id="empty" hidden>
+        <svg class="empty-logo" viewBox="0 0 64 64" aria-hidden="true"><use href="#i-wave"/></svg>
+        <h2>Empieza tu pieza</h2>
+        <p>Dibuja con medidas exactas, o trae un logo, un SVG o la foto de un dibujo.</p>
+        <div class="empty-actions">
+          <button type="button" id="emptyDraw" class="primary"><svg class="i"><use href="#i-rect"/></svg>Dibujar</button>
+          <button type="button" id="emptyOpen"><svg class="i"><use href="#i-open"/></svg>Abrir imagen o SVG</button>
+          <button type="button" id="emptyDemo" class="ghost">Ver un ejemplo</button>
+        </div>
+      </div>
+      <div class="busy" id="busy" hidden><span id="busyText">Procesando…</span></div>
+      <div class="drop" id="drop" hidden><svg class="i"><use href="#i-open"/></svg>Suelta el archivo para abrirlo</div>
+    </div>
+
+    <div class="playbar" role="group" aria-label="Simulación del recorrido">
+      <button type="button" id="simPlay" class="primary-soft"><svg class="i"><use href="#i-play"/></svg><span>Simular</span></button>
+      <button type="button" id="simStop" class="icon" aria-label="Terminar la simulación" title="Terminar la simulación" hidden><svg class="i"><use href="#i-stop"/></svg></button>
+      <input type="range" id="simSeek" min="0" max="1000" value="0" step="1" aria-label="Avance de la simulación" disabled>
+      <span id="simTime" class="sim-time">0:00 / 0:00</span>
+      <select id="simSpeed" aria-label="Velocidad de la simulación"><option value="1">1×</option><option value="5">5×</option><option value="20" selected>20×</option><option value="100">100×</option><option value="500">500×</option></select>
+    </div>
+    <div class="stats" id="stats" aria-label="Resumen del programa"></div>
+    <div id="warns"></div>
+  </main>
+
+  <!-- inspector: lo que se está editando -->
+  <aside class="inspector" aria-label="Inspector">
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" id="tabFigBtn" aria-selected="true" aria-controls="tabFig">Figuras <span class="count" id="elCount"></span></button>
+      <button type="button" role="tab" id="tabCodeBtn" aria-selected="false" aria-controls="tabCode">Código G</button>
+    </div>
+
+    <section class="tabpanel" id="tabFig" role="tabpanel" aria-labelledby="tabFigBtn">
+      <!-- figura del croquis seleccionada -->
+      <div class="panel" id="skProps" hidden>
+        <div class="panel-head"><h3 id="skTitle">Figura</h3>
           <div class="actions">
-            <button type="button" id="skDup" class="ghost"><svg class="i"><use href="#i-dup"/></svg>Duplicar</button>
-            <button type="button" id="skDel" class="ghost"><svg class="i"><use href="#i-del"/></svg>Eliminar</button>
+            <button type="button" id="skDup" class="icon ghost" aria-label="Duplicar" title="Duplicar"><svg class="i"><use href="#i-dup"/></svg></button>
+            <button type="button" id="skDel" class="icon ghost" aria-label="Eliminar" title="Eliminar (Supr)"><svg class="i"><use href="#i-del"/></svg></button>
           </div>
         </div>
-        <div class="card-body">
-          <div class="params" id="skFields"></div>
-          <p class="hint">Medidas en mm desde la esquina inferior izquierda de la pieza. Los ángulos van en grados, antihorario desde la derecha.</p>
-        </div>
-      </section>
+        <div class="params" id="skFields"></div>
+        <p class="hint">Medidas en mm desde la esquina inferior izquierda de la pieza. Ángulos en grados, antihorario desde la derecha.</p>
+      </div>
 
-      <section class="card" id="svgOpts" hidden aria-labelledby="hSvg">
-        <div class="card-head"><h2 id="hSvg">SVG</h2></div>
-        <div class="card-body">
-          <div class="params">
-            <label class="full" for="svgQ">Calidad de curvas: <b id="svgQVal">Normal</b><input type="range" id="svgQ" min="1" max="5" step="1" value="3" list="svgQMarks"></label>
-          </div>
-          <datalist id="svgQMarks"><option value="1"></option><option value="2"></option><option value="3"></option><option value="4"></option><option value="5"></option></datalist>
-          <p class="hint">Más calidad sigue las curvas más fielmente, con más puntos y un cálculo más lento. Normal basta para casi todo; Borrador sirve para revisar rápido un dibujo pesado.</p>
+      <!-- texto: aparece con la herramienta Texto o al elegir un texto -->
+      <div class="panel" id="txtPanel" hidden>
+        <div class="panel-head"><h3 id="txtTitle">Agregar texto</h3>
+          <button type="button" id="txtClose" class="icon ghost" aria-label="Cerrar" title="Cerrar"><svg class="i"><use href="#i-close"/></svg></button>
         </div>
-      </section>
+        <div class="params">
+          <label class="full">Texto<input type="text" id="tText" value="LADO B" maxlength="80"></label>
+          <label class="full">Estilo de letra<select id="tFont"></select></label>
+          <label>Altura (mm)<input type="number" id="tH" value="6" min="1" step="0.5"></label>
+          <label>Espaciado (%)<input type="number" id="tSp" value="0" min="-30" max="100" step="5"></label>
+          <label>Centro X (mm)<input type="number" id="tX" value="45" step="0.5"></label>
+          <label>Centro Y (mm)<input type="number" id="tY" value="8" step="0.5"></label>
+        </div>
+        <div class="row2"><button class="primary-soft" id="tAdd" type="button">Agregar a la pieza</button><button id="tDel" type="button" hidden><svg class="i"><use href="#i-del"/></svg>Eliminar</button><button id="tNew" type="button" class="ghost" hidden>Nuevo texto</button></div>
+        <p class="hint">También puedes arrastrar el texto en la pieza.</p>
+      </div>
 
-      <section class="card" id="imgOpts" hidden aria-labelledby="hImg">
-        <div class="card-head"><h2 id="hImg">Imagen</h2>
+      <!-- archivo cargado -->
+      <div class="panel" id="svgOpts" hidden>
+        <div class="panel-head"><h3>SVG</h3></div>
+        <label class="field" for="svgQ">Calidad de curvas: <b id="svgQVal">Normal</b><input type="range" id="svgQ" min="1" max="5" step="1" value="3" list="svgQMarks"></label>
+        <datalist id="svgQMarks"><option value="1"></option><option value="2"></option><option value="3"></option><option value="4"></option><option value="5"></option></datalist>
+        <p class="hint">Más calidad sigue las curvas con más puntos. Borrador sirve para revisar rápido un dibujo pesado.</p>
+      </div>
+
+      <div class="panel" id="imgOpts" hidden>
+        <div class="panel-head"><h3>Imagen</h3>
           <div class="seg" role="group" aria-label="Qué mostrar">
-            <button type="button" id="ivMask" aria-pressed="true">Lo que detecta</button>
+            <button type="button" id="ivMask" aria-pressed="true">Detectado</button>
             <button type="button" id="ivOrig" aria-pressed="false">Original</button>
           </div>
         </div>
-        <div class="card-body">
-          <canvas id="imgView" class="imgview" aria-label="Imagen cargada; arrastra para recortar"></canvas>
-          <div class="row-between"><p class="hint" id="imgInfo"></p><button type="button" id="imgUncrop" class="ghost" hidden>Quitar recorte</button></div>
-          <p class="hint">Arrastra sobre la imagen para quedarte solo con una parte.</p>
-          <div class="params">
-            <label class="full">Detectar el dibujo<select id="imgMode">
-              <option value="auto">Automático (imagen limpia o logo)</option>
-              <option value="photo">Foto de papel (ignora sombras)</option>
-              <option value="color">Por color del fondo (logo sobre color)</option>
-              <option value="manual">Umbral manual</option>
-            </select></label>
-            <label class="full" id="thrLbl" for="thr" hidden>Umbral: <b id="thrVal">128</b> (más alto toma grises más claros como dibujo)<input type="range" id="thr" min="20" max="235" value="128"></label>
-            <label>Limpieza<select id="imgClean"><option value="0">Ninguna</option><option value="1" selected>Suave</option><option value="2">Media</option><option value="3">Fuerte</option></select></label>
-            <label>Detalle<select id="imgDetail"><option value="600" selected>Normal</option><option value="1200">Alto</option><option value="2000">Máximo (más lento)</option></select></label>
-            <label class="full check"><input type="checkbox" id="imgInvert"> Invertir (el dibujo es lo claro)</label>
-            <label class="full">Vectorizar como<select id="imgHow"><option value="area">Áreas (Relleno, Contorno o Invertir)</option><option value="center">Línea central (cada trazo en una pasada)</option></select></label>
-          </div>
-          <p class="hint">Limpieza quita puntitos sueltos y tapa huecos chicos. Más detalle conserva líneas finas (útil con V-bit). Línea central sirve para trazos delgados y letras a mano.</p>
-        </div>
-      </section>
-
-      <section class="card" aria-labelledby="hEls">
-        <div class="card-head"><h2 id="hEls"><span class="step">2</span>Figuras</h2><span class="hint" id="elCount"></span></div>
-        <div class="card-body">
-          <p class="hint">Relleno vacía el área · Contorno sigue la orilla · Invertir graba la orilla y vacía los huecos · Línea sigue el trazo por su centro.</p>
-          <div class="els" id="els"></div>
-          <div class="seg" id="allModes"></div>
-          <p class="hint err" id="loadErr" role="alert"></p>
-        </div>
-      </section>
-
-      <section class="card" aria-labelledby="txtTitle">
-        <div class="card-head"><h2 id="txtTitle">Agregar texto</h2></div>
-        <div class="card-body">
-          <div class="params">
-            <label class="full">Texto<input type="text" id="tText" value="LADO B" maxlength="80"></label>
-            <label class="full">Estilo de letra<select id="tFont"></select></label>
-            <label>Altura de mayúscula (mm)<input type="number" id="tH" value="6" min="1" step="0.5"></label>
-            <label>Espaciado (%)<input type="number" id="tSp" value="0" min="-30" max="100" step="5"></label>
-            <label>Centro X (mm)<input type="number" id="tX" value="45" step="0.5"></label>
-            <label>Centro Y (mm)<input type="number" id="tY" value="8" step="0.5"></label>
-          </div>
-          <div class="row2"><button id="tAdd" type="button">Agregar a la pieza</button><button id="tDel" type="button" hidden>Eliminar texto</button><button id="tNew" type="button" class="ghost" hidden>Nuevo texto</button></div>
-          <p class="hint">Con un texto seleccionado, estos campos lo editan. También puedes arrastrarlo en la vista previa.</p>
-        </div>
-      </section>
-
-      <section class="card" aria-labelledby="hPar">
-        <div class="card-head"><h2 id="hPar">Pieza y herramienta</h2>
-          <button id="reset" type="button" class="ghost" title="Volver a los valores de la tarea de referencia"><svg class="i"><use href="#i-reset"/></svg>Valores iniciales</button>
-        </div>
-        <div class="card-body">
-          <div class="params">
-            <h3>Pieza</h3>
-            <label>Ancho (mm)<input type="number" id="pw" value="90" min="5" step="1"></label>
-            <label>Alto (mm)<input type="number" id="ph" value="50" min="5" step="1"></label>
-            <label class="full">Tamaño del dibujo<select id="fit"><option value="fill">Ajustar a la pieza (con margen)</option><option value="width">Elegir ancho y alto (mm)</option><option value="native">Escala 1:1 (unidades del SVG = mm)</option></select></label>
-            <label id="dwLbl" hidden>Ancho del dibujo (mm)<input type="number" id="dw" value="40" min="1" step="0.5"></label>
-            <label id="dhLbl" hidden>Alto del dibujo (mm)<input type="number" id="dh" min="1" step="0.5"></label>
-            <p class="hint full" id="sizeInfo"></p>
-            <label id="marginLbl">Margen (mm)<input type="number" id="margin" value="3" min="0" step="0.5"></label>
-            <label>Ignorar manchas &lt; (mm²)<input type="number" id="speck" value="0.5" min="0" step="0.1"></label>
-
-            <h3>Herramienta</h3>
-            <label>Tipo<select id="ttype"><option value="ball">Ball mill</option><option value="flat">Fresa plana</option><option value="v">V-bit</option></select></label>
-            <label>Diámetro (mm)<input type="number" id="tdia" value="3.175" min="0.1" step="0.025"></label>
-            <label id="vAngLbl" hidden>Ángulo del V-bit (°)<input type="number" id="vang" value="60" min="10" max="150" step="5"></label>
-            <label id="vTipLbl" hidden>Punta del V-bit (mm)<input type="number" id="vtip" value="0.1" min="0" step="0.05"></label>
-            <label>Número (T)<input type="number" id="tnum" value="3" min="1" step="1"></label>
-            <label>Profundidad (mm)<input type="number" id="depth" value="0.1" min="0.01" step="0.05"></label>
-            <div class="eff full" id="eff"></div>
-
-            <h3>Avances</h3>
-            <label>Husillo (rpm)<input type="number" id="rpm" value="2200" min="0" step="100"></label>
-            <label>Retracción Z (mm)<input type="number" id="retract" value="3" min="0.5" step="0.5"></label>
-            <label>Avance en Z (mm/min)<input type="number" id="fz" value="60" min="1" step="5"></label>
-            <label>Avance en X-Y (mm/min)<input type="number" id="fxy" value="130" min="1" step="5"></label>
-            <label>Prof. por pasada (mm)<input type="number" id="stepdown" value="0.2" min="0.01" step="0.05"></label>
-            <label>Paso de vaciado (%)<input type="number" id="stepover" value="45" min="10" max="90" step="5"></label>
-          </div>
+        <canvas id="imgView" class="imgview" aria-label="Imagen cargada; arrastra para recortar"></canvas>
+        <div class="row-between"><p class="hint" id="imgInfo"></p><button type="button" id="imgUncrop" class="ghost" hidden>Quitar recorte</button></div>
+        <div class="params">
+          <label class="full">Detectar el dibujo<select id="imgMode">
+            <option value="auto">Automático</option>
+            <option value="photo">Foto de papel (ignora sombras)</option>
+            <option value="color">Por color del fondo</option>
+            <option value="manual">Umbral manual</option>
+          </select></label>
+          <label class="full" id="thrLbl" for="thr" hidden>Umbral: <b id="thrVal">128</b><input type="range" id="thr" min="20" max="235" value="128"></label>
+          <label class="full">Vectorizar como<select id="imgHow"><option value="area">Áreas (rellenar o contornear)</option><option value="center">Línea central (una pasada por trazo)</option></select></label>
         </div>
         <details class="more">
-          <summary>Formato del código</summary>
+          <summary>Más opciones de imagen</summary>
           <div class="params">
-            <label>Controlador<select id="dialect"><option value="fanuc">Fanuc / Haas</option><option value="grbl">GRBL</option></select></label>
-            <label>Decimales<select id="dec"><option>1</option><option selected>2</option><option>3</option></select></label>
-            <label>Tolerancia de curvas (mm)<input type="number" id="tol" value="0.05" min="0.005" step="0.01"></label>
-            <label>Número de programa<input type="number" id="prog" value="1" min="1" step="1"></label>
-            <label class="full check"><input type="checkbox" id="arcs" checked> Convertir curvas a arcos G02/G03</label>
+            <label>Limpieza<select id="imgClean"><option value="0">Ninguna</option><option value="1" selected>Suave</option><option value="2">Media</option><option value="3">Fuerte</option></select></label>
+            <label>Detalle<select id="imgDetail"><option value="600" selected>Normal</option><option value="1200">Alto</option><option value="2000">Máximo</option></select></label>
+            <label class="full check"><input type="checkbox" id="imgInvert"> Invertir (el dibujo es lo claro)</label>
           </div>
+          <p class="hint">Arrastra sobre la imagen para recortarla. Limpieza quita puntitos y tapa huecos chicos; más detalle conserva líneas finas.</p>
         </details>
-      </section>
+      </div>
+
+      <!-- lista de figuras -->
+      <div class="panel panel-list">
+        <div class="panel-head"><h3>En la pieza</h3><button type="button" id="textTool2" class="ghost"><svg class="i"><use href="#i-text"/></svg>Texto</button></div>
+        <div class="els" id="els"></div>
+        <div class="seg" id="allModes"></div>
+        <p class="hint">Relleno vacía el área · Contorno sigue la orilla · Invertir graba la orilla y vacía los huecos · Línea sigue el trazo.</p>
+        <p class="hint err" id="loadErr" role="alert"></p>
+      </div>
+    </section>
+
+    <section class="tabpanel" id="tabCode" role="tabpanel" aria-labelledby="tabCodeBtn" hidden>
+      <div class="panel">
+        <div class="panel-head">
+          <p class="hint">Toca una línea para ver qué hace. Con ↑ ↓ recorres el programa.</p>
+          <label class="check"><input type="checkbox" id="explainAll"> Explicar todas</label>
+        </div>
+        <div class="code" id="code" tabindex="0" role="listbox" aria-label="Programa G y M"></div>
+        <div class="explain" id="explain" hidden>
+          <div class="explain-head"><span class="chip" id="exKind"></span><b id="exWhere"></b>
+            <div class="explain-nav">
+              <button type="button" id="exPrev" class="icon" aria-label="Línea anterior"><svg class="i"><use href="#i-up"/></svg></button>
+              <button type="button" id="exNext" class="icon" aria-label="Línea siguiente"><svg class="i"><use href="#i-down"/></svg></button>
+            </div>
+          </div>
+          <code id="exCode"></code>
+          <p id="exText"></p>
+        </div>
+        <div class="row2"><button id="copy" type="button"><svg class="i"><use href="#i-copy"/></svg>Copiar código</button></div>
+      </div>
+    </section>
+  </aside>
+</div>
+
+<div class="mobilebar"><button class="primary" id="save2" type="button"><svg class="i"><use href="#i-export"/></svg>Exportar</button></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- parámetros del trabajo: cambian con cada pieza -->
+<dialog id="jobDlg" aria-labelledby="jobTitle">
+  <form method="dialog">
+    <div class="dlg-head"><h2 id="jobTitle">Parámetros del trabajo</h2><button type="submit" class="icon ghost" aria-label="Cerrar"><svg class="i"><use href="#i-close"/></svg></button></div>
+    <div class="params">
+      <h3 id="secPiece">Pieza</h3>
+      <label>Ancho (mm)<input type="number" id="pw" value="90" min="5" step="1"></label>
+      <label>Alto (mm)<input type="number" id="ph" value="50" min="5" step="1"></label>
+      <label class="full">Tamaño del dibujo<select id="fit"><option value="fill">Ajustar a la pieza (con margen)</option><option value="width">Elegir ancho y alto (mm)</option><option value="native">Escala 1:1 (unidades del SVG = mm)</option></select></label>
+      <label id="dwLbl" hidden>Ancho del dibujo (mm)<input type="number" id="dw" value="40" min="1" step="0.5"></label>
+      <label id="dhLbl" hidden>Alto del dibujo (mm)<input type="number" id="dh" min="1" step="0.5"></label>
+      <p class="hint full" id="sizeInfo"></p>
+      <label id="marginLbl">Margen (mm)<input type="number" id="margin" value="3" min="0" step="0.5"></label>
+      <label>Ignorar manchas &lt; (mm²)<input type="number" id="speck" value="0.5" min="0" step="0.1"></label>
+
+      <h3 id="secTool">Herramienta</h3>
+      <label>Tipo<select id="ttype"><option value="ball">Ball mill</option><option value="flat">Fresa plana</option><option value="v">V-bit</option></select></label>
+      <label>Diámetro (mm)<input type="number" id="tdia" value="3.175" min="0.1" step="0.025"></label>
+      <label id="vAngLbl" hidden>Ángulo del V-bit (°)<input type="number" id="vang" value="60" min="10" max="150" step="5"></label>
+      <label id="vTipLbl" hidden>Punta del V-bit (mm)<input type="number" id="vtip" value="0.1" min="0" step="0.05"></label>
+      <label>Número (T)<input type="number" id="tnum" value="3" min="1" step="1"></label>
+      <label>Profundidad (mm)<input type="number" id="depth" value="0.1" min="0.01" step="0.05"></label>
+      <div class="eff full" id="eff"></div>
+      <label>Prof. por pasada (mm)<input type="number" id="stepdown" value="0.2" min="0.01" step="0.05"></label>
+      <label>Paso de vaciado (%)<input type="number" id="stepover" value="45" min="10" max="90" step="5"></label>
     </div>
-  </div>
-</main>
+    <div class="dlg-actions"><button type="submit" class="primary">Listo</button></div>
+  </form>
+</dialog>
+
+<!-- ajustes de máquina: se configuran una vez por taller -->
+<dialog id="setDlg" aria-labelledby="setTitle">
+  <form method="dialog">
+    <div class="dlg-head"><h2 id="setTitle">Ajustes de máquina</h2><button type="submit" class="icon ghost" aria-label="Cerrar"><svg class="i"><use href="#i-close"/></svg></button></div>
+    <p class="hint">Se guardan en este equipo. Los valores iniciales son los de la tarea de referencia (T3, S2200, F60/F130, Z3).</p>
+    <div class="params">
+      <h3>Máquina</h3>
+      <label class="full">Controlador<select id="dialect"><option value="fanuc">Fanuc / Haas</option><option value="grbl">GRBL</option></select></label>
+      <label>Husillo (rpm)<input type="number" id="rpm" value="2200" min="0" step="100"></label>
+      <label>Retracción Z (mm)<input type="number" id="retract" value="3" min="0.5" step="0.5"></label>
+      <label>Avance en Z (mm/min)<input type="number" id="fz" value="60" min="1" step="5"></label>
+      <label>Avance en X-Y (mm/min)<input type="number" id="fxy" value="130" min="1" step="5"></label>
+      <h3>Formato del código</h3>
+      <label>Decimales<select id="dec"><option>1</option><option selected>2</option><option>3</option></select></label>
+      <label>Número de programa<input type="number" id="prog" value="1" min="1" step="1"></label>
+      <label>Tolerancia de curvas (mm)<input type="number" id="tol" value="0.05" min="0.005" step="0.01"></label>
+      <label class="check"><input type="checkbox" id="arcs" checked> Arcos G02/G03</label>
+    </div>
+    <div class="dlg-actions">
+      <button type="button" id="reset" class="ghost"><svg class="i"><use href="#i-reset"/></svg>Valores iniciales</button>
+      <button type="submit" class="primary">Listo</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- exportar -->
+<dialog id="exportDlg" aria-labelledby="exportTitle">
+  <form method="dialog">
+    <div class="dlg-head"><h2 id="exportTitle">Exportar</h2><button type="submit" class="icon ghost" aria-label="Cerrar"><svg class="i"><use href="#i-close"/></svg></button></div>
+    <p class="export-sum" id="exportSum"></p>
+    <div class="export-opts">
+      <button type="button" class="export-opt primary-opt" id="save"><svg class="i"><use href="#i-save"/></svg><span><b>Guardar código</b><small>Archivo .txt para la máquina (Ctrl+S)</small></span></button>
+      <button type="button" class="export-opt" id="sheetBtn"><svg class="i"><use href="#i-sheet"/></svg><span><b>Hoja de entrega</b><small>PDF con datos, dibujo acotado y programa explicado</small></span></button>
+      <button type="button" class="export-opt" id="copy2"><svg class="i"><use href="#i-copy"/></svg><span><b>Copiar código</b><small>Para pegarlo en el control o en un simulador</small></span></button>
+    </div>
+  </form>
+</dialog>
 
 <dialog id="sheetDlg" aria-labelledby="sheetTitle">
   <form method="dialog" id="sheetForm">
-    <h2 id="sheetTitle">Hoja de entrega</h2>
-    <p class="hint">Sale una hoja con estos datos, los parámetros de corte, el dibujo sobre cuadrícula con coordenadas y el programa explicado línea por línea. En el diálogo de impresión elige “Guardar como PDF” si la vas a enviar.</p>
+    <div class="dlg-head"><h2 id="sheetTitle">Hoja de entrega</h2><button type="button" id="shCancel" class="icon ghost" aria-label="Cancelar"><svg class="i"><use href="#i-close"/></svg></button></div>
+    <p class="hint">Sale una hoja con estos datos, los parámetros de corte, el dibujo sobre cuadrícula y el programa explicado. En el diálogo de impresión elige “Guardar como PDF” si la vas a enviar.</p>
     <div class="params">
       <label class="full">Alumno o equipo<input type="text" id="shName" autocomplete="name"></label>
       <label>Número de control<input type="text" id="shId"></label>
@@ -271,14 +321,11 @@
       <label class="full check"><input type="checkbox" id="shProgram" checked> Incluir el programa explicado línea por línea</label>
     </div>
     <div class="dlg-actions">
-      <button type="button" id="shCancel" class="ghost">Cancelar</button>
       <button type="submit" class="primary" value="print"><svg class="i"><use href="#i-sheet"/></svg>Imprimir o guardar PDF</button>
     </div>
   </form>
 </dialog>
 <div id="sheet" aria-hidden="true"></div>
-
-<div class="mobilebar"><button class="primary" id="save2" type="button"><svg class="i"><use href="#i-save"/></svg>Guardar código</button></div>
 
 <div id="svghost" style="position:absolute;left:-20000px;top:0;width:1000px;height:1000px;overflow:hidden;pointer-events:none" aria-hidden="true"></div>
 <script type="module" src="/src/main.js"></script>
