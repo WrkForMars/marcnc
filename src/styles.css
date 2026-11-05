@@ -19,6 +19,7 @@
   --plate:#c9cfd4; --plate-edge:#9aa4ac; --cut:#27313a;
   --warn:#a8480a; --warn-soft:#fcebdc; --ok:#22703f;
   --m-fill:#2457c5; --m-contour:#0f7a72; --m-invert:#8a3fb3; --m-line:#a15c0e; --m-skip:#68737c; --on-mode:#ffffff;
+  --sheet-ink:#000000; --sheet-muted:#444444; --sheet-line:#8c8c8c; --sheet-fill:#eeeeee;
   --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
   --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
@@ -162,8 +163,59 @@ details.more .params{padding:0 16px 16px}
 .hint{color:var(--muted);font-size:12px;line-height:16px;margin:0}
 .warnbox{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:8px 12px;font-size:14px;line-height:20px}
 .warnbox b{display:block}
-pre.code{margin:0;font-family:var(--f-mono);font-size:12px;line-height:20px;background:var(--bg);border:1px solid var(--line);border-radius:8px;
-  padding:12px;max-height:360px;overflow:auto;white-space:pre}
+/* ---------- programa ---------- */
+.code-head{display:flex;justify-content:space-between;align-items:center;gap:8px 16px;flex-wrap:wrap}
+.code{position:relative;font-family:var(--f-mono);font-size:12px;line-height:20px;background:var(--bg);border:1px solid var(--line);border-radius:8px;
+  padding:4px 0;max-height:360px;overflow:auto}
+.code .row{display:grid;grid-template-columns:48px max-content;gap:0 12px;padding:0 12px 0 0;cursor:pointer;border-left:3px solid transparent;white-space:pre}
+.code.all .row{grid-template-columns:48px minmax(120px,max-content) minmax(240px,1fr)}
+.code .row:hover{background:var(--panel)}
+.code .row.sel{background:var(--accent-soft);border-left-color:var(--accent)}
+.code .no{color:var(--muted);text-align:right;user-select:none}
+.code .ex{font-family:var(--f-body);color:var(--muted);white-space:normal}
+.code .k-comment code{color:var(--muted)}
+.code .k-danger code{color:var(--warn);font-weight:600}
+.code .more{padding:8px 12px;color:var(--muted);font-family:var(--f-body)}
+@media (pointer:coarse){.code .row{padding-block:4px}}
+@media (max-width:560px){.code.all .row{grid-template-columns:40px 1fr}.code.all .ex{grid-column:2;padding-bottom:4px}}
+.explain{border:1px solid var(--accent);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--panel)}
+.explain-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.explain-head .chip{background:var(--accent-soft);color:var(--accent-text)}
+.explain-head .chip.danger{background:var(--warn-soft);color:var(--warn)}
+.explain-nav{margin-left:auto;display:flex;gap:4px}
+#exCode{font-family:var(--f-mono);font-size:14px;line-height:20px;font-weight:500}
+#exText{margin:0;font-size:16px;line-height:24px}
+
+/* ---------- diálogo de la hoja de entrega ---------- */
+dialog{border:1px solid var(--line-strong);border-radius:12px;background:var(--panel);color:var(--ink);padding:24px;width:min(560px,calc(100vw - 32px));max-height:calc(100vh - 32px)}
+dialog::backdrop{background:rgb(0 0 0 / .45)}
+dialog h2{font-family:var(--f-display);font-size:20px;line-height:28px;margin:0 0 8px}
+dialog .params{margin:16px 0}
+.dlg-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+
+/* ---------- hoja impresa: solo existe al imprimir ---------- */
+#sheet{display:none}
+@media print{
+  @page{size:letter;margin:12mm}
+  html,body{background:#fff!important}
+  body>*:not(#sheet){display:none!important}
+  #sheet{display:block;color:var(--sheet-ink);font-family:var(--f-body);font-size:10pt;line-height:1.35}
+}
+#sheet h1{font-family:var(--f-display);font-size:18pt;margin:0 0 2mm}
+#sheet h2{font-family:var(--f-display);font-size:12pt;margin:6mm 0 2mm;text-transform:uppercase;letter-spacing:.04em}
+#sheet table{width:100%;border-collapse:collapse}
+#sheet th,#sheet td{border:1px solid var(--sheet-line);padding:1.2mm 2mm;text-align:left;vertical-align:top}
+#sheet th{background:var(--sheet-fill);font-weight:600}
+#sheet .info td:nth-child(odd){width:22%;font-weight:600;background:var(--sheet-fill)}
+#sheet .prog{font-size:8.5pt}
+#sheet .prog td:first-child{width:9mm;text-align:right;color:var(--sheet-muted)}
+#sheet .prog td:nth-child(2){font-family:var(--f-mono);white-space:pre;width:52mm}
+#sheet .prog tr{break-inside:avoid}
+#sheet img{width:100%;border:1px solid var(--sheet-line)}
+#sheet .note{color:var(--sheet-muted);font-size:9pt;margin:1mm 0}
+#sheet .sign{display:flex;gap:16mm;margin-top:12mm}
+#sheet .sign div{flex:1;border-top:1px solid var(--sheet-ink);padding-top:1mm;text-align:center;font-size:9pt}
+#sheet .avoid{break-inside:avoid}
 .toast{font-size:12px;line-height:16px;color:var(--ok);min-height:16px;font-weight:500}
 .err{color:var(--warn)}
 .row2{display:flex;gap:8px;flex-wrap:wrap}

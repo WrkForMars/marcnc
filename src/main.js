@@ -2,6 +2,7 @@
 import './styles.css';
 import { buildDesign } from './design.js';
 import { DEMO_SVG, DEMO_TEXT } from './demo.js';
+import { explainProgram } from './cam/explain.js';
 import { generateGcode } from './cam/gcode.js';
 import { computePlan } from './cam/plan.js';
 import { isDesktop, saveTextDesktop } from './desktop.js';
@@ -11,6 +12,8 @@ import { traceImage } from './input/image.js';
 import { bbox, createPreview } from './preview/canvas.js';
 import { buildText, textElement, TEXT_FONTS } from './text/text.js';
 import { renderList } from './ui/list.js';
+import { KIND_NAME, markRow, renderCode } from './ui/code-view.js';
+import { sheetHTML, sheetImage } from './ui/sheet.js';
 import { renderSketchProps } from './ui/sketch-props.js';
 import { createSketchEditor } from './sketch/editor.js';
 import { sketchElements } from './sketch/geometry.js';
@@ -21,7 +24,7 @@ const tick = () => new Promise(r => setTimeout(r, 0));
 const state = {
   raw: null, rawId: 0, design: [], designNote: '', texts: [], elements: [],
   selected: -1, lastImage: null, lastSvg: '', fileName: '', designScale: 0, designSize: [0, 0], demoFit: false, gcode: '', plan: null, gen: 0, textSeq: 0,
-  cache: new Map(), sketchEls: [],
+  cache: new Map(), sketchEls: [], explained: [], codeSel: 0, lastG: null,
 };
 const preview = createPreview($('cv'));
 
@@ -127,18 +130,19 @@ async function refresh() {
   state.plan = plan;
 
   if (!state.elements.length) {
-    state.gcode = '';
-    $('code').textContent = 'Carga un SVG o una imagen, o agrega un texto, para generar el código.';
+    state.gcode = ''; state.explained = []; state.codeSel = 0; state.lastG = null;
+    $('code').innerHTML = '<div class="more">Dibuja en la pieza, carga un SVG o una imagen, o agrega un texto, para generar el código.</div>';
+    $('explain').hidden = true;
     $('stats').textContent = ''; $('warns').textContent = '';
   } else {
     busy('Escribiendo el código…');
     await tick();
     if (my !== state.gen) return;
     const g = generateGcode(plan, state.elements, p);
-    state.gcode = g.text;
-    $('code').textContent = g.lines > 4000
-      ? g.text.split('\n').slice(0, 4000).join('\n') + `\n… (${g.lines - 4000} líneas más; usa Copiar o Descargar para el archivo completo)`
-      : g.text;
+    state.gcode = g.text; state.lastG = g;
+    state.explained = explainProgram(g.text);
+    if (state.codeSel > state.explained.length) state.codeSel = 0;
+    showCode();
     $('stats').textContent = '';
     [['Líneas', g.lines], ['Arcos', g.arcsN], ['Corte', `${g.cutLen.toFixed(0)} mm`], ['Pasadas', g.passes], ['Tiempo aprox.', `${Math.max(1, Math.round(g.mins))} min`]]
       .forEach(([a, b]) => { const s = document.createElement('span'); s.append(a + ' '); const bb = document.createElement('b'); bb.textContent = b; s.append(bb); $('stats').append(s); });
@@ -369,7 +373,9 @@ function drawOverlay() {
   ov.style.width = w + 'px'; ov.style.height = h + 'px';
   octx.setTransform(dpr, 0, 0, dpr, 0, 0);
   octx.clearRect(0, 0, w, h);
-  sketch.draw(octx, x => v.ox + x * v.k, y => v.oy + (v.H - y) * v.k, v.k, v.W, v.H);
+  const X = x => v.ox + x * v.k, Y = y => v.oy + (v.H - y) * v.k;
+  sketch.draw(octx, X, Y, v.k, v.W, v.H);
+  drawCodeHighlight(X, Y, v.k);
 }
 let propsFor = null;
 /** Tarjeta de medidas de la figura seleccionada (solo se reconstruye si cambió, para no perder el foco). */
@@ -481,6 +487,104 @@ window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() =
 // también cuando cambia el ancho sin que la ventana cambie (panel que se abre, ventana oculta que vuelve)
 let lastW = 0;
 new ResizeObserver(([en]) => { const w = Math.round(en.contentRect.width); if (w !== lastW) { lastW = w; clearTimeout(rt); rt = setTimeout(() => drawOnly(), 60); } }).observe($('stage'));
+
+/* ---------- programa explicado ---------- */
+const CODE_LIMIT = 4000;
+function showCode() {
+  renderCode($('code'), state.explained, { limit: CODE_LIMIT, explainAll: $('explainAll').checked, selected: state.codeSel });
+  showLine();
+}
+/** Tarjeta con la explicación de la línea elegida; su movimiento se resalta en la vista previa. */
+function showLine() {
+  const e = state.explained[state.codeSel - 1];
+  $('explain').hidden = !e;
+  if (e) {
+    $('exKind').textContent = KIND_NAME[e.kind];
+    $('exKind').classList.toggle('danger', e.kind === 'danger');
+    $('exWhere').textContent = `Línea ${e.n}${e.block ? ` · ${e.block.startsWith('FIGURA') ? 'figura ' + e.block.slice(7) : e.block.replace('TEXTO', 'texto')}` : ''}`;
+    $('exCode').textContent = e.code;
+    $('exText').textContent = e.text;
+  }
+  drawOverlay();
+}
+function selectLine(n) {
+  const max = Math.min(state.explained.length, CODE_LIMIT);
+  if (!max) return;
+  state.codeSel = Math.max(1, Math.min(max, n));
+  markRow($('code'), state.codeSel);
+  showLine();
+}
+$('code').addEventListener('click', ev => { const r = ev.target.closest('.row'); if (r) { selectLine(+r.dataset.n); $('code').focus({ preventScroll: true }); } });
+$('code').addEventListener('keydown', ev => {
+  const step = { ArrowDown: 1, ArrowUp: -1, PageDown: 15, PageUp: -15 }[ev.key];
+  if (step) { ev.preventDefault(); selectLine((state.codeSel || 0) + step); }
+  else if (ev.key === 'Home') { ev.preventDefault(); selectLine(1); }
+  else if (ev.key === 'End') { ev.preventDefault(); selectLine(state.explained.length); }
+});
+$('exPrev').addEventListener('click', () => selectLine(state.codeSel - 1));
+$('exNext').addEventListener('click', () => selectLine(state.codeSel + 1));
+$('explainAll').addEventListener('change', showCode);
+
+/** Movimiento de la línea elegida sobre la vista previa: trazo, posición de la herramienta y su altura. */
+function drawCodeHighlight(X, Y, k) {
+  const e = state.explained[state.codeSel - 1];
+  if (!e || !e.to) return;
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const [x0, y0] = e.from, [x1, y1, z1] = e.to;
+  const col = css(e.kind === 'danger' ? '--warn' : '--accent');
+  octx.save();
+  octx.strokeStyle = col; octx.lineWidth = 3; octx.lineCap = 'round';
+  if (e.kind === 'rapid' || e.kind === 'retract' || e.kind === 'danger') octx.setLineDash([6, 5]);
+  octx.beginPath();
+  if (e.arc) {
+    // en pantalla Y crece hacia abajo: el sentido antihorario de la máquina es horario en el lienzo
+    const [cx, cy] = e.arc.c;
+    octx.arc(X(cx), Y(cy), e.arc.r * k, -Math.atan2(y0 - cy, x0 - cx), -Math.atan2(y1 - cy, x1 - cx), e.arc.ccw);
+  } else { octx.moveTo(X(x0), Y(y0)); octx.lineTo(X(x1), Y(y1)); }
+  octx.stroke(); octx.setLineDash([]);
+  const tw = state.plan ? state.plan.tl.w : 1;
+  const r = Math.max(6, (tw * k) / 2);
+  octx.beginPath(); octx.arc(X(x1), Y(y1), r, 0, 2 * Math.PI);
+  octx.fillStyle = col; octx.globalAlpha = z1 < 0 ? 0.6 : 0.15; octx.fill(); octx.globalAlpha = 1; octx.stroke();
+  const txt = `Z${z1.toFixed(2)}${z1 < 0 ? ' cortando' : ' arriba'}`;
+  octx.font = '500 12px "IBM Plex Mono", monospace';
+  const w = octx.measureText(txt).width + 8, lx = Math.min(X(x1) + r + 6, octx.canvas.clientWidth - w - 2) || X(x1) + r + 6;
+  octx.fillStyle = css('--panel'); octx.fillRect(lx, Y(y1) - 9, w, 18);
+  octx.strokeStyle = css('--line-strong'); octx.lineWidth = 1; octx.strokeRect(lx + 0.5, Y(y1) - 8.5, w - 1, 17);
+  octx.fillStyle = css('--ink'); octx.fillText(txt, lx + 4, Y(y1) + 4);
+  octx.restore();
+}
+
+/* ---------- hoja de entrega ---------- */
+const SHEET_STORE = 'grabacnc:entrega';
+const SHEET_FIELDS = { name: 'shName', id: 'shId', group: 'shGroup', practice: 'shPractice', teacher: 'shTeacher', material: 'shMaterial' };
+$('sheetBtn').addEventListener('click', () => {
+  if (!state.gcode) { $('toast').textContent = 'Todavía no hay código para entregar.'; return; }
+  let info = {};
+  try { info = JSON.parse(localStorage.getItem(SHEET_STORE) || '{}'); } catch { /* vacío */ }
+  Object.entries(SHEET_FIELDS).forEach(([k, id]) => { $(id).value = info[k] || ''; });
+  $('sheetDlg').showModal();
+});
+$('shCancel').addEventListener('click', () => $('sheetDlg').close(''));
+$('sheetForm').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  $('sheetDlg').close();
+  if (!state.lastG) return;
+  const info = Object.fromEntries(Object.entries(SHEET_FIELDS).map(([k, id]) => [k, $(id).value.trim()]));
+  try { localStorage.setItem(SHEET_STORE, JSON.stringify(info)); } catch { /* solo esta vez */ }
+  const p = params(), css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  busy('Preparando la hoja…'); await tick();
+  const image = sheetImage({ elements: state.elements, W: p.W, H: p.H, toolWidth: state.plan.tl.w, css });
+  $('sheet').innerHTML = sheetHTML({
+    info, p, tl: state.plan.tl, g: state.lastG, ex: state.explained, elements: state.elements, image,
+    fileName: `${(state.fileName || 'grabado').replace(/[^\w\-]+/g, '_')}_GM.txt`, withProgram: $('shProgram').checked,
+  });
+  // la imagen ya está en memoria; el tope evita quedarse esperando si el navegador no la decodifica (ventana oculta)
+  await new Promise(r => { const im = $('sheet').querySelector('img'); if (!im || im.complete) r(); else { im.onload = r; im.onerror = r; setTimeout(r, 1500); } });
+  busy(null);
+  window.print();
+});
+window.addEventListener('afterprint', () => { $('sheet').innerHTML = ''; });
 
 /* ---------- salida ---------- */
 $('copy').addEventListener('click', () => {

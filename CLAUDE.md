@@ -42,10 +42,13 @@ src/
   cam/arcs.js        ajuste de arcos G02/G03 — probado
   cam/plan.js        cálculo con caché y orden de corte, cede el hilo cada ~30 ms
   cam/gcode.js       escritura del programa (función pura) — probado
+  cam/explain.js     explica cada línea del programa siguiendo su estado (posición, modo G, avance) — probado
   text/hershey.js    texto de una línea (fuentes Hershey, datos en hershey-data.json)
   text/text.js       textos rellenos (canvas → ImageTracer) y posición en la pieza
   preview/canvas.js  dibujo de la vista previa y selección con el puntero
   ui/list.js         lista de figuras con los botones de modo
+  ui/code-view.js    visor del programa: tocar una línea la explica y resalta su movimiento
+  ui/sheet.js        hoja de entrega imprimible (#sheet, solo visible con @media print)
 tests/               Vitest en entorno node; helpers.js trae parseMoves() para leer G-code
 ```
 
@@ -89,9 +92,11 @@ es un cambio de comportamiento que hay que justificar.
 
 ## Pendiente (en orden de valor)
 
-1. Paquete de entrega escolar: .txt + imagen de coordenadas en cuadrícula + tabla que explica cada línea.
-2. Perfiles de máquina y material (avances sugeridos para aluminio, acrílico, MDF).
-3. Mover vectorizado y vaciado a un Web Worker.
-4. Simulación animada del recorrido.
-5. PWA instalable (manifest + service worker).
-6. Firmar el .exe (certificado de código) para que Windows no muestre la advertencia de SmartScreen.
+1. Simulación animada del recorrido (el visor ya resalta una línea a la vez).
+2. Ayuda en cada campo (qué es paso de vaciado, retracción, V-bit…) y ejemplos para empezar (llavero, placa, engrane).
+3. Perfiles de máquina y material (avances sugeridos para aluminio, acrílico, MDF).
+4. Croquis: cotas visibles en el dibujo, mover con flechas, zoom y paneo de la vista previa.
+5. Importar DXF (lo que exporta SolidWorks).
+6. Mover vectorizado y vaciado a un Web Worker.
+7. PWA instalable (manifest + service worker).
+8. Firmar el .exe (certificado de código) para que Windows no muestre la advertencia de SmartScreen.
