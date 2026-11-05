@@ -2,6 +2,7 @@
 
 Convierte un SVG o una imagen con fondo blanco en código G y M para grabado CNC. Funciona en el navegador o como programa de Windows (.exe), sin internet.
 
+- **Croquis con coordenadas:** dibuja líneas, rectángulos, círculos, arcos y polígonos sobre la pieza con el ratón (imán a cuadrícula y a vértices, centros y puntos medios) o tecleando `x y`, `@dx dy` o `@distancia<ángulo`. Cada medida se puede corregir después; una figura cerrada dentro de otra queda como hueco. Atajos: V, L, R, C, A, P, Esc, Supr, Ctrl+Z / Ctrl+Y.
 - **Modo por figura:** cada figura detectada se graba con Relleno, Contorno, Invertir (orilla exterior + huecos vaciados), Línea u Omitir.
 - **Textos:** de una sola línea (fuentes Hershey, ideales para grabar) o rellenos, con acentos y ñ; se arrastran en la vista previa.
 - **Simulación real:** la vista previa dibuja el grabado con el ancho que de verdad deja la herramienta a esa profundidad (una ball mill de 1/8" a 0.1 mm corta 1.11 mm, no 3.175 mm) y avisa cuando un detalle no cabe o algo se sale de la pieza.

@@ -18,6 +18,16 @@
   <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h9"/></symbol>
   <symbol id="i-theme" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 0 0 16z" fill="currentColor"/></symbol>
   <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4"/></symbol>
+  <symbol id="i-select" viewBox="0 0 24 24"><path d="M5 3l14 8-6 2-3 6z"/></symbol>
+  <symbol id="i-line" viewBox="0 0 24 24"><path d="M5 19L19 5"/><circle cx="5" cy="19" r="1.5"/><circle cx="19" cy="5" r="1.5"/></symbol>
+  <symbol id="i-rect" viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="1"/></symbol>
+  <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 12h.01"/></symbol>
+  <symbol id="i-arc" viewBox="0 0 24 24"><path d="M4 18a8 8 0 0 1 16 0"/><path d="M12 18h.01"/></symbol>
+  <symbol id="i-poly" viewBox="0 0 24 24"><path d="M12 3l8 5v8l-8 5-8-5V8z"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></symbol>
+  <symbol id="i-dup" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V5a1 1 0 0 1 1-1h11"/></symbol>
+  <symbol id="i-del" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
 </svg>
 
 <header class="topbar">
@@ -33,7 +43,7 @@
 </header>
 
 <main class="wrap">
-  <p class="lede">Abre un SVG o una imagen con fondo blanco (o arrástrala a la vista previa), elige cómo se corta cada figura y guarda el código G y M.</p>
+  <p class="lede">Dibuja en la pieza con coordenadas exactas, o abre un SVG o una imagen con fondo blanco (también puedes arrastrarla). Elige cómo se corta cada figura y guarda el código G y M.</p>
 
   <div class="grid">
     <div class="col">
@@ -41,8 +51,30 @@
         <div class="card-head"><h2 id="hPrev"><span class="step">1</span>Vista previa</h2>
           <label class="check"><input type="checkbox" id="showPath"> Ver recorrido</label>
         </div>
+        <div class="sketchbar" role="toolbar" aria-label="Croquis">
+          <div class="tools" id="skTools">
+            <button type="button" data-tool="select" aria-pressed="true" title="Seleccionar y mover (V)"><svg class="i"><use href="#i-select"/></svg><span>Seleccionar</span></button>
+            <button type="button" data-tool="line" aria-pressed="false" title="Línea (L)"><svg class="i"><use href="#i-line"/></svg><span>Línea</span></button>
+            <button type="button" data-tool="rect" aria-pressed="false" title="Rectángulo (R)"><svg class="i"><use href="#i-rect"/></svg><span>Rectángulo</span></button>
+            <button type="button" data-tool="circle" aria-pressed="false" title="Círculo (C)"><svg class="i"><use href="#i-circle"/></svg><span>Círculo</span></button>
+            <button type="button" data-tool="arc" aria-pressed="false" title="Arco (A)"><svg class="i"><use href="#i-arc"/></svg><span>Arco</span></button>
+            <button type="button" data-tool="poly" aria-pressed="false" title="Polígono (P)"><svg class="i"><use href="#i-poly"/></svg><span>Polígono</span></button>
+          </div>
+          <div class="sk-row">
+            <label class="sk-coord">Coordenada o medida<input type="text" id="skInput" placeholder="x y  ·  @dx dy  ·  @d&lt;ángulo" autocomplete="off" spellcheck="false"></label>
+            <label id="skSidesLbl" class="sk-small" hidden>Lados<input type="number" id="skSides" value="6" min="3" max="64" step="1"></label>
+            <label class="sk-small">Cuadrícula<select id="skGrid"><option value="0.5">0.5 mm</option><option value="1" selected>1 mm</option><option value="2">2 mm</option><option value="5">5 mm</option><option value="10">10 mm</option></select></label>
+            <label class="check"><input type="checkbox" id="skSnap" checked> Imán</label>
+            <div class="sk-undo">
+              <button type="button" id="skUndo" class="icon" aria-label="Deshacer (Ctrl+Z)" title="Deshacer (Ctrl+Z)"><svg class="i"><use href="#i-undo"/></svg></button>
+              <button type="button" id="skRedo" class="icon" aria-label="Rehacer (Ctrl+Y)" title="Rehacer (Ctrl+Y)"><svg class="i"><use href="#i-redo"/></svg></button>
+            </div>
+          </div>
+          <div class="sk-status"><span id="skPrompt" role="status"></span><span id="skCursor"></span></div>
+        </div>
         <div class="stage" id="stage">
           <canvas id="cv" width="900" height="500" aria-label="Vista previa de la pieza con el grabado simulado"></canvas>
+          <canvas id="ov" class="overlay" aria-hidden="true"></canvas>
           <div class="busy" id="busy" hidden><span id="busyText">Procesando…</span></div>
           <div class="drop" id="drop" hidden><svg class="i"><use href="#i-open"/></svg>Suelta el archivo para abrirlo</div>
         </div>
@@ -66,6 +98,19 @@
     </div>
 
     <div class="col">
+      <section class="card" id="skProps" hidden aria-labelledby="skTitle">
+        <div class="card-head"><h2 id="skTitle">Figura</h2>
+          <div class="actions">
+            <button type="button" id="skDup" class="ghost"><svg class="i"><use href="#i-dup"/></svg>Duplicar</button>
+            <button type="button" id="skDel" class="ghost"><svg class="i"><use href="#i-del"/></svg>Eliminar</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="params" id="skFields"></div>
+          <p class="hint">Medidas en mm desde la esquina inferior izquierda de la pieza. Los ángulos van en grados, antihorario desde la derecha.</p>
+        </div>
+      </section>
+
       <section class="card" id="svgOpts" hidden aria-labelledby="hSvg">
         <div class="card-head"><h2 id="hSvg">SVG</h2></div>
         <div class="card-body">

@@ -31,6 +31,10 @@ src/
   input/svg.js       lee un SVG con estilos y transformaciones (usa DOM); niveles de calidad SVG_QUALITY
   input/image.js     imagen → contornos con ImageTracer, o línea central
   input/centerline.js  esqueletización (Zhang–Suen) → polilíneas por pieza, puro — probado
+  sketch/geometry.js croquis puro: figuras por coordenadas, ajuste a puntos, lectura de "x y"/"@dx dy"/"@d<a",
+                     figuras → elementos (una cerrada dentro de otra es hueco) — probado
+  sketch/editor.js   herramientas, imán, mover, deshacer; dibuja en una capa (#ov) sobre la vista previa
+  ui/sketch-props.js medidas editables de la figura seleccionada
   geometry/clipper.js  envolturas de Clipper (offset, unión, resta, regiones)
   geometry/simplify.js RDP, distancia a segmento, punto en polígono
   cam/tool.js        ancho de línea según herramienta y profundidad — probado
@@ -44,6 +48,9 @@ src/
   ui/list.js         lista de figuras con los botones de modo
 tests/               Vitest en entorno node; helpers.js trae parseMoves() para leer G-code
 ```
+
+El croquis no pasa por `buildDesign`: ya está en mm de la pieza y `sketchElements` da los elementos directo.
+Se guarda en localStorage (`grabacnc:croquis`); si hay uno guardado, la app abre con él en vez del ejemplo.
 
 Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y hacia arriba) → elementos
 → `computePlan` (trayectorias del centro de la herramienta + orden) → `generateGcode`.

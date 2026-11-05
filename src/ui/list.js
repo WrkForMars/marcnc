@@ -37,9 +37,9 @@ export function renderList(box, allBox, s) {
       t.textContent = `“${e.text.text}”`;
       sm.textContent = `${e.text.h} mm · ${e.type === 'line' ? 'una línea' : 'rellena'}`;
     } else {
-      t.textContent = e.type === 'line' ? 'Trazo' : 'Figura';
+      t.textContent = e.label || (e.type === 'line' ? 'Trazo' : 'Figura');
       const p = e.parts[0];
-      sm.textContent = e.type === 'line'
+      sm.textContent = e.detail ? e.detail : e.type === 'line'
         ? (e.parts.length > 1 ? `${e.parts.length} tramos` : p.closed ? 'cerrado' : 'abierto')
         : (p.holes.length ? `${p.holes.length} hueco${p.holes.length > 1 ? 's' : ''}` : 'sin huecos');
     }

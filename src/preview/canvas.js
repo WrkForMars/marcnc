@@ -22,7 +22,7 @@ export function bbox(e) {
 
 export function createPreview(cv) {
   const ctx = cv.getContext('2d');
-  let view = { k: 1, ox: 0, oy: 0, H: 50 };
+  let view = { k: 1, ox: 0, oy: 0, W: 90, H: 50 };
 
   const toMM = (mx, my) => [(mx - view.ox) / view.k, view.H - (my - view.oy) / view.k];
 
@@ -38,7 +38,7 @@ export function createPreview(cv) {
       cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr); cv.style.height = cssH + 'px';
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    view = { k, ox: pad, oy: pad, H };
+    view = { k, ox: pad, oy: pad, W, H };
     const X = x => pad + x * k, Y = y => pad + (H - y) * k;
     ctx.clearRect(0, 0, cssW, cssH);
 
@@ -106,7 +106,7 @@ export function createPreview(cv) {
       ctx.beginPath();
       if (ctx.roundRect) ctx.roundRect(tx - w / 2, ty - 12, w, 15, 3); else ctx.rect(tx - w / 2, ty - 12, w, 15);
       ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.fillText(lbl, tx - w / 2 + 4, ty - 1);
+      ctx.fillStyle = css('--on-mode'); ctx.fillText(lbl, tx - w / 2 + 4, ty - 1);
     });
   }
 
@@ -137,5 +137,8 @@ export function createPreview(cv) {
     return best;
   }
 
-  return { draw, hit, toMM };
+  /** Escala actual: px por mm (k), desplazamiento y tamaño de la pieza, para dibujar capas encima. */
+  const getView = () => view;
+
+  return { draw, hit, toMM, getView };
 }

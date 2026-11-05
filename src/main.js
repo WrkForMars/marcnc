@@ -11,6 +11,9 @@ import { traceImage } from './input/image.js';
 import { bbox, createPreview } from './preview/canvas.js';
 import { buildText, textElement, TEXT_FONTS } from './text/text.js';
 import { renderList } from './ui/list.js';
+import { renderSketchProps } from './ui/sketch-props.js';
+import { createSketchEditor } from './sketch/editor.js';
+import { sketchElements } from './sketch/geometry.js';
 
 const $ = id => document.getElementById(id);
 const tick = () => new Promise(r => setTimeout(r, 0));
@@ -18,7 +21,7 @@ const tick = () => new Promise(r => setTimeout(r, 0));
 const state = {
   raw: null, rawId: 0, design: [], designNote: '', texts: [], elements: [],
   selected: -1, lastImage: null, lastSvg: '', fileName: '', designScale: 0, designSize: [0, 0], demoFit: false, gcode: '', plan: null, gen: 0, textSeq: 0,
-  cache: new Map(),
+  cache: new Map(), sketchEls: [],
 };
 const preview = createPreview($('cv'));
 
@@ -42,11 +45,15 @@ function rebuildDesign() {
   state.design = r.elements; state.designNote = r.note; state.designScale = r.scale; state.designSize = r.size; state.cache.clear();
   svgQualityLabel(); syncSize();
 }
+function rebuildSketch() {
+  state.sketchEls = sketchElements(sketch.entities, sketch.modes);
+}
 function assemble() {
-  state.elements = state.design.concat(state.texts.map(textElement).filter(Boolean));
+  state.elements = state.design.concat(state.sketchEls, state.texts.map(textElement).filter(Boolean));
   if (state.selected >= state.elements.length) state.selected = -1;
 }
-const keyOf = e => (e.src === 'text' ? `t${e.text.id}:${e.text.x}:${e.text.y}:${e.text.rev}` : `d${state.rawId}:${state.design.indexOf(e)}`);
+const keyOf = e => (e.src === 'text' ? `t${e.text.id}:${e.text.x}:${e.text.y}:${e.text.rev}`
+  : e.src === 'sketch' ? `s${e.sketchId}:${e.sig}` : `d${state.rawId}:${state.design.indexOf(e)}`);
 
 function select(i) {
   state.selected = i;
@@ -54,6 +61,9 @@ function select(i) {
   const isText = !!(e && e.src === 'text');
   $('txtTitle').textContent = isText ? 'Editar texto' : 'Agregar texto';
   $('tAdd').hidden = isText; $('tDel').hidden = !isText; $('tNew').hidden = !isText;
+  // una figura del croquis muestra sus medidas para editarlas
+  // (si ya está elegido un hueco de esa figura, se queda el hueco)
+  if (e && e.src === 'sketch') { if (!sketch.selected || !hasEntity(e, sketch.selected.id)) sketch.select(e.sketchId); } else if (sketch.selected) sketch.select(null);
   if (isText) {
     const t = e.text;
     $('tText').value = t.text; $('tFont').value = t.font; $('tH').value = t.h; $('tSp').value = t.sp;
@@ -69,6 +79,7 @@ function drawOnly(dragging = false) {
     elements: state.elements, selected: state.selected, W: p.W, H: p.H,
     toolWidth: state.plan ? state.plan.tl.w : toolGeometry(p).w, plan: state.plan, showPath: $('showPath').checked, dragging,
   });
+  drawOverlay();
 }
 function renderAll() {
   drawOnly();
@@ -76,8 +87,8 @@ function renderAll() {
   renderList($('els'), $('allModes'), {
     elements: state.elements, selected: state.selected,
     onSelect: i => { select(i); renderAll(); },
-    onMode: (i, m) => { const e = state.elements[i]; e.mode = m; if (e.src === 'text') e.text.mode = m; select(i); refresh(); },
-    onModeAll: m => { state.elements.forEach(e => { if (e.type === 'region') { e.mode = m; if (e.src === 'text') e.text.mode = m; } }); refresh(); },
+    onMode: (i, m) => { const e = state.elements[i]; e.mode = m; if (e.src === 'text') e.text.mode = m; if (e.src === 'sketch') { sketch.setMode(e.sketchId, m); storeSketch(); } select(i); refresh(); },
+    onModeAll: m => { state.elements.forEach(e => { if (e.type === 'region') { e.mode = m; if (e.src === 'text') e.text.mode = m; if (e.src === 'sketch') sketch.setMode(e.sketchId, m); } }); storeSketch(); refresh(); },
   });
 }
 
@@ -229,6 +240,7 @@ $('demo').addEventListener('click', () => { state.lastImage = null; state.lastSv
 $('clear').addEventListener('click', () => {
   Object.assign(state, { raw: null, design: [], texts: [], lastImage: null, lastSvg: '', designNote: '', fileName: '', designSize: [0, 0] });
   syncSize();
+  sketch.clear(); // se puede deshacer con Ctrl+Z
   $('imgOpts').hidden = true; $('svgOpts').hidden = true; assemble(); select(-1); refresh();
 });
 $('thr').addEventListener('input', () => { $('thrVal').textContent = $('thr').value; });
@@ -334,16 +346,106 @@ $('tDel').addEventListener('click', () => {
 });
 $('tNew').addEventListener('click', () => { select(-1); renderAll(); $('tText').focus(); });
 
-/* ---------- vista previa: selección y arrastre de textos ---------- */
+/* ---------- croquis ---------- */
+const sketch = createSketchEditor({
+  onChange: () => { rebuildSketch(); storeSketch(); assemble(); syncSketchSelection(); refresh(); },
+  onRedraw: () => { drawOverlay(); renderSketchProps2(); },
+  onStatus: ({ prompt, cursor, kind }) => {
+    if (!$('skPrompt').classList.contains('err')) $('skPrompt').textContent = prompt;
+    $('skCursor').textContent = cursor ? `X ${cursor[0].toFixed(2)}  Y ${cursor[1].toFixed(2)}${kind && kind !== 'cuadrícula' ? `  · ${kind}` : ''}` : '';
+  },
+  css: v => getComputedStyle(document.documentElement).getPropertyValue(v).trim(),
+});
+const SKETCH_STORE = 'grabacnc:croquis';
+function storeSketch() { try { localStorage.setItem(SKETCH_STORE, JSON.stringify(sketch.save())); } catch { /* solo esta sesión */ } }
+function loadSketch() { try { sketch.load(JSON.parse(localStorage.getItem(SKETCH_STORE) || 'null')); } catch { /* croquis vacío */ } rebuildSketch(); }
+
+/** Capa del croquis: mismo tamaño que la vista previa, se redibuja sola (rápido) al mover el cursor. */
+const ov = $('ov'), octx = ov.getContext('2d');
+function drawOverlay() {
+  const cv = $('cv'), dpr = window.devicePixelRatio || 1, v = preview.getView();
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (ov.width !== Math.round(w * dpr) || ov.height !== Math.round(h * dpr)) { ov.width = Math.round(w * dpr); ov.height = Math.round(h * dpr); }
+  ov.style.width = w + 'px'; ov.style.height = h + 'px';
+  octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  octx.clearRect(0, 0, w, h);
+  sketch.draw(octx, x => v.ox + x * v.k, y => v.oy + (v.H - y) * v.k, v.k, v.W, v.H);
+}
+let propsFor = null;
+/** Tarjeta de medidas de la figura seleccionada (solo se reconstruye si cambió, para no perder el foco). */
+function renderSketchProps2() {
+  const e = sketch.selected;
+  $('skProps').hidden = !e;
+  const sig = e ? JSON.stringify(e) : null;
+  if (sig === propsFor) return;
+  propsFor = sig;
+  if (e) $('skTitle').textContent = renderSketchProps($('skFields'), e, patch => sketch.update(e.id, patch));
+}
+/** ¿El elemento viene de esa figura del croquis (como exterior o como hueco)? */
+const hasEntity = (x, id) => x.src === 'sketch' && (x.sketchId === id || new RegExp(`"id":${id}[,}]`).test(x.sig));
+/** Selecciona en la lista el elemento que contiene la figura elegida en el croquis. */
+function syncSketchSelection() {
+  const e = sketch.selected;
+  if (!e) return;
+  const i = state.elements.findIndex(x => hasEntity(x, e.id));
+  state.selected = i;
+}
+function setTool(t) {
+  sketch.setTool(t);
+  document.querySelectorAll('#skTools button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === t)));
+  $('skSidesLbl').hidden = t !== 'poly';
+  $('skPrompt').classList.remove('err');
+  if (t !== 'select') { state.selected = -1; renderAll(); }
+}
+document.querySelectorAll('#skTools button').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
+$('skGrid').addEventListener('change', () => sketch.setOptions({ grid: +$('skGrid').value }));
+$('skSnap').addEventListener('change', () => sketch.setOptions({ snap: $('skSnap').checked }));
+$('skSides').addEventListener('change', () => sketch.setOptions({ sides: Math.min(64, Math.max(3, Math.round(num('skSides', 6)))) }));
+$('skUndo').addEventListener('click', () => sketch.undoOne());
+$('skRedo').addEventListener('click', () => sketch.redoOne());
+$('skDel').addEventListener('click', () => { const e = sketch.selected; if (e) sketch.remove(e.id); });
+$('skDup').addEventListener('click', () => { const e = sketch.selected; if (e) sketch.duplicate(e.id); });
+$('skInput').addEventListener('keydown', ev => {
+  if (ev.key === 'Enter') {
+    ev.preventDefault();
+    const err = sketch.submit($('skInput').value);
+    $('skPrompt').classList.toggle('err', !!err);
+    if (err) $('skPrompt').textContent = err; else { $('skInput').value = ''; sketch.refreshStatus(); }
+  } else if (ev.key === 'Escape') { ev.preventDefault(); sketch.key('Escape'); $('skInput').blur(); }
+});
+$('skInput').addEventListener('input', () => { if ($('skPrompt').classList.contains('err')) { $('skPrompt').classList.remove('err'); sketch.refreshStatus(); } });
+// atajos: herramientas con una letra, Esc/Enter/Supr y deshacer, salvo mientras se escribe en un campo
+const TOOL_KEYS = { v: 'select', l: 'line', r: 'rect', c: 'circle', a: 'arc', p: 'poly' };
+document.addEventListener('keydown', ev => {
+  const t = ev.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  const k = ev.key.toLowerCase();
+  if ((ev.ctrlKey || ev.metaKey) && !ev.altKey) {
+    if (k === 'z' && !ev.shiftKey) { ev.preventDefault(); sketch.undoOne(); } else if (k === 'y' || (k === 'z' && ev.shiftKey)) { ev.preventDefault(); sketch.redoOne(); }
+    return;
+  }
+  if (ev.altKey) return;
+  if (TOOL_KEYS[k] && !ev.shiftKey) { setTool(TOOL_KEYS[k]); return; }
+  if (sketch.key(ev.key)) { ev.preventDefault(); if (sketch.tool === 'select') setTool('select'); }
+});
+
+/* ---------- vista previa: croquis, selección y arrastre de textos ---------- */
 const cv = $('cv');
 let drag = null;
+const evMM = ev => { const r = cv.getBoundingClientRect(); return { mx: ev.clientX - r.left, my: ev.clientY - r.top }; };
+const pickTol = () => 8 / preview.getView().k; // 8 px en mm
 cv.addEventListener('pointerdown', ev => {
-  const r = cv.getBoundingClientRect();
-  const mx = ev.clientX - r.left, my = ev.clientY - r.top;
+  const { mx, my } = evMM(ev);
+  const mm = preview.toMM(mx, my);
+  if (sketch.down(mm, pickTol())) {
+    cv.setPointerCapture(ev.pointerId);
+    if (sketch.tool === 'select') { syncSketchSelection(); select(state.selected); renderAll(); }
+    return;
+  }
   const i = preview.hit(mx, my, state.elements, state.plan ? state.plan.tl.w : 1);
   select(i);
   if (i >= 0 && state.elements[i].src === 'text') {
-    const [x, y] = preview.toMM(mx, my);
+    const [x, y] = mm;
     const t = state.elements[i].text;
     drag = { i, t, sx: x, sy: y, x0: t.x, y0: t.y, moved: false };
     cv.setPointerCapture(ev.pointerId);
@@ -352,9 +454,9 @@ cv.addEventListener('pointerdown', ev => {
   if (i >= 0) document.querySelector(`.el[data-i="${i}"]`)?.scrollIntoView({ block: 'nearest' });
 });
 cv.addEventListener('pointermove', ev => {
-  if (!drag) return;
-  const r = cv.getBoundingClientRect();
-  const [x, y] = preview.toMM(ev.clientX - r.left, ev.clientY - r.top);
+  const { mx, my } = evMM(ev);
+  const [x, y] = preview.toMM(mx, my);
+  if (!drag) { sketch.move([x, y], pickTol()); return; }
   const nx = Math.round((drag.x0 + x - drag.sx) * 2) / 2, ny = Math.round((drag.y0 + y - drag.sy) * 2) / 2; // pasos de 0.5 mm
   if (nx === drag.t.x && ny === drag.t.y) return;
   drag.t.x = nx; drag.t.y = ny; drag.moved = true;
@@ -364,6 +466,7 @@ cv.addEventListener('pointermove', ev => {
   drawOnly(true);
 });
 const endDrag = () => {
+  sketch.up();
   if (!drag) return;
   const moved = drag.moved;
   drag.t.rev++; drag = null;
@@ -371,8 +474,13 @@ const endDrag = () => {
 };
 cv.addEventListener('pointerup', endDrag);
 cv.addEventListener('pointercancel', endDrag);
+cv.addEventListener('pointerleave', () => { if (!drag) sketch.leave(); });
+cv.addEventListener('dblclick', () => sketch.dblclick());
 let rt;
 window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => drawOnly(), 120); });
+// también cuando cambia el ancho sin que la ventana cambie (panel que se abre, ventana oculta que vuelve)
+let lastW = 0;
+new ResizeObserver(([en]) => { const w = Math.round(en.contentRect.width); if (w !== lastW) { lastW = w; clearTimeout(rt); rt = setTimeout(() => drawOnly(), 60); } }).observe($('stage'));
 
 /* ---------- salida ---------- */
 $('copy').addEventListener('click', () => {
@@ -417,6 +525,9 @@ document.addEventListener('keydown', ev => {
 /* ---------- inicio ---------- */
 (async () => {
   restoreParams();
+  loadSketch();
+  setTool('select');
+  if (sketch.entities.length) { assemble(); await refresh(); return; } // hay un croquis guardado: se abre ese, sin el ejemplo
   $('fit').value = 'native'; state.demoFit = true;
   state.lastSvg = DEMO_SVG;
   await loadShapes(() => parseSVG(DEMO_SVG, $('svghost'), SVG_QUALITY[+$('svgQ').value - 1][0]), false);
