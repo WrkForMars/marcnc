@@ -42,12 +42,12 @@ Cada push a `main` (y cada PR) corre `.github/workflows/escritorio.yml`, que dej
 - **MarCNC-windows:** `MarCNC-portable.exe` (se abre directo, sin instalar ni permisos de administrador) y el instalador `MarCNC_x.y.z_x64-setup.exe` (se instala solo para el usuario actual).
 - **MarCNC-linux:** `MarCNC_x.y.z_amd64.deb` y `MarCNC_x.y.z_amd64.AppImage`, compilados en Ubuntu 22.04 para que sirvan en Ubuntu 22.04/24.04 y Linux Mint 21/22.
 
-Al subir una etiqueta `v0.3.0` se publican todos como Release.
+Al subir una etiqueta `v1.0.0` se publican todos como Release.
 
 ### Instalar en Linux Mint / Ubuntu
 
 ```bash
-sudo apt install ./MarCNC_0.3.0_amd64.deb
+sudo apt install ./MarCNC_1.0.0_amd64.deb
 ```
 
 O doble clic al `.deb` y *Instalar paquete*. Queda en el menú como **MarCNC**. Para desinstalar: `sudo apt remove marcnc`.

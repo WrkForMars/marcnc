@@ -1,7 +1,7 @@
 name: App de escritorio (Windows y Linux)
 
 # Compila MarCNC para Windows (.exe portable e instalador) y Linux (.deb y AppImage).
-# Con una etiqueta v* (p. ej. v0.3.0) además publica un Release con todos los archivos.
+# Con una etiqueta v* (p. ej. v1.0.0) además publica un Release con todos los archivos.
 on:
   push:
     branches: [main]
