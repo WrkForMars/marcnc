@@ -24,7 +24,7 @@ const tick = () => new Promise(r => setTimeout(r, 0));
 
 const state = {
   raw: null, rawId: 0, design: [], designNote: '', texts: [], elements: [],
-  selected: -1, lastImage: null, lastSvg: '', fileName: '', designScale: 0, designSize: [0, 0], demoFit: false, gcode: '', plan: null, gen: 0, textSeq: 0,
+  selected: -1, lastImage: null, imgCrop: null, imgMask: null, imgInfo: null, imgView: 'mask', lastSvg: '', fileName: '', designScale: 0, designSize: [0, 0], demoFit: false, gcode: '', plan: null, gen: 0, textSeq: 0,
   cache: new Map(), sketchEls: [], explained: [], codeSel: 0, lastG: null,
 };
 const preview = createPreview($('cv'));
@@ -204,7 +204,15 @@ function svgQualityLabel(moving = false) {
 function loadImage() {
   if (!state.lastImage) return;
   if ($('fit').value === 'native') $('fit').value = 'fill'; // una imagen no tiene unidades físicas
-  loadShapes(() => traceImage(state.lastImage, +$('thr').value, $('imgHow').value), true);
+  const opts = {
+    mode: $('imgMode').value, thr: +$('thr').value, invert: $('imgInvert').checked, clean: +$('imgClean').value,
+    how: $('imgHow').value, detail: +$('imgDetail').value, crop: state.imgCrop,
+  };
+  loadShapes(() => {
+    const r = traceImage(state.lastImage, opts);
+    state.imgMask = r.mask; state.imgInfo = r.info;
+    return r;
+  }, true).then(drawImgView);
 }
 
 /* ---------- archivos ---------- */
@@ -222,7 +230,7 @@ function openFile(f) {
   } else {
     rd.onload = () => {
       const im = new Image();
-      im.onload = () => { state.lastImage = im; loadImage(); };
+      im.onload = () => { state.lastImage = im; state.imgCrop = null; state.imgMask = null; loadImage(); };
       im.onerror = () => { $('loadErr').textContent = 'No pude abrir esa imagen.'; };
       im.src = String(rd.result);
     };
@@ -255,6 +263,74 @@ $('clear').addEventListener('click', () => {
 });
 $('thr').addEventListener('input', () => { $('thrVal').textContent = $('thr').value; });
 $('thr').addEventListener('change', loadImage);
+['imgMode', 'imgClean', 'imgDetail', 'imgInvert'].forEach(id => $(id).addEventListener('change', () => { $('thrLbl').hidden = $('imgMode').value !== 'manual'; loadImage(); }));
+
+/* ---------- imagen: lo que detecta y recorte ---------- */
+const iv = $('imgView'), ivx = iv.getContext('2d');
+let ivDrag = null;
+/** Dónde queda la imagen dentro del lienzo de vista (px CSS). */
+function ivLayout() {
+  const im = state.lastImage, W = iv.clientWidth || 320;
+  const H = Math.round(Math.min(W * 0.75, W * im.naturalHeight / im.naturalWidth));
+  const k = Math.min(W / im.naturalWidth, H / im.naturalHeight);
+  return { W, H, k, ox: (W - im.naturalWidth * k) / 2, oy: (H - im.naturalHeight * k) / 2, iw: im.naturalWidth, ih: im.naturalHeight };
+}
+/** Muestra la imagen original o lo que la app toma como dibujo, con el recorte marcado. */
+function drawImgView() {
+  const im = state.lastImage;
+  if (!im || $('imgOpts').hidden) return;
+  const L = ivLayout(), dpr = window.devicePixelRatio || 1, css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  iv.width = Math.round(L.W * dpr); iv.height = Math.round(L.H * dpr); iv.style.height = L.H + 'px';
+  ivx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ivx.clearRect(0, 0, L.W, L.H);
+  const c = state.imgCrop || { x: 0, y: 0, w: 1, h: 1 };
+  const rx = L.ox + c.x * L.iw * L.k, ry = L.oy + c.y * L.ih * L.k, rw = c.w * L.iw * L.k, rh = c.h * L.ih * L.k;
+  if (state.imgView === 'orig' || !state.imgMask) {
+    ivx.drawImage(im, L.ox, L.oy, L.iw * L.k, L.ih * L.k);
+  } else {
+    // lo detectado en tinta sobre papel, dentro del recorte; fuera del recorte la imagen apagada
+    ivx.globalAlpha = 0.25; ivx.drawImage(im, L.ox, L.oy, L.iw * L.k, L.ih * L.k); ivx.globalAlpha = 1;
+    const m = state.imgMask, off = document.createElement('canvas');
+    off.width = m.w; off.height = m.h;
+    const od = off.getContext('2d').createImageData(m.w, m.h), ink = css('--ink'), paper = css('--panel');
+    const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+    const [ir, ig, ib] = rgb(ink), [pr, pg, pb] = rgb(paper);
+    for (let i = 0; i < m.w * m.h; i++) { const on = m.data[i]; od.data[4 * i] = on ? ir : pr; od.data[4 * i + 1] = on ? ig : pg; od.data[4 * i + 2] = on ? ib : pb; od.data[4 * i + 3] = 255; }
+    off.getContext('2d').putImageData(od, 0, 0);
+    ivx.imageSmoothingEnabled = false;
+    ivx.drawImage(off, rx, ry, rw, rh);
+    ivx.imageSmoothingEnabled = true;
+  }
+  ivx.strokeStyle = css('--accent'); ivx.lineWidth = 2; ivx.setLineDash(state.imgCrop ? [] : [6, 4]);
+  if (state.imgCrop) ivx.strokeRect(rx + 1, ry + 1, rw - 2, rh - 2);
+  ivx.setLineDash([]);
+  if (ivDrag && ivDrag.cur) {
+    const [a, b] = [ivDrag.start, ivDrag.cur];
+    ivx.strokeStyle = css('--accent'); ivx.setLineDash([6, 4]);
+    ivx.strokeRect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]));
+    ivx.setLineDash([]);
+  }
+  const info = state.imgInfo;
+  const auto = $('imgMode').value === 'auto';
+  $('imgInfo').textContent = info ? `Dibujo: ${(info.ink * 100).toFixed(1)} % de la imagen${auto && info.used === 'photo' ? ' · parece foto: se ignoran sombras' : ''}${info.inverted ? ' · invertida' : ''}${state.imgMask ? ` · ${state.imgMask.w} × ${state.imgMask.h} px` : ''}` : '';
+  $('imgUncrop').hidden = !state.imgCrop;
+}
+const ivPos = ev => { const r = iv.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; };
+iv.addEventListener('pointerdown', ev => { if (!state.lastImage) return; ivDrag = { start: ivPos(ev), cur: null }; iv.setPointerCapture(ev.pointerId); });
+iv.addEventListener('pointermove', ev => { if (ivDrag) { ivDrag.cur = ivPos(ev); drawImgView(); } });
+iv.addEventListener('pointerup', () => {
+  const d = ivDrag; ivDrag = null;
+  if (!d || !d.cur) return;
+  const L = ivLayout();
+  const toImg = ([px, py]) => [Math.min(1, Math.max(0, (px - L.ox) / (L.iw * L.k))), Math.min(1, Math.max(0, (py - L.oy) / (L.ih * L.k)))];
+  const [x0, y0] = toImg(d.start), [x1, y1] = toImg(d.cur);
+  const crop = { x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.abs(x1 - x0), h: Math.abs(y1 - y0) };
+  if (crop.w * L.iw < 8 || crop.h * L.ih < 8) { drawImgView(); return; } // un clic, no un recorte
+  state.imgCrop = crop; loadImage();
+});
+$('imgUncrop').addEventListener('click', () => { state.imgCrop = null; loadImage(); });
+$('ivMask').addEventListener('click', () => { state.imgView = 'mask'; $('ivMask').setAttribute('aria-pressed', 'true'); $('ivOrig').setAttribute('aria-pressed', 'false'); drawImgView(); });
+$('ivOrig').addEventListener('click', () => { state.imgView = 'orig'; $('ivOrig').setAttribute('aria-pressed', 'true'); $('ivMask').setAttribute('aria-pressed', 'false'); drawImgView(); });
 $('svgQ').addEventListener('input', () => svgQualityLabel(true));
 $('svgQ').addEventListener('change', loadSvg);
 $('imgHow').addEventListener('change', loadImage);
@@ -289,12 +365,12 @@ $('showPath').addEventListener('change', () => drawOnly());
 
 // los parámetros se recuerdan entre sesiones (cada taller tiene su máquina y su herramienta)
 const SAVED = ['pw', 'ph', 'margin', 'speck', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'depth', 'rpm', 'retract', 'fz', 'fxy',
-  'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs', 'imgHow', 'thr', 'svgQ', 'dw'];
+  'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs', 'imgHow', 'thr', 'svgQ', 'dw', 'imgMode', 'imgClean', 'imgDetail', 'imgInvert'];
 const STORE = 'marcnc:parametros';
 const getVal = id => ($(id).type === 'checkbox' ? $(id).checked : $(id).value);
 const setVal = (id, v) => { if ($(id).type === 'checkbox') $(id).checked = !!v; else $(id).value = v; };
 const DEFAULTS = Object.fromEntries(SAVED.map(id => [id, getVal(id)]));
-const syncLabels = () => { $('vAngLbl').hidden = $('vTipLbl').hidden = $('ttype').value !== 'v'; $('thrVal').textContent = $('thr').value; svgQualityLabel(); };
+const syncLabels = () => { $('vAngLbl').hidden = $('vTipLbl').hidden = $('ttype').value !== 'v'; $('thrVal').textContent = $('thr').value; $('thrLbl').hidden = $('imgMode').value !== 'manual'; svgQualityLabel(); };
 function storeParams() {
   try { localStorage.setItem(STORE, JSON.stringify(Object.fromEntries(SAVED.map(id => [id, getVal(id)])))); } catch { /* sin almacenamiento: no pasa nada */ }
 }
@@ -489,7 +565,7 @@ cv.addEventListener('pointercancel', endDrag);
 cv.addEventListener('pointerleave', () => { if (!drag) sketch.leave(); });
 cv.addEventListener('dblclick', () => sketch.dblclick());
 let rt;
-window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => drawOnly(), 120); });
+window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { drawOnly(); drawImgView(); }, 120); });
 // también cuando cambia el ancho sin que la ventana cambie (panel que se abre, ventana oculta que vuelve)
 let lastW = 0;
 new ResizeObserver(([en]) => { const w = Math.round(en.contentRect.width); if (w !== lastW) { lastW = w; clearTimeout(rt); rt = setTimeout(() => drawOnly(), 60); } }).observe($('stage'));

@@ -115,6 +115,11 @@ input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent);margin:0;
 input[aria-invalid="true"]{border-color:var(--warn)}
 @media (max-width:560px){.tools button span{display:none}.tools button{width:44px;padding:0}}
 
+/* ---------- imagen cargada ---------- */
+.imgview{width:100%;height:auto;border:1px solid var(--line);border-radius:8px;cursor:crosshair;background:var(--bg)}
+.row-between{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.seg button[aria-pressed="true"]:not([style]){background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+
 /* ---------- vista previa ---------- */
 .stage{position:relative;padding:12px}
 canvas.overlay{position:absolute;left:12px;top:12px;pointer-events:none}

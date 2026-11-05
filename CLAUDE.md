@@ -29,7 +29,8 @@ src/
   demo.js            dibujo y texto de ejemplo
   input/svg-path.js  lector de rutas SVG puro (sin DOM); curvas divididas por tolerancia — probado
   input/svg.js       lee un SVG con estilos y transformaciones (usa DOM); niveles de calidad SVG_QUALITY
-  input/image.js     imagen → contornos con ImageTracer, o línea central
+  input/detect.js    qué píxeles son dibujo: Otsu, adaptativo para fotos con sombra, por color del fondo, limpieza — probado
+  input/image.js     imagen (recorte, detalle) → detect.js → contornos con ImageTracer, o línea central
   input/centerline.js  esqueletización (Zhang–Suen) → polilíneas por pieza, puro — probado
   sketch/geometry.js croquis puro: figuras por coordenadas, ajuste a puntos, lectura de "x y"/"@dx dy"/"@d<a",
                      figuras → elementos (una cerrada dentro de otra es hueco) — probado
