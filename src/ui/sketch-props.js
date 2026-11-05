@@ -2,7 +2,8 @@
 import { ENTITY_NAME } from '../sketch/geometry.js';
 
 const FIELDS = {
-  rect: [['x', 'Esquina X (mm)'], ['y', 'Esquina Y (mm)'], ['w', 'Ancho (mm)', 'pos'], ['h', 'Alto (mm)', 'pos']],
+  rect: [['x', 'Esquina X (mm)'], ['y', 'Esquina Y (mm)'], ['w', 'Ancho (mm)', 'pos'], ['h', 'Alto (mm)', 'pos'], ['rr', 'Radio de esquinas (mm)', 'nonneg']],
+  slot: [['x1', 'Centro 1 X (mm)'], ['y1', 'Centro 1 Y (mm)'], ['x2', 'Centro 2 X (mm)'], ['y2', 'Centro 2 Y (mm)'], ['w', 'Ancho (mm)', 'pos']],
   circle: [['cx', 'Centro X (mm)'], ['cy', 'Centro Y (mm)'], ['r', 'Radio (mm)', 'pos']],
   arc: [['cx', 'Centro X (mm)'], ['cy', 'Centro Y (mm)'], ['r', 'Radio (mm)', 'pos'], ['a1', 'Ángulo inicial (°)'], ['a2', 'Ángulo final (°)']],
   poly: [['cx', 'Centro X (mm)'], ['cy', 'Centro Y (mm)'], ['r', 'Radio (mm)', 'pos'], ['n', 'Lados', 'sides'], ['rot', 'Rotación (°)']],
@@ -10,10 +11,10 @@ const FIELDS = {
 
 const numInput = (value, onSet, check) => {
   const i = document.createElement('input');
-  i.type = 'number'; i.step = 'any'; i.value = String(+(+value).toFixed(3));
+  i.type = 'number'; i.step = 'any'; i.value = String(+(+(value || 0)).toFixed(3));
   i.addEventListener('change', () => {
     const v = parseFloat(i.value);
-    const ok = Number.isFinite(v) && (check !== 'pos' || v > 0) && (check !== 'sides' || (v >= 3 && v <= 64));
+    const ok = Number.isFinite(v) && (check !== 'pos' || v > 0) && (check !== 'nonneg' || v >= 0) && (check !== 'sides' || (v >= 3 && v <= 64));
     if (!ok) { i.value = String(+(+value).toFixed(3)); i.setAttribute('aria-invalid', 'true'); return; }
     i.removeAttribute('aria-invalid');
     onSet(check === 'sides' ? Math.round(v) : v);

@@ -1,47 +1,65 @@
-// Editor del croquis: herramientas de dibujo, ajuste a puntos, coordenadas tecleadas, mover, deshacer.
+// Editor del croquis, con la forma de trabajar de un CAD: herramientas de dibujo con inferencias (horizontal, vertical,
+// alineado con otros puntos), cotas que mandan sobre la geometría, figuras azules mientras les falte alguna cota y negras
+// cuando quedan definidas, geometría de construcción, selección múltiple (clic con Shift o recuadro), patrones y simetría.
 // Dibuja en una capa aparte sobre la vista previa, así mover el cursor no recalcula el grabado.
-import { arcSweep, entityPts, hitEntity, parseNum, parsePoint, snap, snapPoints, translate } from './geometry.js';
+import {
+  applyDims, arcSweep, definedState, dimGeometry, dimensions, entityBox, entityPts, hitEntity, infer, measure, mirror,
+  parseNum, parsePoint, rotate, snapPoints, translate,
+} from './geometry.js';
 
 const RAD = Math.PI / 180;
 const ang = (c, p) => ((Math.atan2(p[1] - c[1], p[0] - c[0]) / RAD) + 360) % 360;
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const r3 = v => Math.round(v * 1000) / 1000;
+/** Distancia del punto p a la recta que pasa por a y b. */
+const toLine = (p, a, b) => { const L = dist(a, b) || 1e-9; return Math.abs((b[0] - a[0]) * (a[1] - p[1]) - (a[0] - p[0]) * (b[1] - a[1])) / L; };
 
 /** Qué pide cada herramienta en cada paso. */
 const PROMPTS = {
-  select: () => 'Toca una figura para editarla o arrástrala para moverla.',
+  select: () => 'Toca una figura (Shift suma a la selección) o arrastra un recuadro para elegir varias.',
   line: n => (n ? 'Siguiente punto. Enter o doble clic termina; tocar el primer punto cierra la figura.' : 'Primer punto de la línea.'),
   rect: n => (n ? 'Esquina opuesta, o @ancho alto.' : 'Primera esquina del rectángulo.'),
   circle: n => (n ? 'Un punto del borde, o escribe el radio.' : 'Centro del círculo.'),
   arc: n => ['Centro del arco.', 'Inicio del arco, o escribe el radio.', 'Final del arco (antihorario), o escribe el ángulo final en grados.'][n],
   poly: n => (n ? 'Un vértice, o escribe el radio.' : 'Centro del polígono.'),
+  slot: n => ['Centro del primer extremo de la ranura.', 'Centro del otro extremo, o @largo<ángulo.', 'Ancho: un punto en la orilla, o escribe el ancho.'][n],
+  dim: n => (n ? 'Toca la misma figura para acotar su tamaño, otra figura para la distancia entre ambas, o un borde de la pieza.' : 'Toca la figura que quieres acotar.'),
 };
+const DRAW_TOOLS = ['line', 'rect', 'circle', 'arc', 'poly', 'slot'];
 
 /**
- * @param {{onChange:()=>void, onRedraw:()=>void, onStatus:(s:{prompt:string, cursor:[number,number]|null, kind:string})=>void, css:(v:string)=>string}} hooks
+ * @param {{onChange:()=>void, onRedraw:()=>void, onStatus:(s:{prompt:string, cursor:[number,number]|null, kind:string})=>void,
+ *   css:(v:string)=>string, onDimCreated?:(id:number)=>void}} hooks
  */
 export function createSketchEditor(hooks) {
   const S = {
-    entities: [], modes: {}, nextId: 1,
-    tool: 'select', pts: [], hover: null, selected: null, drag: null,
+    entities: [], modes: {}, nextId: 1, dims: [], nextDim: 1,
+    tool: 'select', pts: [], hover: null, sel: new Set(), drag: null, box: null, dimFirst: null,
     undo: [], redo: [], last: [0, 0],
-    opt: { grid: 1, snap: true, sides: 6 },
+    opt: { grid: 1, snap: true, sides: 6, W: 90, H: 50 },
   };
 
-  const status = () => hooks.onStatus({ prompt: PROMPTS[S.tool](S.pts.length), cursor: S.hover && S.hover.p, kind: S.hover ? S.hover.kind : '' });
-  const snapshot = () => JSON.stringify({ entities: S.entities, modes: S.modes, nextId: S.nextId });
-  const restore = s => { const o = JSON.parse(s); S.entities = o.entities; S.modes = o.modes; S.nextId = o.nextId; };
-  /** Toda modificación pasa por aquí: guarda para deshacer y avisa. */
+  const status = () => hooks.onStatus({ prompt: PROMPTS[S.tool](S.tool === 'dim' ? (S.dimFirst ? 1 : 0) : S.pts.length), cursor: S.hover && S.hover.p, kind: S.hover ? S.hover.kind : '' });
+  const snapshot = () => JSON.stringify({ entities: S.entities, modes: S.modes, nextId: S.nextId, dims: S.dims, nextDim: S.nextDim });
+  const restore = s => { const o = JSON.parse(s); S.entities = o.entities; S.modes = o.modes; S.nextId = o.nextId; S.dims = o.dims || []; S.nextDim = o.nextDim || 1; };
+  /** Las cotas mandan: después de cualquier cambio, cada una vuelve a poner su figura donde dice. */
+  const enforce = () => { if (S.dims.length) S.entities = applyDims(S.entities, S.dims, S.opt.W, S.opt.H); };
+  /** Toda modificación pasa por aquí: guarda para deshacer, hace cumplir las cotas y avisa. */
   function commit(fn) {
     S.undo.push(snapshot());
     if (S.undo.length > 100) S.undo.shift();
     S.redo = [];
     fn();
-    if (S.selected && !S.entities.some(e => e.id === S.selected)) S.selected = null;
+    const ids = new Set(S.entities.map(e => e.id));
+    S.dims = S.dims.filter(d => ids.has(d.ent) && (d.kind !== 'between' || ids.has(d.ref)));
+    enforce();
+    S.sel.forEach(id => { if (!ids.has(id)) S.sel.delete(id); });
     hooks.onChange(); status(); hooks.onRedraw();
   }
-  const add = e => commit(() => { e.id = S.nextId++; S.entities.push(e); S.selected = e.id; });
+  const add = e => commit(() => { e.id = S.nextId++; S.entities.push(e); S.sel = new Set([e.id]); });
   const base = () => (S.pts.length ? S.pts[S.pts.length - 1] : S.last);
+  const byId = () => new Map(S.entities.map(e => [e.id, e]));
+  const selList = () => S.entities.filter(e => S.sel.has(e.id));
 
   /** Punto nuevo para la herramienta activa (de un clic o tecleado). */
   function point(p) {
@@ -70,10 +88,17 @@ export function createSketchEditor(hooks) {
         const [c, s] = P; S.pts = [];
         add({ type: 'arc', cx: c[0], cy: c[1], r: r3(dist(s, c)), a1: r3(ang(c, s)), a2: r3(ang(c, p)) });
       }
+    } else if (t === 'slot') {
+      if (P.length < 2) { if (!P.length || dist(p, P[0]) > 1e-6) P.push(p); }
+      else finishSlot(2 * toLine(p, P[0], P[1]));
     }
     status(); hooks.onRedraw();
   }
-
+  function finishSlot(w) {
+    const [a, b] = S.pts;
+    S.pts = [];
+    if (w > 1e-6) add({ type: 'slot', x1: r3(a[0]), y1: r3(a[1]), x2: r3(b[0]), y2: r3(b[1]), w: r3(w) });
+  }
   function finishLine(closed = false) {
     const P = S.pts;
     S.pts = [];
@@ -93,40 +118,116 @@ export function createSketchEditor(hooks) {
       case 'arc':
         if (P.length === 1) return { type: 'line', pts: [P[0], h], closed: false };
         return { type: 'arc', cx: P[0][0], cy: P[0][1], r: dist(P[1], P[0]), a1: ang(P[0], P[1]), a2: ang(P[0], h) };
+      case 'slot':
+        if (P.length === 1) return { type: 'line', pts: [P[0], h], closed: false };
+        return { type: 'slot', x1: P[0][0], y1: P[0][1], x2: P[1][0], y2: P[1][1], w: Math.max(1e-3, 2 * toLine(h, P[0], P[1])) };
     }
     return null;
+  }
+
+  /**
+   * Guarda una cota nueva. Reemplaza la que ya fije lo mismo (el mismo tamaño, o la posición en ese eje de esa figura),
+   * para que nunca haya dos cotas peleando por la misma medida.
+   */
+  function putDim(d) {
+    const same = q => q.ent === d.ent && (d.kind === 'size' ? q.kind === 'size' && q.axis === d.axis : q.kind !== 'size' && q.axis === d.axis);
+    const dim = { ...d, id: S.nextDim++, value: r3(d.value) };
+    commit(() => { S.dims = S.dims.filter(q => !same(q)).concat(dim); });
+    return dim.id;
+  }
+  /** Herramienta Cota: tamaño, distancia a un borde de la pieza o distancia entre dos figuras. */
+  function dimClick(p, tol) {
+    const e = hitEntity(S.entities, p, tol);
+    const { W, H } = S.opt;
+    if (!S.dimFirst) { if (e) { S.dimFirst = e.id; S.sel = new Set([e.id]); } status(); hooks.onRedraw(); return; }
+    const first = S.entities.find(q => q.id === S.dimFirst);
+    S.dimFirst = null;
+    if (!first) { status(); hooks.onRedraw(); return; }
+    let id = null;
+    if (e && e.id === first.id) {
+      // tamaño: todas las medidas que le falten (o la primera, si ya tiene todas)
+      const have = new Set(S.dims.filter(d => d.ent === e.id && d.kind === 'size').map(d => d.axis));
+      const sizes = dimensions(e, W, H).filter(d => d.kind === 'size');
+      const todo = sizes.filter(d => !have.has(d.axis));
+      (todo.length ? todo : sizes.slice(0, 1)).forEach(d => { id = putDim({ kind: 'size', ent: e.id, axis: d.axis, value: d.value }); });
+    } else if (e) {
+      // entre dos figuras: en el eje en que están más separadas; se mueve la segunda
+      const b1 = entityBox(first), b2 = entityBox(e);
+      const dx = (b2[0] + b2[2]) / 2 - (b1[0] + b1[2]) / 2, dy = (b2[1] + b2[3]) / 2 - (b1[1] + b1[3]) / 2;
+      const axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
+      id = putDim({ kind: 'between', ent: e.id, ref: first.id, axis, value: Math.abs(axis === 'x' ? dx : dy) });
+    } else {
+      // un borde de la pieza: el más cercano al toque
+      const sides = [['left', p[0]], ['right', W - p[0]], ['bottom', p[1]], ['top', H - p[1]]].sort((a, b) => Math.abs(a[1]) - Math.abs(b[1]));
+      if (Math.abs(sides[0][1]) <= Math.max(tol * 3, 2)) {
+        const side = sides[0][0], axis = side === 'left' || side === 'right' ? 'x' : 'y';
+        const b = entityBox(first), value = { left: b[0], right: W - b[2], bottom: b[1], top: H - b[3] }[side];
+        id = putDim({ kind: 'edge', ent: first.id, axis, side, value });
+      }
+    }
+    status(); hooks.onRedraw();
+    if (id && hooks.onDimCreated) hooks.onDimCreated(id);
+  }
+
+  /** Copias de la selección (patrones y simetría), en un solo paso de deshacer. Las cotas no se copian. */
+  function addCopies(make) {
+    const src = selList();
+    if (!src.length) return 0;
+    let n = 0;
+    commit(() => {
+      const added = [];
+      make(src).forEach(e => { const c = { ...JSON.parse(JSON.stringify(e)), id: S.nextId++ }; S.entities.push(c); added.push(c.id); n++; });
+      if (added.length) S.sel = new Set(added);
+    });
+    return n;
   }
 
   const api = {
     get tool() { return S.tool; },
     get entities() { return S.entities; },
     get modes() { return S.modes; },
-    get selected() { return S.entities.find(e => e.id === S.selected) || null; },
+    /** La figura elegida, si hay exactamente una. */
+    get selected() { return S.sel.size === 1 ? S.entities.find(e => S.sel.has(e.id)) || null : null; },
+    get selection() { return selList(); },
     /** La figura elegida tal como se ve ahora (con el arrastre en curso aplicado), para dibujar sus cotas. */
     get shown() { const e = api.selected; return e && S.drag ? translate(e, S.drag.dx, S.drag.dy) : e; },
-    get busy() { return S.pts.length > 0 || !!S.drag; },
+    get busy() { return S.pts.length > 0 || !!S.drag || !!S.box; },
+    get grid() { return S.opt.grid; },
+    get dims() { return S.dims; },
 
     load(data) {
       if (!data || !Array.isArray(data.entities)) return;
       S.entities = data.entities; S.modes = data.modes || {}; S.nextId = data.nextId || (Math.max(0, ...S.entities.map(e => e.id)) + 1);
+      S.dims = Array.isArray(data.dims) ? data.dims : []; S.nextDim = data.nextDim || (Math.max(0, ...S.dims.map(d => d.id)) + 1);
       S.undo = []; S.redo = [];
     },
-    save: () => ({ entities: S.entities, modes: S.modes, nextId: S.nextId }),
+    save: () => ({ entities: S.entities, modes: S.modes, nextId: S.nextId, dims: S.dims, nextDim: S.nextDim }),
 
     setTool(t) {
       if (S.tool === 'line' && S.pts.length >= 2) finishLine();
-      S.tool = t; S.pts = []; S.drag = null;
-      if (t !== 'select') S.selected = null;
+      S.tool = t; S.pts = []; S.drag = null; S.box = null; S.dimFirst = null;
+      if (DRAW_TOOLS.includes(t)) S.sel = new Set();
       status(); hooks.onRedraw();
     },
     setOptions(o) { Object.assign(S.opt, o); hooks.onRedraw(); },
-    select(id) { S.selected = id; status(); hooks.onRedraw(); },
+    /** Tamaño de la pieza: las cotas al borde derecho y al de arriba dependen de él. */
+    setPiece(W, H) {
+      if (W === S.opt.W && H === S.opt.H) return;
+      S.opt.W = W; S.opt.H = H;
+      if (S.dims.some(d => d.kind === 'edge')) { enforce(); hooks.onChange(); }
+    },
+    select(id) { S.sel = new Set(id ? [id] : []); status(); hooks.onRedraw(); },
+    selectMany(ids) { S.sel = new Set(ids); status(); hooks.onRedraw(); },
     setMode(id, m) { S.modes[id] = m; },
 
     /** @param {[number,number]} p cursor en mm @param {number} tol radio de captura en mm */
     move(p, tol) {
-      const extra = S.tool === 'line' ? S.pts : [];
-      S.hover = S.tool === 'select' && !S.drag ? { p, kind: '' } : snap(p, S.entities.filter(e => !S.drag || e.id !== S.drag.id), { ...S.opt, tol, extra });
+      if (S.box) { S.box.cur = p; hooks.onRedraw(); return; }
+      if (S.tool === 'select' || S.tool === 'dim') S.hover = { p, kind: '', guides: [] };
+      else {
+        const extra = S.tool === 'line' ? S.pts : [];
+        S.hover = infer(p, S.entities, { ...S.opt, tol, extra, last: S.pts.length ? S.pts[S.pts.length - 1] : null });
+      }
       if (S.drag) {
         const g = S.opt.snap ? S.opt.grid : 0;
         const rd = v => (g ? Math.round(v / g) * g : v);
@@ -136,21 +237,49 @@ export function createSketchEditor(hooks) {
     },
     leave() { S.hover = null; status(); hooks.onRedraw(); },
 
-    /** @returns {boolean} si el croquis atendió el clic (si no, la vista previa selecciona como siempre) */
-    down(p, tol) {
+    /**
+     * @param {boolean} [additive] Shift o Ctrl: suma o quita de la selección
+     * @returns {boolean} si el croquis atendió el clic (si no, la vista previa selecciona como siempre)
+     */
+    down(p, tol, additive = false) {
+      if (S.tool === 'dim') { dimClick(p, tol); return true; }
       if (S.tool !== 'select') { api.move(p, tol); point(S.hover.p); return true; }
       const e = hitEntity(S.entities, p, tol);
-      if (!e) { if (S.selected) { S.selected = null; status(); hooks.onRedraw(); } return false; }
-      S.selected = e.id;
-      S.drag = { id: e.id, start: p, dx: 0, dy: 0 };
+      if (!e) {
+        if (!additive) S.sel = new Set();
+        S.box = { start: p, cur: p, additive }; // posible recuadro de selección
+        status(); hooks.onRedraw();
+        return false;
+      }
+      if (additive) { if (S.sel.has(e.id)) S.sel.delete(e.id); else S.sel.add(e.id); }
+      else if (!S.sel.has(e.id)) S.sel = new Set([e.id]);
+      if (S.sel.has(e.id)) S.drag = { start: p, dx: 0, dy: 0 };
       status(); hooks.onRedraw();
       return true;
     },
+    /** @returns {boolean} si terminó un recuadro de selección */
     up() {
+      const b = S.box;
+      S.box = null;
+      if (b) {
+        if (dist(b.start, b.cur) < 0.5) { hooks.onRedraw(); return false; }
+        // de izquierda a derecha: lo que queda completo adentro; de derecha a izquierda: lo que toca
+        const crossing = b.cur[0] < b.start[0];
+        const x0 = Math.min(b.start[0], b.cur[0]), x1 = Math.max(b.start[0], b.cur[0]), y0 = Math.min(b.start[1], b.cur[1]), y1 = Math.max(b.start[1], b.cur[1]);
+        S.entities.forEach(e => {
+          const q = entityBox(e);
+          const inside = q[0] >= x0 - 1e-6 && q[2] <= x1 + 1e-6 && q[1] >= y0 - 1e-6 && q[3] <= y1 + 1e-6;
+          const touch = q[0] <= x1 && q[2] >= x0 && q[1] <= y1 && q[3] >= y0;
+          if (crossing ? touch : inside) S.sel.add(e.id);
+        });
+        status(); hooks.onRedraw();
+        return true;
+      }
       const d = S.drag;
       S.drag = null;
-      if (d && (d.dx || d.dy)) commit(() => { S.entities = S.entities.map(e => (e.id === d.id ? translate(e, r3(d.dx), r3(d.dy)) : e)); });
+      if (d && (d.dx || d.dy)) commit(() => { S.entities = S.entities.map(e => (S.sel.has(e.id) ? translate(e, r3(d.dx), r3(d.dy)) : e)); });
       else hooks.onRedraw();
+      return false;
     },
     dblclick() { if (S.tool === 'line') finishLine(); },
 
@@ -159,7 +288,7 @@ export function createSketchEditor(hooks) {
      * @returns {string} mensaje de error, o '' si se aceptó
      */
     submit(str) {
-      if (S.tool === 'select') return 'Elige una herramienta de dibujo para escribir coordenadas.';
+      if (S.tool === 'select' || S.tool === 'dim') return 'Elige una herramienta de dibujo para escribir coordenadas.';
       const n = parseNum(str), P = S.pts;
       if (n !== null) {
         if ((S.tool === 'circle' || S.tool === 'poly') && P.length === 1) {
@@ -174,6 +303,7 @@ export function createSketchEditor(hooks) {
           point([c[0] + r * Math.cos(n * RAD), c[1] + r * Math.sin(n * RAD)]);
           return '';
         }
+        if (S.tool === 'slot' && P.length === 2) { if (n <= 0) return 'El ancho debe ser mayor que 0.'; finishSlot(n); return ''; }
       }
       const p = parsePoint(str, base());
       if (!p) return 'No entendí la coordenada. Usa "x y", "@dx dy" o "@distancia<ángulo".';
@@ -184,36 +314,67 @@ export function createSketchEditor(hooks) {
     key(k) {
       if (k === 'Escape') {
         if (S.tool === 'line' && S.pts.length >= 2) finishLine();
-        else if (S.pts.length) { S.pts = []; status(); hooks.onRedraw(); }
+        else if (S.pts.length || S.dimFirst) { S.pts = []; S.dimFirst = null; status(); hooks.onRedraw(); }
         else if (S.tool !== 'select') api.setTool('select');
-        else if (S.selected) api.select(null);
+        else if (S.sel.size) api.select(null);
         else return false;
         return true;
       }
       if (k === 'Enter' && S.tool === 'line' && S.pts.length) { finishLine(); return true; }
-      if ((k === 'Delete' || k === 'Backspace') && S.selected && S.tool === 'select') { api.remove(S.selected); return true; }
+      if ((k === 'Delete' || k === 'Backspace') && S.sel.size && S.tool === 'select') { api.removeMany([...S.sel]); return true; }
       return false;
     },
 
     update(id, patch) { commit(() => { S.entities = S.entities.map(e => (e.id === id ? { ...e, ...patch } : e)); }); },
     /** Reemplaza la figura completa (p. ej. tras escribir una cota). */
     replace(id, ent) { commit(() => { S.entities = S.entities.map(e => (e.id === id ? { ...ent, id } : e)); }); },
-    /** Agrega varias figuras de una vez (pegar): un solo paso de deshacer; queda elegida la primera (el contorno exterior). */
+    /** Agrega varias figuras de una vez (pegar): un solo paso de deshacer; quedan todas elegidas. */
     addMany(list) {
       if (!list.length) return;
-      commit(() => { list.forEach((e, i) => { const n = { ...JSON.parse(JSON.stringify(e)), id: S.nextId++ }; S.entities.push(n); if (!i) S.selected = n.id; }); });
+      commit(() => { const ids = []; list.forEach(e => { const n = { ...JSON.parse(JSON.stringify(e)), id: S.nextId++ }; S.entities.push(n); ids.push(n.id); }); S.sel = new Set(ids); });
     },
-    nudge(dx, dy) { const id = S.selected; if (id) commit(() => { S.entities = S.entities.map(e => (e.id === id ? translate(e, dx, dy) : e)); }); },
-    get grid() { return S.opt.grid; },
-    remove(id) { commit(() => { S.entities = S.entities.filter(e => e.id !== id); delete S.modes[id]; }); },
+    nudge(dx, dy) { if (S.sel.size) commit(() => { S.entities = S.entities.map(e => (S.sel.has(e.id) ? translate(e, dx, dy) : e)); }); },
+    remove(id) { api.removeMany([id]); },
+    removeMany(ids) { const s = new Set(ids); commit(() => { S.entities = S.entities.filter(e => !s.has(e.id)); ids.forEach(id => delete S.modes[id]); }); },
     duplicate(id) {
       const e = S.entities.find(q => q.id === id);
       if (e) add(translate(JSON.parse(JSON.stringify(e)), S.opt.grid * 5, -S.opt.grid * 5));
     },
-    clear() { if (S.entities.length) commit(() => { S.entities = []; S.modes = {}; S.selected = null; }); },
+    clear() { if (S.entities.length) commit(() => { S.entities = []; S.modes = {}; S.dims = []; S.sel = new Set(); }); },
     undoOne() { if (!S.undo.length) return false; S.redo.push(snapshot()); restore(S.undo.pop()); S.pts = []; hooks.onChange(); status(); hooks.onRedraw(); return true; },
     redoOne() { if (!S.redo.length) return false; S.undo.push(snapshot()); restore(S.redo.pop()); hooks.onChange(); status(); hooks.onRedraw(); return true; },
     refreshStatus: status,
+
+    /* ----- cotas ----- */
+    addDim(d) { return putDim(d); },
+    setDimValue(id, v) { commit(() => { S.dims = S.dims.map(d => (d.id === id ? { ...d, value: r3(v) } : d)); }); },
+    removeDim(id) { commit(() => { S.dims = S.dims.filter(d => d.id !== id); }); },
+    /** Cotas guardadas listas para dibujar (con el arrastre en curso aplicado a la vista). */
+    dimsView() {
+      const ents = S.drag ? S.entities.map(e => (S.sel.has(e.id) ? translate(e, S.drag.dx, S.drag.dy) : e)) : S.entities;
+      const map = new Map(ents.map(e => [e.id, e]));
+      return S.dims.map(d => { const g = dimGeometry(d, map, S.opt.W, S.opt.H); return g && { ...d, ...g, persistent: true }; }).filter(Boolean);
+    },
+    /** Lo que le falta a cada figura para quedar definida. */
+    defined() { return definedState(S.entities, S.dims); },
+    measure(d) { return measure(d, byId(), S.opt.W, S.opt.H); },
+
+    /* ----- operaciones sobre la selección ----- */
+    setConstruction(on) { const s = new Set(S.sel); commit(() => { S.entities = S.entities.map(e => (s.has(e.id) ? { ...e, construction: on } : e)); }); },
+    /** Patrón lineal: n copias más, cada una desplazada (dx, dy) respecto a la anterior. */
+    linear(n, dx, dy) { return addCopies(src => Array.from({ length: n }, (_, k) => src.map(e => translate(e, dx * (k + 1), dy * (k + 1)))).flat()); },
+    /** Patrón circular: n copias en total alrededor de (cx, cy), repartidas en `total` grados (360 = vuelta completa). */
+    circular(n, cx, cy, total = 360) {
+      const step = total >= 360 ? 360 / n : total / Math.max(1, n - 1);
+      return addCopies(src => Array.from({ length: n - 1 }, (_, k) => src.map(e => rotate(e, cx, cy, step * (k + 1)))).flat());
+    },
+    /** Simetría: copia reflejada en x = c (axis 'x') o y = c (axis 'y'). */
+    mirror(axis, c) { return addCopies(src => src.map(e => mirror(e, axis, c))); },
+    /** Caja de toda la selección, para proponer centros de patrón y ejes de simetría. */
+    selectionBox() {
+      const b = selList().map(entityBox);
+      return b.length ? [Math.min(...b.map(q => q[0])), Math.min(...b.map(q => q[1])), Math.max(...b.map(q => q[2])), Math.max(...b.map(q => q[3]))] : null;
+    },
 
     /** Capa del croquis. X, Y: mm → px; k: px por mm; W, H: pieza en mm. */
     draw(ctx, X, Y, k, W, H) {
@@ -222,7 +383,7 @@ export function createSketchEditor(hooks) {
       const shape = (e, tol) => { const { pts, closed } = entityPts(e, tol); path(pts, closed); };
       const tol = 0.5 / k; // medio píxel
 
-      if (drawing) {
+      if (drawing && S.tool !== 'dim') {
         // cuadrícula fina: la del imán, o múltiplos suyos si quedaría muy apretada
         let g = S.opt.grid;
         while (g * k < 8) g *= g < 1 ? 2 : 5;
@@ -232,18 +393,38 @@ export function createSketchEditor(hooks) {
         ctx.stroke(); ctx.globalAlpha = 1;
       }
 
-      // todas las figuras del croquis, finas, para verlas aunque estén omitidas o tapadas por el grabado
-      ctx.lineWidth = 1; ctx.strokeStyle = css('--plate-accent'); ctx.globalAlpha = drawing ? 0.8 : 0.45;
-      S.entities.forEach(e => { if (!S.drag || e.id !== S.drag.id) shape(e, tol); });
-      ctx.globalAlpha = 1;
+      // cada figura según su estado: azul si le faltan cotas, negra si está definida, punteada si es de construcción
+      const def = definedState(S.entities, S.dims);
+      const off = e => (S.drag && S.sel.has(e.id) ? translate(e, S.drag.dx, S.drag.dy) : e);
+      S.entities.forEach(e0 => {
+        const e = off(e0), sel = S.sel.has(e.id) || S.dimFirst === e.id;
+        ctx.setLineDash(e.construction ? [6, 4] : []);
+        ctx.strokeStyle = css(e.construction ? '--plate-muted' : def.get(e.id)?.full ? '--cut' : '--plate-accent');
+        ctx.lineWidth = sel ? 2.5 : 1.25;
+        shape(e, tol);
+      });
+      ctx.setLineDash([]);
 
-      const sel = api.selected;
-      if (sel) {
-        const e = S.drag ? translate(sel, S.drag.dx, S.drag.dy) : sel;
-        ctx.lineWidth = 2; ctx.strokeStyle = css('--plate-accent'); shape(e, tol);
-        ctx.fillStyle = css('--panel');
-        snapPoints(e).forEach(({ p }) => { ctx.fillRect(X(p[0]) - 3, Y(p[1]) - 3, 6, 6); ctx.strokeRect(X(p[0]) - 3, Y(p[1]) - 3, 6, 6); });
-        if (S.drag && (S.drag.dx || S.drag.dy)) label(ctx, css, X(S.drag.start[0]) + 12, Y(S.drag.start[1]) - 12, `Δ ${fmt(S.drag.dx)}, ${fmt(S.drag.dy)}`);
+      // selección: tiradores en los puntos notables
+      const sl = S.entities.filter(e => S.sel.has(e.id) || S.dimFirst === e.id).map(off);
+      ctx.fillStyle = css('--plate-on'); ctx.strokeStyle = css('--plate-accent'); ctx.lineWidth = 1.5;
+      sl.forEach(e => snapPoints(e).forEach(({ p }) => { ctx.fillRect(X(p[0]) - 3, Y(p[1]) - 3, 6, 6); ctx.strokeRect(X(p[0]) - 3, Y(p[1]) - 3, 6, 6); }));
+      if (S.drag && (S.drag.dx || S.drag.dy)) label(ctx, css, X(S.drag.start[0]) + 12, Y(S.drag.start[1]) - 12, `Δ ${fmt(S.drag.dx)}, ${fmt(S.drag.dy)}`);
+
+      // recuadro de selección: continuo = dentro, punteado = lo que toque
+      if (S.box && dist(S.box.start, S.box.cur) >= 0.5) {
+        const b = S.box, crossing = b.cur[0] < b.start[0];
+        const x = Math.min(X(b.start[0]), X(b.cur[0])), y = Math.min(Y(b.start[1]), Y(b.cur[1]));
+        const w = Math.abs(X(b.cur[0]) - X(b.start[0])), h = Math.abs(Y(b.cur[1]) - Y(b.start[1]));
+        ctx.fillStyle = css('--plate-accent'); ctx.globalAlpha = 0.08; ctx.fillRect(x, y, w, h); ctx.globalAlpha = 1;
+        ctx.setLineDash(crossing ? [5, 4] : []); ctx.strokeStyle = css('--plate-accent'); ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w, h); ctx.setLineDash([]);
+      }
+
+      // líneas guía de las inferencias
+      if (drawing && S.hover && S.hover.guides && S.hover.guides.length) {
+        ctx.setLineDash([2, 4]); ctx.strokeStyle = css('--plate-accent'); ctx.lineWidth = 1;
+        S.hover.guides.forEach(g => { ctx.beginPath(); ctx.moveTo(X(g.from[0]), Y(g.from[1])); ctx.lineTo(X(g.to[0]), Y(g.to[1])); ctx.stroke(); });
+        ctx.setLineDash([]);
       }
 
       const rb = rubber();
@@ -252,21 +433,23 @@ export function createSketchEditor(hooks) {
         const h = S.hover.p, P = S.pts;
         const o = P[P.length - 1];
         let txt = '';
-        if (S.tool === 'line' || (S.tool === 'arc' && P.length === 1)) txt = `${fmt(dist(o, h))} mm · ${fmt(ang(o, h))}°`;
+        if (S.tool === 'line' || ((S.tool === 'arc' || S.tool === 'slot') && P.length === 1)) txt = `${fmt(dist(o, h))} mm · ${fmt(ang(o, h))}°`;
         else if (S.tool === 'rect') txt = `${fmt(Math.abs(h[0] - P[0][0]))} × ${fmt(Math.abs(h[1] - P[0][1]))} mm`;
         else if (S.tool === 'circle' || S.tool === 'poly') txt = `R ${fmt(dist(h, P[0]))} mm`;
         else if (S.tool === 'arc') txt = `${fmt(arcSweep(rb))}°`;
+        else if (S.tool === 'slot') txt = `ancho ${fmt(rb.w)} mm`;
         if (txt) label(ctx, css, X(h[0]) + 12, Y(h[1]) + 22, txt);
       }
       S.pts.forEach(p => { ctx.fillStyle = css('--plate-accent'); ctx.fillRect(X(p[0]) - 2.5, Y(p[1]) - 2.5, 5, 5); });
 
-      if (drawing && S.hover) {
+      if (drawing && S.tool !== 'dim' && S.hover) {
         const [x, y] = S.hover.p, px = X(x), py = Y(y);
         ctx.strokeStyle = css('--cut'); ctx.lineWidth = 1; ctx.beginPath();
         ctx.moveTo(px - 8, py + 0.5); ctx.lineTo(px + 8, py + 0.5); ctx.moveTo(px + 0.5, py - 8); ctx.lineTo(px + 0.5, py + 8); ctx.stroke();
-        if (S.hover.kind && S.hover.kind !== 'cuadrícula') {
+        const kind = S.hover.kind;
+        if (kind && kind !== 'cuadrícula') {
           ctx.strokeStyle = css('--plate-accent'); ctx.lineWidth = 2; ctx.strokeRect(px - 5, py - 5, 10, 10);
-          label(ctx, css, px + 12, py - 10, S.hover.kind);
+          label(ctx, css, px + 12, py - 10, kind === 'horizontal' ? '— horizontal' : kind === 'vertical' ? '| vertical' : kind);
         }
       }
     },

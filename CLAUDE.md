@@ -32,9 +32,10 @@ src/
   input/detect.js    qué píxeles son dibujo: Otsu, adaptativo para fotos con sombra, por color del fondo, limpieza — probado
   input/image.js     imagen (recorte, detalle) → detect.js → contornos con ImageTracer, o línea central
   input/centerline.js  esqueletización (Zhang–Suen) → polilíneas por pieza, puro — probado
-  sketch/geometry.js croquis puro: figuras por coordenadas, ajuste a puntos, lectura de "x y"/"@dx dy"/"@d<a",
-                     figuras → elementos (una cerrada dentro de otra es hueco) — probado
-  sketch/editor.js   herramientas, imán, mover, deshacer; dibuja en una capa (#ov) sobre la vista previa
+  sketch/geometry.js croquis puro: figuras (incl. ranura y rect. redondeado), inferencias, girar/reflejar,
+                     cotas que mandan (applyDims, definedState), figuras → elementos — probado
+  sketch/editor.js   herramientas (incl. Cota), selección múltiple y recuadro, patrones, construcción, deshacer;
+                     tras cada cambio hace cumplir las cotas guardadas. Dibuja en la capa #ov
   ui/sketch-props.js medidas editables de la figura seleccionada
   preview/dims.js    cotas sobre la vista previa (al borde y tamaño); dimensions/applyDimension en sketch/geometry.js — probado
   geometry/clipper.js  envolturas de Clipper (offset, unión, resta, regiones)

@@ -2,8 +2,10 @@
 
 Convierte un SVG o una imagen con fondo blanco en código G y M para grabado CNC. Funciona en el navegador o como programa de Windows (.exe) y Linux (.deb / AppImage), sin internet.
 
-- **Cotas:** al elegir una figura se ven su distancia al borde más cercano de la pieza y su tamaño. Toca una cota, escribe el valor y la figura se mueve o se ajusta.
-- **Atajos:** Ctrl+C / Ctrl+X / Ctrl+V copian, cortan y pegan (una figura de un SVG o imagen se pega como croquis editable); Ctrl+D duplica; Supr elimina; las flechas mueven un paso de cuadrícula (Shift: 10).
+- **Croquis como en CAD:** línea, rectángulo (con esquinas redondeadas), círculo, arco, polígono y ranura, con inferencias al dibujar: horizontal, vertical y alineado con otros puntos, con líneas guía.
+- **Cotas que mandan:** con la herramienta Cota (D) acotas el tamaño de una figura, su distancia a un borde de la pieza o la distancia entre dos figuras. Al cambiar el valor la geometría se ajusta, y lo acotado ya no se mueve en esa dirección. Las figuras sin cotas suficientes se ven en azul y las completamente definidas en negro. Al elegir una figura aparecen cotas sugeridas: tocar una y escribir el valor la guarda.
+- **Geometría de construcción** (punteada, no se graba), **selección múltiple** (Shift+clic o recuadro), **patrón lineal**, **patrón circular** y **simetría**.
+- **Atajos:** V L R C A P S D (herramientas), Ctrl+C / X / V / D, Ctrl+A, Supr, flechas (Shift: ×10), Ctrl+Z / Y.
 - **Croquis con coordenadas:** dibuja líneas, rectángulos, círculos, arcos y polígonos sobre la pieza con el ratón (imán a cuadrícula y a vértices, centros y puntos medios) o tecleando `x y`, `@dx dy` o `@distancia<ángulo`. Cada medida se puede corregir después; una figura cerrada dentro de otra queda como hueco. Atajos: V, L, R, C, A, P, Esc, Supr, Ctrl+Z / Ctrl+Y.
 - **Modo por figura:** cada figura detectada se graba con Relleno, Contorno, Invertir (orilla exterior + huecos vaciados), Línea u Omitir.
 - **Textos:** de una sola línea (fuentes Hershey, ideales para grabar) o rellenos, con acentos y ñ; se arrastran en la vista previa.

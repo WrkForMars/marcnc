@@ -2,7 +2,8 @@
 
 /**
  * @param {CanvasRenderingContext2D} ctx
- * @param {{from:[number,number], to:[number,number], label:string, kind:string}[]} dims
+ * @param {{from:[number,number], to:[number,number], label:string, kind:string, persistent?:boolean, hint?:boolean}[]} dims
+ *   persistent: cota guardada (manda sobre la figura), oscura; las demás son sugerencias, en azul y más tenues
  * @param {(x:number)=>number} X @param {(y:number)=>number} Y mm → px
  * @param {(v:string)=>string} css
  * @param {boolean} editable si las etiquetas se pueden tocar (dibuja el subrayado de "editable")
@@ -10,14 +11,16 @@
  */
 export function drawDims(ctx, dims, X, Y, css, editable) {
   const hits = [];
-  const col = css('--plate-accent');
+  const accent = css('--plate-accent'), dark = css('--cut');
   ctx.save();
   ctx.font = '600 12px "IBM Plex Mono", monospace';
   dims.forEach((d, i) => {
+    const col = d.persistent ? dark : accent;
+    ctx.globalAlpha = d.persistent || !d.hint ? 1 : 0.85;
     const ax = X(d.from[0]), ay = Y(d.from[1]), bx = X(d.to[0]), by = Y(d.to[1]);
     const len = Math.hypot(bx - ax, by - ay);
     ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1;
-    ctx.setLineDash(d.kind === 'edge' ? [4, 3] : []);
+    ctx.setLineDash(d.persistent ? [] : [4, 3]);
     ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
     ctx.setLineDash([]);
     // remates: flechas cortas hacia los extremos (si cabe) o marcas perpendiculares
@@ -39,6 +42,7 @@ export function drawDims(ctx, dims, X, Y, css, editable) {
     ctx.fill();
     ctx.fillStyle = css('--plate-on'); ctx.textBaseline = 'middle'; ctx.fillText(d.label, x + 6, y + h / 2 + 1);
     if (editable) { ctx.strokeStyle = css('--plate-on'); ctx.globalAlpha = 0.6; ctx.beginPath(); ctx.moveTo(x + 6, y + h - 4); ctx.lineTo(x + w - 6, y + h - 4); ctx.stroke(); ctx.globalAlpha = 1; }
+    ctx.globalAlpha = 1;
     hits.push({ x, y, w, h, i });
   });
   ctx.restore();

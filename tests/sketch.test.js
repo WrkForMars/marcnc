@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fromC } from '../src/geometry/clipper.js';
-import { applyDimension, dimensions, entityPts, hitEntity, parseNum, parsePoint, sketchElements, snap, translate } from '../src/sketch/geometry.js';
+import { applyDimension, applyDims, definedState, dimensions, entityBox, entityPts, hitEntity, infer, measure, mirror, parseNum, parsePoint, rotate, sketchElements, snap, translate } from '../src/sketch/geometry.js';
 
 const rect = (id, x, y, w, h) => ({ id, type: 'rect', x, y, w, h });
 const circle = (id, cx, cy, r) => ({ id, type: 'circle', cx, cy, r });
@@ -155,5 +155,81 @@ describe('cotas', () => {
     expect(applyDimension(e, d[2], 0, W, H)).toBe(e);
     expect(applyDimension(e, d[0], NaN, W, H)).toBe(e);
     expect(applyDimension(e, d[0], -3, W, H)).toBe(e);
+  });
+});
+
+describe('figuras nuevas', () => {
+  it('rectángulo con esquinas redondeadas: misma caja y esquinas a R del borde', () => {
+    const e = { id: 1, type: 'rect', x: 0, y: 0, w: 20, h: 10, rr: 3 };
+    expect(entityBox(e).map(v => +v.toFixed(6))).toEqual([0, 0, 20, 10]);
+    // la esquina (0,0) ya no está: el punto más cercano queda a 3·(√2−1) ≈ 1.24 mm
+    const d = Math.min(...entityPts(e).pts.map(([x, y]) => Math.hypot(x, y)));
+    expect(d).toBeCloseTo(3 * (Math.SQRT2 - 1), 2);
+  });
+
+  it('ranura: largo entre centros + ancho, extremos redondos', () => {
+    const s = { id: 1, type: 'slot', x1: 10, y1: 10, x2: 30, y2: 10, w: 6 };
+    expect(entityBox(s).map(v => +v.toFixed(3))).toEqual([7, 7, 33, 13]);
+    const dims = dimensions(s, 90, 50);
+    expect(dims.find(x => x.axis === 'l').value).toBeCloseTo(20, 9);
+    expect(applyDimension(s, dims.find(x => x.axis === 'l'), 30, 90, 50)).toMatchObject({ x2: 40, y2: 10 });
+    expect(applyDimension(s, dims.find(x => x.axis === 'w'), 8, 90, 50).w).toBe(8);
+  });
+
+  it('girar y reflejar conservan la forma', () => {
+    const r = { id: 1, type: 'rect', x: 0, y: 0, w: 10, h: 4 };
+    expect(rotate(r, 0, 0, 90)).toMatchObject({ type: 'rect', w: 4, h: 10 });
+    expect(rotate(r, 0, 0, 45).type).toBe('line'); // un rectángulo inclinado ya no es rectángulo
+    const a = { id: 2, type: 'arc', cx: 10, cy: 0, r: 5, a1: 0, a2: 90 };
+    const m = mirror(a, 'x', 0);
+    expect(m.cx).toBe(-10);
+    // el arco reflejado cubre el cuadrante espejo: de 90° a 180°
+    expect(m).toMatchObject({ a1: 90, a2: 180 });
+  });
+
+  it('la geometría de construcción no se graba', () => {
+    expect(sketchElements([{ id: 1, type: 'rect', x: 0, y: 0, w: 10, h: 10, construction: true }])).toHaveLength(0);
+  });
+});
+
+describe('inferencias', () => {
+  const ents = [{ id: 1, type: 'rect', x: 10, y: 10, w: 20, h: 10 }];
+  it('se alinea con un punto de otra figura y deja una guía', () => {
+    const r = infer([40.3, 20.2], ents, { grid: 1, snap: true, tol: 0.5 });
+    expect(r.p).toEqual([40, 20]); // y = 20 de la esquina superior; x a la cuadrícula
+    expect(r.kind).toBe('alineado');
+    expect(r.guides).toHaveLength(1);
+  });
+  it('horizontal respecto al punto anterior', () => {
+    const r = infer([55.2, 30.3], ents, { grid: 1, snap: true, tol: 0.5, last: [45, 30] });
+    expect(r.p[1]).toBe(30);
+    expect(r.kind).toBe('horizontal');
+  });
+});
+
+describe('cotas que mandan', () => {
+  const W = 90, H = 50;
+  const base = [{ id: 1, type: 'rect', x: 10, y: 10, w: 20, h: 10 }, { id: 2, type: 'circle', cx: 60, cy: 30, r: 4 }];
+  const dims = [
+    { id: 1, kind: 'edge', ent: 1, axis: 'x', side: 'left', value: 5 },
+    { id: 2, kind: 'size', ent: 1, axis: 'x', value: 30 },
+    { id: 3, kind: 'between', ent: 2, ref: 1, axis: 'x', value: 40 },
+  ];
+  it('se cumplen en orden: borde, tamaño y distancia entre figuras', () => {
+    const out = applyDims(base, dims, W, H);
+    expect(out[0]).toMatchObject({ x: 5, w: 30 });
+    expect(out[1].cx).toBeCloseTo(20 + 40, 9); // centro del rectángulo (20) + 40
+    const byId = new Map(out.map(e => [e.id, e]));
+    dims.forEach(d => expect(measure(d, byId, W, H)).toBeCloseTo(d.value, 9));
+  });
+  it('arrastrar una figura acotada la regresa en esa dirección', () => {
+    const moved = applyDims([translate(base[0], 7, 3), base[1]], dims, W, H);
+    expect(moved[0].x).toBe(5); // X fijo por la cota
+    expect(moved[0].y).toBe(13); // Y libre
+  });
+  it('sabe qué le falta a cada figura para quedar definida', () => {
+    const st = definedState(base, [...dims, { id: 4, kind: 'edge', ent: 1, axis: 'y', side: 'bottom', value: 10 }, { id: 5, kind: 'size', ent: 1, axis: 'y', value: 10 }]);
+    expect(st.get(1)).toEqual({ full: true, missing: [] });
+    expect(st.get(2).missing).toEqual(['posición Y', 'diámetro']); // X fija por la cota a la figura 1, que está fija
   });
 });

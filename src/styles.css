@@ -47,7 +47,7 @@
 
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-html{-webkit-text-size-adjust:100%}
+html{-webkit-text-size-adjust:100%;scrollbar-gutter:stable} /* la barra de desplazamiento no mueve el lienzo al aparecer */
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:20px}
 svg.i{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
 
@@ -137,7 +137,9 @@ input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent);margin:0;
 .sk-coord{flex:1 1 240px}
 .sk-coord input{font-family:var(--f-mono)}
 .sk-small{width:112px}
-.sk-status{flex:1 1 100%;display:flex;justify-content:space-between;gap:8px 16px;flex-wrap:wrap;margin:0;font-size:12px;line-height:16px}
+.sk-status{flex:1 1 100%;display:flex;justify-content:space-between;gap:8px 16px;margin:0;font-size:12px;line-height:16px;min-height:32px} /* dos renglones fijos: la barra no crece y la pieza no se mueve bajo el cursor */
+.sk-status #skPrompt{flex:1;min-width:0}
+.sk-status #skCursor{flex:none}
 #skPrompt{color:var(--ink);font-weight:500}
 #skPrompt.err{color:var(--warn)}
 #skCursor{font-family:var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
@@ -319,3 +321,13 @@ dialog .params{margin:16px 0}
 #sheet .sign div{flex:1;border-top:1px solid var(--sheet-ink);padding-top:1mm;text-align:center;font-size:9pt}
 #sheet .avoid{break-inside:avoid}
 .tabpanel .code{max-height:max(240px,calc(100vh - 420px))}
+
+/* estado de definición de la figura elegida */
+.def-state{margin:0;padding:8px 12px;border-radius:8px;font-size:12px;line-height:16px;font-weight:500;border:1px solid}
+.def-state:empty{display:none}
+.def-state.under{background:var(--accent-soft);color:var(--accent-text);border-color:var(--accent)}
+.def-state.full{background:var(--panel);color:var(--ink);border-color:var(--line-strong)}
+.def-state.cons{background:var(--bg);color:var(--muted);border-style:dashed;border-color:var(--line-strong)}
+#skOps details.more{border-top:1px solid var(--line)}
+#skOps details.more>button{margin-bottom:8px}
+.sketchbar.dimmode .sk-coord,.sketchbar.dimmode .sk-small,.sketchbar.dimmode .check{display:none}

@@ -24,6 +24,8 @@
   <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 12h.01"/></symbol>
   <symbol id="i-arc" viewBox="0 0 24 24"><path d="M4 18a8 8 0 0 1 16 0"/><path d="M12 18h.01"/></symbol>
   <symbol id="i-poly" viewBox="0 0 24 24"><path d="M12 3l8 5v8l-8 5-8-5V8z"/></symbol>
+  <symbol id="i-slot" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="8" rx="4"/><path d="M7 12h.01M17 12h.01"/></symbol>
+  <symbol id="i-dim" viewBox="0 0 24 24"><path d="M4 7v10M20 7v10M4 12h16"/><path d="M7 9l-3 3 3 3M17 9l3 3-3 3"/></symbol>
   <symbol id="i-text" viewBox="0 0 24 24"><path d="M5 6V4h14v2M12 4v16M9 20h6"/></symbol>
   <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
   <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></symbol>
@@ -73,6 +75,8 @@
       <button type="button" data-tool="circle" aria-pressed="false" title="Círculo (C)"><svg class="i"><use href="#i-circle"/></svg><span>Círculo</span></button>
       <button type="button" data-tool="arc" aria-pressed="false" title="Arco (A)"><svg class="i"><use href="#i-arc"/></svg><span>Arco</span></button>
       <button type="button" data-tool="poly" aria-pressed="false" title="Polígono (P)"><svg class="i"><use href="#i-poly"/></svg><span>Polígono</span></button>
+      <button type="button" data-tool="slot" aria-pressed="false" title="Ranura (S)"><svg class="i"><use href="#i-slot"/></svg><span>Ranura</span></button>
+      <button type="button" data-tool="dim" aria-pressed="false" title="Cota: tamaño, al borde o entre figuras (D)"><svg class="i"><use href="#i-dim"/></svg><span>Cota</span></button>
     </div>
     <div class="rail-group">
       <button type="button" id="textTool" title="Agregar texto (T)"><svg class="i"><use href="#i-text"/></svg><span>Texto</span></button>
@@ -145,8 +149,42 @@
             <button type="button" id="skDel" class="icon ghost" aria-label="Eliminar" title="Eliminar (Supr)"><svg class="i"><use href="#i-del"/></svg></button>
           </div>
         </div>
+        <p class="def-state" id="skState" role="status"></p>
         <div class="params" id="skFields"></div>
-        <p class="hint">Medidas en mm desde la esquina inferior izquierda de la pieza. Ángulos en grados, antihorario desde la derecha.</p>
+        <p class="hint">Azul: le faltan cotas · Negro: completamente definida · Punteado: construcción. Medidas en mm desde la esquina inferior izquierda; ángulos antihorario desde la derecha.</p>
+      </div>
+
+      <!-- operaciones sobre la selección -->
+      <div class="panel" id="skOps" hidden>
+        <label class="check"><input type="checkbox" id="skCons"> Geometría de construcción (referencia, no se graba)</label>
+        <details class="more">
+          <summary>Patrón lineal</summary>
+          <div class="params">
+            <label>Copias<input type="number" id="plN" value="3" min="1" max="200" step="1"></label>
+            <span></span>
+            <label>Paso X (mm)<input type="number" id="plDx" value="10" step="0.5"></label>
+            <label>Paso Y (mm)<input type="number" id="plDy" value="0" step="0.5"></label>
+          </div>
+          <button type="button" id="plGo" class="primary-soft">Repetir</button>
+        </details>
+        <details class="more">
+          <summary>Patrón circular</summary>
+          <div class="params">
+            <label>Total de piezas<input type="number" id="pcN" value="6" min="2" max="360" step="1"></label>
+            <label>Ángulo total (°)<input type="number" id="pcA" value="360" min="1" max="360" step="5"></label>
+            <label>Centro X (mm)<input type="number" id="pcCx" value="45" step="0.5"></label>
+            <label>Centro Y (mm)<input type="number" id="pcCy" value="25" step="0.5"></label>
+          </div>
+          <button type="button" id="pcGo" class="primary-soft">Repetir alrededor</button>
+        </details>
+        <details class="more">
+          <summary>Simetría</summary>
+          <div class="params">
+            <label>Eje<select id="mirAxis"><option value="x">Vertical (x = …)</option><option value="y">Horizontal (y = …)</option></select></label>
+            <label>Posición (mm)<input type="number" id="mirC" value="45" step="0.5"></label>
+          </div>
+          <button type="button" id="mirGo" class="primary-soft">Reflejar copia</button>
+        </details>
       </div>
 
       <!-- texto: aparece con la herramienta Texto o al elegir un texto -->

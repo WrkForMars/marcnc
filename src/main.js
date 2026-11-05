@@ -463,6 +463,7 @@ $('tNew').addEventListener('click', () => { state.textOpen = true; select(-1); r
 const sketch = createSketchEditor({
   onChange: () => { rebuildSketch(); storeSketch(); assemble(); syncSketchSelection(); refresh(); },
   onRedraw: () => { drawOverlay(); renderSketchProps2(); },
+  onDimCreated: id => { state.pendingDim = id; drawOverlay(); },
   onStatus: ({ prompt, cursor, kind }) => {
     if (!$('skPrompt').classList.contains('err')) $('skPrompt').textContent = prompt;
     $('skCursor').textContent = cursor ? `X ${cursor[0].toFixed(2)}  Y ${cursor[1].toFixed(2)}${kind && kind !== 'cuadrícula' ? `  · ${kind}` : ''}` : '';
@@ -487,15 +488,31 @@ function drawOverlay() {
   drawCodeHighlight(X, Y, v.k);
   state.dims = currentDims();
   state.dimHits = state.dims ? drawDims(octx, state.dims.list, X, Y, css, state.dims.editable) : [];
+  if (state.pendingDim) {
+    // la cota recién creada con la herramienta Cota pide su valor de inmediato
+    const id = state.pendingDim; state.pendingDim = null;
+    const hit = state.dimHits.find(h => state.dims.list[h.i].persistent && state.dims.list[h.i].id === id);
+    if (hit) setTimeout(() => openDimEdit(hit), 0);
+  }
 }
 
 /* ---------- cotas de lo seleccionado ---------- */
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 /** Cotas de la figura elegida: al borde más cercano y su tamaño. Las del croquis y los textos se editan tocándolas. */
 function currentDims() {
-  if (sim.on || sketch.tool !== 'select') return null;
-  const p = params(), e = sketch.shown;
-  if (e) return { list: dimensions(e, p.W, p.H), editable: true, target: { kind: 'sketch', id: e.id } };
+  if (sim.on) return null;
+  const p = params();
+  // cotas guardadas del croquis: siempre a la vista, como en un CAD
+  const saved = sketch.dimsView();
+  if (sketch.tool !== 'select') return saved.length ? { list: saved, editable: true, target: { kind: 'sketch' } } : null;
+  const e = sketch.shown;
+  if (e) {
+    // sugeridas: las de la figura elegida que todavía no están guardadas (se guardan al escribirles un valor)
+    const has = d => saved.some(q => q.ent === e.id && (d.kind === 'size' ? q.kind === 'size' && q.axis === d.axis : q.kind !== 'size' && q.axis === d.axis));
+    const hints = dimensions(e, p.W, p.H).filter(d => !has(d)).map(d => ({ ...d, ent: e.id, hint: true }));
+    return { list: saved.concat(hints), editable: true, target: { kind: 'sketch', id: e.id } };
+  }
+  if (saved.length && state.selected < 0) return { list: saved, editable: true, target: { kind: 'sketch' } };
   const el = state.elements[state.selected];
   const bb = el && bbox(el);
   if (!bb) return null;
@@ -514,11 +531,13 @@ function openDimEdit(hit) {
   const cv = $('cv');
   inp.style.left = `${cv.offsetLeft + hit.x + hit.w / 2 - 48}px`; inp.style.top = `${cv.offsetTop + hit.y - 12}px`;
   inp.value = String(+d.value.toFixed(3)); inp.hidden = false; inp.focus(); inp.select();
+  inp.title = d.persistent ? 'Enter aplica · vacío y Enter quita la cota · Esc cancela' : 'Enter guarda esta cota';
   const close = () => { inp.hidden = true; inp.onkeydown = inp.onblur = null; };
   inp.onkeydown = ev => {
     if (ev.key === 'Escape') { ev.preventDefault(); close(); return; }
     if (ev.key !== 'Enter') return;
     ev.preventDefault();
+    if (d.persistent && !inp.value.trim()) { close(); sketch.removeDim(d.id); $('toast').textContent = 'Cota quitada: esa medida vuelve a quedar libre.'; return; }
     const v = parseFloat(inp.value.replace(',', '.'));
     if (!(v >= 0) || (d.kind === 'size' && !(v > 0))) { $('toast').textContent = 'Escribe un número mayor que cero (en mm).'; return; }
     close();
@@ -528,7 +547,11 @@ function openDimEdit(hit) {
 }
 function applyDimValue(target, d, v) {
   const p = params();
-  if (target.kind === 'sketch') {
+  if (d.persistent) { sketch.setDimValue(d.id, v); return; }
+  if (target.kind === 'sketch' && d.hint) {
+    // una cota sugerida se vuelve cota guardada: desde ahora manda sobre la figura
+    sketch.addDim({ kind: d.kind, ent: d.ent, axis: d.axis, side: d.side, value: v });
+  } else if (target.kind === 'sketch') {
     const e = sketch.selected;
     if (e) sketch.replace(e.id, applyDimension(e, d, v, p.W, p.H));
   } else if (target.kind === 'text') {
@@ -541,12 +564,30 @@ function applyDimValue(target, d, v) {
 let propsFor = null;
 /** Tarjeta de medidas de la figura seleccionada (solo se reconstruye si cambió, para no perder el foco). */
 function renderSketchProps2() {
-  const e = sketch.selected;
-  $('skProps').hidden = !e;
-  const sig = e ? JSON.stringify(e) : null;
+  const list = sketch.selection, e = sketch.selected;
+  $('skProps').hidden = !list.length;
+  $('skOps').hidden = !list.length;
+  if (!list.length) { propsFor = null; return; }
+  // estado de definición: qué cotas le faltan (como el azul/negro de un croquis de CAD)
+  const def = sketch.defined();
+  const st = list.map(x => def.get(x.id)).filter(Boolean);
+  const full = st.every(s => s.full), cons = list.every(x => x.construction);
+  $('skState').textContent = cons ? 'Construcción: sirve de referencia y no se graba.'
+    : full ? 'Completamente definida: todas sus medidas y su posición están acotadas.'
+      : list.length === 1 ? `Le falta: ${st[0].missing.join(', ')}. Toca una cota sugerida para fijarla.` : 'Algunas figuras todavía tienen medidas libres.';
+  $('skState').className = `def-state ${cons ? 'cons' : full ? 'full' : 'under'}`;
+  $('skCons').checked = cons;
+  const sig = JSON.stringify(list) + JSON.stringify(sketch.dims);
   if (sig === propsFor) return;
   propsFor = sig;
   if (e) $('skTitle').textContent = renderSketchProps($('skFields'), e, patch => sketch.update(e.id, patch));
+  else { $('skTitle').textContent = `${list.length} figuras`; $('skFields').textContent = ''; }
+  // centro sugerido para el patrón circular y la simetría: el de la selección
+  const b = sketch.selectionBox();
+  if (b && document.activeElement?.closest?.('#skOps') == null) {
+    $('pcCx').value = +((b[0] + b[2]) / 2).toFixed(2); $('pcCy').value = +((b[1] + b[3]) / 2).toFixed(2);
+    $('mirC').value = $('mirAxis').value === 'x' ? +b[2].toFixed(2) : +b[3].toFixed(2);
+  }
 }
 /** ¿El elemento viene de esa figura del croquis (como exterior o como hueco)? */
 const hasEntity = (x, id) => x.src === 'sketch' && (x.sketchId === id || new RegExp(`"id":${id}[,}]`).test(x.sig));
@@ -562,6 +603,7 @@ function setTool(t) {
   document.querySelectorAll('#skTools button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === t)));
   $('skSidesLbl').hidden = t !== 'poly';
   $('sketchbar').hidden = t === 'select';
+  $('sketchbar').classList.toggle('dimmode', t === 'dim');
   $('skPrompt').classList.remove('err');
   if (t !== 'select') { state.selected = -1; renderAll(); } else $('empty').hidden = !state.ready || state.elements.length > 0;
 }
@@ -571,8 +613,15 @@ $('skSnap').addEventListener('change', () => sketch.setOptions({ snap: $('skSnap
 $('skSides').addEventListener('change', () => sketch.setOptions({ sides: Math.min(64, Math.max(3, Math.round(num('skSides', 6)))) }));
 $('skUndo').addEventListener('click', () => sketch.undoOne());
 $('skRedo').addEventListener('click', () => sketch.redoOne());
-$('skDel').addEventListener('click', () => { const e = sketch.selected; if (e) sketch.remove(e.id); });
-$('skDup').addEventListener('click', () => { const e = sketch.selected; if (e) sketch.duplicate(e.id); });
+$('skDel').addEventListener('click', () => { const l = sketch.selection; if (l.length) sketch.removeMany(l.map(x => x.id)); });
+$('skCons').addEventListener('change', () => sketch.setConstruction($('skCons').checked));
+const opNum = (id, def) => { const v = parseFloat(String($(id).value).replace(',', '.')); return Number.isFinite(v) ? v : def; };
+const opDone = n => { $('toast').textContent = n ? `Se agregaron ${n} figura${n > 1 ? 's' : ''}.` : 'Elige primero las figuras a repetir.'; };
+$('plGo').addEventListener('click', () => opDone(sketch.linear(Math.max(1, Math.round(opNum('plN', 3))), opNum('plDx', 10), opNum('plDy', 0))));
+$('pcGo').addEventListener('click', () => opDone(sketch.circular(Math.max(2, Math.round(opNum('pcN', 6))), opNum('pcCx', 45), opNum('pcCy', 25), opNum('pcA', 360))));
+$('mirGo').addEventListener('click', () => opDone(sketch.mirror($('mirAxis').value, opNum('mirC', 45))));
+$('mirAxis').addEventListener('change', () => { const b = sketch.selectionBox(); if (b) $('mirC').value = $('mirAxis').value === 'x' ? +b[2].toFixed(2) : +b[3].toFixed(2); });
+$('skDup').addEventListener('click', () => { if (copySelection(true)) paste(true); });
 $('skInput').addEventListener('keydown', ev => {
   if (ev.key === 'Enter') {
     ev.preventDefault();
@@ -583,7 +632,7 @@ $('skInput').addEventListener('keydown', ev => {
 });
 $('skInput').addEventListener('input', () => { if ($('skPrompt').classList.contains('err')) { $('skPrompt').classList.remove('err'); sketch.refreshStatus(); } });
 // atajos: herramientas con una letra, Esc/Enter/Supr y deshacer, salvo mientras se escribe en un campo
-const TOOL_KEYS = { v: 'select', l: 'line', r: 'rect', c: 'circle', a: 'arc', p: 'poly' };
+const TOOL_KEYS = { v: 'select', l: 'line', r: 'rect', c: 'circle', a: 'arc', p: 'poly', s: 'slot', d: 'dim' };
 document.addEventListener('keydown', ev => {
   const t = ev.target;
   if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
@@ -594,16 +643,17 @@ document.addEventListener('keydown', ev => {
     else if (k === 'c' && !getSelection().toString()) { if (copySelection()) { ev.preventDefault(); $('toast').textContent = 'Copiado. Ctrl+V para pegar.'; } }
     else if (k === 'x') { if (copySelection()) { ev.preventDefault(); deleteSelection(); $('toast').textContent = 'Cortado. Ctrl+V para pegar.'; } }
     else if (k === 'v') { if (state.clip) { ev.preventDefault(); paste(); } }
+    else if (k === 'a' && sketch.entities.length) { ev.preventDefault(); setTool('select'); sketch.selectMany(sketch.entities.map(x => x.id)); state.selected = -1; renderAll(); }
     else if (k === 'd') { ev.preventDefault(); if (copySelection(true)) paste(true); }
     return;
   }
   if (ev.altKey) return;
   // flechas: mueven lo elegido un paso de cuadrícula (Shift: 10 pasos)
   const arrow = { arrowleft: [-1, 0], arrowright: [1, 0], arrowup: [0, 1], arrowdown: [0, -1] }[k];
-  if (arrow && sketch.tool === 'select' && (sketch.selected || state.elements[state.selected]?.src === 'text')) {
+  if (arrow && sketch.tool === 'select' && (sketch.selection.length || state.elements[state.selected]?.src === 'text')) {
     ev.preventDefault();
-    const step = (ev.shiftKey ? 10 : 1) * (sketch.selected ? sketch.grid : 0.5);
-    if (sketch.selected) sketch.nudge(arrow[0] * step, arrow[1] * step);
+    const step = (ev.shiftKey ? 10 : 1) * (sketch.selection.length ? sketch.grid : 0.5);
+    if (sketch.selection.length) sketch.nudge(arrow[0] * step, arrow[1] * step);
     else { const t = state.elements[state.selected].text; t.x += arrow[0] * step; t.y += arrow[1] * step; t.rev++; $('tX').value = t.x; $('tY').value = t.y; assemble(); select(state.elements.findIndex(x => x.text === t)); refresh(); }
     return;
   }
@@ -623,7 +673,8 @@ function copySelection(keep = false) {
   let clip = null;
   const el = state.elements[state.selected];
   const e = sketch.selected || (el && el.src === 'sketch' ? sketch.entities.find(x => x.id === el.sketchId) : null);
-  if (e) clip = { entities: [JSON.parse(JSON.stringify(e))], texts: [] };
+  if (sketch.selection.length > 1) clip = { entities: JSON.parse(JSON.stringify(sketch.selection)), texts: [] };
+  else if (e) clip = { entities: [JSON.parse(JSON.stringify(e))], texts: [] };
   else if (el && el.src === 'text') clip = { entities: [], texts: [{ ...el.text, local: null }] };
   else if (el) {
     const entities = el.type === 'region'
@@ -660,6 +711,7 @@ async function paste(fromDup = false) {
 /** Supr: borra la figura del croquis o el texto; una figura del archivo se omite (no se graba). */
 function deleteSelection() {
   const el = state.elements[state.selected];
+  if (sketch.selection.length > 1) { sketch.removeMany(sketch.selection.map(x => x.id)); return; }
   const e = sketch.selected || (el && el.src === 'sketch' ? sketch.entities.find(x => x.id === el.sketchId) : null);
   if (e) { sketch.remove(e.id); return; }
   if (!el) return;
@@ -672,14 +724,18 @@ function deleteSelection() {
 const cv = $('cv');
 let drag = null;
 const evMM = ev => { const r = cv.getBoundingClientRect(); return { mx: ev.clientX - r.left, my: ev.clientY - r.top }; };
+/** Captura el puntero para seguir el arrastre fuera del lienzo (sin fallar si el navegador no lo permite). */
+const capture = ev => { try { cv.setPointerCapture(ev.pointerId); } catch { /* puntero ya liberado */ } };
 const pickTol = () => 8 / preview.getView().k; // 8 px en mm
 cv.addEventListener('pointerdown', ev => {
   const { mx, my } = evMM(ev);
   const mm = preview.toMM(mx, my);
-  const dh = sketch.tool === 'select' && dimAt(state.dimHits, mx, my);
+  const sx = (preview.getView().cssW || cv.clientWidth) / (cv.clientWidth || 1); // lienzo estirado mientras no se redibuja
+  const dh = (sketch.tool === 'select' || sketch.tool === 'dim') && dimAt(state.dimHits, mx * sx, my);
   if (dh) { ev.preventDefault(); openDimEdit(dh); return; }
-  if (sketch.down(mm, pickTol())) {
-    cv.setPointerCapture(ev.pointerId);
+  capture(ev); // también para el recuadro de selección
+  if (sketch.down(mm, pickTol(), ev.shiftKey || ev.ctrlKey || ev.metaKey)) {
+    capture(ev);
     if (sketch.tool === 'select') { syncSketchSelection(); select(state.selected); renderAll(); }
     return;
   }
@@ -689,7 +745,7 @@ cv.addEventListener('pointerdown', ev => {
     const [x, y] = mm;
     const t = state.elements[i].text;
     drag = { i, t, sx: x, sy: y, x0: t.x, y0: t.y, moved: false };
-    cv.setPointerCapture(ev.pointerId);
+    capture(ev);
   }
   renderAll();
   if (i >= 0) document.querySelector(`.el[data-i="${i}"]`)?.scrollIntoView({ block: 'nearest' });
@@ -707,7 +763,8 @@ cv.addEventListener('pointermove', ev => {
   drawOnly(true);
 });
 const endDrag = () => {
-  sketch.up();
+  // un recuadro de selección termina eligiendo figuras del croquis
+  if (sketch.up()) { syncSketchSelection(); if (!sketch.selected) state.selected = -1; renderAll(); }
   if (!drag) return;
   const moved = drag.moved;
   drag.t.rev++; drag = null;
@@ -971,6 +1028,7 @@ $('simPlay').addEventListener('click', () => showTab(true));
 /** Un renglón con lo que define el trabajo: pieza, herramienta y velocidades. Tocarlo abre dónde se cambia. */
 function jobSummary() {
   const p = params(), tl = toolGeometry(p), n = v => String(+(+v).toFixed(3));
+  sketch.setPiece(p.W, p.H);
   const TOOL = { ball: 'Ball', flat: 'Plana', v: 'V-bit' }[p.toolType];
   $('jobPieceTxt').textContent = `${n(p.W)} × ${n(p.H)} mm`;
   $('jobToolTxt').textContent = `T${p.toolNum} ${TOOL} Ø${n(p.dia)} · ${n(p.depth)} mm → línea ${tl.w.toFixed(2)}`;

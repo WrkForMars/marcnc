@@ -24,7 +24,11 @@ export function createPreview(cv) {
   const ctx = cv.getContext('2d');
   let view = { k: 1, ox: 0, oy: 0, W: 90, H: 50 };
 
-  const toMM = (mx, my) => [(mx - view.ox) / view.k, view.H - (my - view.oy) / view.k];
+  // si el lienzo cambió de ancho y todavía no se vuelve a dibujar, la imagen está estirada en X: se corrige aquí
+  const toMM = (mx, my) => {
+    const sx = view.cssW && cv.clientWidth ? view.cssW / cv.clientWidth : 1;
+    return [(mx * sx - view.ox) / view.k, view.H - (my - view.oy) / view.k];
+  };
 
   /**
    * @param {{elements:any[], selected:number, W:number, H:number, toolWidth:number, plan:any, showPath:boolean, dragging?:boolean, simulating?:boolean}} s
@@ -42,7 +46,7 @@ export function createPreview(cv) {
       cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr); cv.style.height = cssH + 'px';
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    view = { k, ox, oy: pT, W, H };
+    view = { k, ox, oy: pT, W, H, cssW };
     const X = x => ox + x * k, Y = y => pT + (H - y) * k;
     ctx.clearRect(0, 0, cssW, cssH);
 
