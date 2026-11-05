@@ -171,7 +171,13 @@ async function refresh() {
       .forEach(([a, b]) => { const s = document.createElement('span'); s.append(a + ' '); const bb = document.createElement('b'); bb.textContent = b; s.append(bb); $('stats').append(s); });
     const ws = warnings(p, plan);
     $('warns').textContent = '';
-    if (ws.length) { const d = document.createElement('div'); d.className = 'warnbox'; d.textContent = ws.join(' '); $('warns').append(d); }
+    if (ws.length) {
+      // aviso: ícono, título y un punto por problema
+      const d = document.createElement('div'); d.className = 'warnbox'; d.setAttribute('role', 'status');
+      d.innerHTML = '<svg class="i" aria-hidden="true"><use href="#i-warn"/></svg><div><b>Revisa antes de cortar</b><ul></ul></div>';
+      ws.forEach(w => { const li = document.createElement('li'); li.textContent = w; d.querySelector('ul').append(li); });
+      $('warns').append(d);
+    }
   }
   busy(null);
   simButtons();

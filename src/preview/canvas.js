@@ -95,7 +95,10 @@ export function createPreview(cv) {
     // omitidos y elemento arrastrado: solo borde punteado
     ctx.setLineDash([4, 3]); ctx.strokeStyle = css('--plate-muted'); ctx.lineWidth = 1;
     elements.forEach(e => { if (e.mode === 'skip' || isDragged(e)) outline(e); });
-    ctx.setLineDash([]);
+    // lo que no se omitió pero no deja ningún corte (más fino que la herramienta): contorno en color de aviso
+    ctx.strokeStyle = css('--plate-warn'); ctx.lineWidth = 1.5;
+    elements.forEach(e => { if (e.mode !== 'skip' && !isDragged(e) && e.paths && !e.paths.length) outline(e); });
+    ctx.setLineDash([]); ctx.lineWidth = 1;
 
     // grabado simulado: cada trayectoria con el ancho real de la línea
     ctx.strokeStyle = css('--cut'); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
