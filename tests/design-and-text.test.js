@@ -18,6 +18,16 @@ describe('buildDesign', () => {
     expect((x0 + x1) / 2).toBeCloseTo(45, 2);
   });
 
+  it('con ancho fijo escala al ancho pedido, conserva la proporción y centra en la pieza', () => {
+    const raw = [{ kind: 'fill', white: false, rule: 'nonzero', rings: [[[0, 0], [200, 0], [200, 100], [0, 100]]] }];
+    const r = buildDesign(raw, { ...P, fit: 'width', drawW: 30 });
+    expect(r.size[0]).toBeCloseTo(30, 9); expect(r.size[1]).toBeCloseTo(15, 9);
+    const [x0, y0, x1, y1] = bounds(r.elements);
+    expect([x0, y0, x1, y1].map(v => +v.toFixed(3))).toEqual([30, 17.5, 60, 32.5]);
+    // más grande que la pieza: se respeta (la interfaz avisa que se sale)
+    expect(buildDesign(raw, { ...P, fit: 'width', drawW: 120 }).size[0]).toBeCloseTo(120, 9);
+  });
+
   it('informa cuántos mm mide una unidad de lienzo', () => {
     const raw = [{ kind: 'fill', white: false, rule: 'nonzero', rings: [square(0, 0, 200)] }];
     expect(buildDesign(raw, P).scale).toBeCloseTo(44 / 200, 9); // el alto limita: 50 − 2·3

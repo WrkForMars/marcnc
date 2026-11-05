@@ -125,8 +125,11 @@
             <h3>Pieza</h3>
             <label>Ancho (mm)<input type="number" id="pw" value="90" min="5" step="1"></label>
             <label>Alto (mm)<input type="number" id="ph" value="50" min="5" step="1"></label>
-            <label class="full">Tamaño del dibujo<select id="fit"><option value="fill">Ajustar a la pieza (con margen)</option><option value="native">Escala 1:1 (unidades del SVG = mm)</option></select></label>
-            <label>Margen (mm)<input type="number" id="margin" value="3" min="0" step="0.5"></label>
+            <label class="full">Tamaño del dibujo<select id="fit"><option value="fill">Ajustar a la pieza (con margen)</option><option value="width">Elegir ancho y alto (mm)</option><option value="native">Escala 1:1 (unidades del SVG = mm)</option></select></label>
+            <label id="dwLbl" hidden>Ancho del dibujo (mm)<input type="number" id="dw" value="40" min="1" step="0.5"></label>
+            <label id="dhLbl" hidden>Alto del dibujo (mm)<input type="number" id="dh" min="1" step="0.5"></label>
+            <p class="hint full" id="sizeInfo"></p>
+            <label id="marginLbl">Margen (mm)<input type="number" id="margin" value="3" min="0" step="0.5"></label>
             <label>Ignorar manchas &lt; (mm²)<input type="number" id="speck" value="0.5" min="0" step="0.1"></label>
 
             <h3>Herramienta</h3>

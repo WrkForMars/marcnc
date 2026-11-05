@@ -17,7 +17,7 @@ const tick = () => new Promise(r => setTimeout(r, 0));
 
 const state = {
   raw: null, rawId: 0, design: [], designNote: '', texts: [], elements: [],
-  selected: -1, lastImage: null, lastSvg: '', fileName: '', designScale: 0, gcode: '', plan: null, gen: 0, textSeq: 0,
+  selected: -1, lastImage: null, lastSvg: '', fileName: '', designScale: 0, designSize: [0, 0], demoFit: false, gcode: '', plan: null, gen: 0, textSeq: 0,
   cache: new Map(),
 };
 const preview = createPreview($('cv'));
@@ -28,7 +28,7 @@ TEXT_FONTS.forEach(([v, label]) => { const o = document.createElement('option');
 const num = (id, def) => { const v = parseFloat($(id).value); return Number.isFinite(v) ? v : def; };
 function params() {
   return {
-    W: num('pw', 90), H: num('ph', 50), margin: num('margin', 3), fit: $('fit').value, speck: num('speck', 0.5),
+    W: num('pw', 90), H: num('ph', 50), margin: num('margin', 3), fit: $('fit').value, drawW: num('dw', 0), speck: num('speck', 0.5),
     toolType: $('ttype').value, dia: num('tdia', 3.175), depth: num('depth', 0.1), vAngle: num('vang', 60), vTip: num('vtip', 0.1),
     stepoverPct: num('stepover', 45), stepdown: num('stepdown', 0.2),
     toolNum: num('tnum', 1), rpm: num('rpm', 1000), fz: num('fz', 60), fxy: num('fxy', 130), retract: num('retract', 3),
@@ -39,8 +39,8 @@ function params() {
 /* ---------- elementos ---------- */
 function rebuildDesign() {
   const r = buildDesign(state.raw, params(), state.design);
-  state.design = r.elements; state.designNote = r.note; state.designScale = r.scale; state.cache.clear();
-  svgQualityLabel();
+  state.design = r.elements; state.designNote = r.note; state.designScale = r.scale; state.designSize = r.size; state.cache.clear();
+  svgQualityLabel(); syncSize();
 }
 function assemble() {
   state.elements = state.design.concat(state.texts.map(textElement).filter(Boolean));
@@ -92,7 +92,7 @@ function warnings(p, plan) {
   const thin = state.elements.map((e, i) => (e.warn ? { e, i } : null)).filter(Boolean);
   const ws = [];
   if (state.designNote) ws.push(state.designNote);
-  if (out.length) ws.push(`${out.join(', ')} se sale${out.length > 1 ? 'n' : ''} de la pieza; muévelo o reduce su tamaño.`);
+  if (out.length) ws.push(`${out.join(', ')} se sale${out.length > 1 ? 'n' : ''} de la pieza; ajusta su tamaño o su posición.`);
   if (thin.length > 3) {
     const tot = thin.reduce((a, { e }) => a + (parseFloat(e.warn) || 0), 0);
     ws.push(`${thin.length} figuras tienen detalles más finos que la línea de ${plan.tl.w.toFixed(2)} mm${tot ? ` (${tot.toFixed(1)} mm² en total)` : ''}; están marcadas con “No cabe todo”. Prueba una herramienta más fina, menos profundidad, una pieza más grande o el modo Contorno.`);
@@ -191,6 +191,9 @@ function openFile(f) {
   const isSvg = /svg/i.test(f.type) || /\.svg$/i.test(f.name);
   if (!isSvg && !/^image\//.test(f.type)) { $('loadErr').textContent = 'Ese archivo no es un SVG ni una imagen (PNG, JPG o WEBP).'; return; }
   state.fileName = f.name.replace(/\.[^.]+$/, '');
+  // el ejemplo se ve a 1:1 porque está dibujado en mm; un archivo propio empieza ajustado a la pieza
+  if (state.demoFit && $('fit').value === 'native') $('fit').value = 'fill';
+  state.demoFit = false;
   const rd = new FileReader();
   if (isSvg) {
     rd.onload = () => { state.lastImage = null; state.lastSvg = String(rd.result); loadSvg(); };
@@ -222,9 +225,10 @@ document.addEventListener('drop', ev => {
   const f = ev.dataTransfer.files[0];
   if (f) openFile(f);
 });
-$('demo').addEventListener('click', () => { state.lastImage = null; state.lastSvg = DEMO_SVG; state.fileName = ''; $('fit').value = 'native'; loadSvg(); });
+$('demo').addEventListener('click', () => { state.lastImage = null; state.lastSvg = DEMO_SVG; state.fileName = ''; $('fit').value = 'native'; state.demoFit = true; loadSvg(); });
 $('clear').addEventListener('click', () => {
-  Object.assign(state, { raw: null, design: [], texts: [], lastImage: null, lastSvg: '', designNote: '', fileName: '' });
+  Object.assign(state, { raw: null, design: [], texts: [], lastImage: null, lastSvg: '', designNote: '', fileName: '', designSize: [0, 0] });
+  syncSize();
   $('imgOpts').hidden = true; $('svgOpts').hidden = true; assemble(); select(-1); refresh();
 });
 $('thr').addEventListener('input', () => { $('thrVal').textContent = $('thr').value; });
@@ -234,14 +238,36 @@ $('svgQ').addEventListener('change', loadSvg);
 $('imgHow').addEventListener('change', loadImage);
 
 /* ---------- parámetros ---------- */
-['pw', 'ph', 'margin', 'speck', 'fit'].forEach(id => $(id).addEventListener('change', () => { rebuildDesign(); assemble(); refresh(); }));
+/* ---------- tamaño del dibujo ---------- */
+const r1 = v => Math.round(v * 10) / 10;
+/** Muestra ancho/alto o margen según el modo, y el tamaño real del dibujo. */
+function syncSize() {
+  const fit = $('fit').value, [w, h] = state.designSize;
+  $('dwLbl').hidden = $('dhLbl').hidden = fit !== 'width';
+  $('marginLbl').hidden = fit !== 'fill';
+  if (fit === 'width' && w) $('dh').value = r1(h);
+  const big = w > num('pw', 90) + 0.01 || h > num('ph', 50) + 0.01;
+  $('sizeInfo').textContent = w ? `El dibujo mide ${r1(w)} × ${r1(h)} mm${big ? '. No cabe en la pieza: redúcelo o agranda la pieza' : ''}.` : '';
+  $('sizeInfo').classList.toggle('err', big);
+}
+$('fit').addEventListener('change', () => {
+  state.demoFit = false;
+  // al pasar a medida libre se parte del tamaño que ya tenía, para que nada brinque
+  if ($('fit').value === 'width' && state.designSize[0]) $('dw').value = r1(state.designSize[0]);
+});
+$('dh').addEventListener('change', () => {
+  const [w, h] = state.designSize, v = num('dh', 0);
+  if (w && h && v > 0) $('dw').value = r1(v * w / h);
+  storeParams(); rebuildDesign(); assemble(); refresh();
+});
+['pw', 'ph', 'margin', 'speck', 'fit', 'dw'].forEach(id => $(id).addEventListener('change', () => { rebuildDesign(); assemble(); refresh(); }));
 ['depth', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'rpm', 'fz', 'fxy', 'retract', 'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs']
   .forEach(id => $(id).addEventListener('change', () => { $('vAngLbl').hidden = $('vTipLbl').hidden = $('ttype').value !== 'v'; refresh(); }));
 $('showPath').addEventListener('change', () => drawOnly());
 
 // los parámetros se recuerdan entre sesiones (cada taller tiene su máquina y su herramienta)
 const SAVED = ['pw', 'ph', 'margin', 'speck', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'depth', 'rpm', 'retract', 'fz', 'fxy',
-  'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs', 'imgHow', 'thr', 'svgQ'];
+  'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs', 'imgHow', 'thr', 'svgQ', 'dw'];
 const STORE = 'grabacnc:parametros';
 const getVal = id => ($(id).type === 'checkbox' ? $(id).checked : $(id).value);
 const setVal = (id, v) => { if ($(id).type === 'checkbox') $(id).checked = !!v; else $(id).value = v; };
@@ -391,7 +417,7 @@ document.addEventListener('keydown', ev => {
 /* ---------- inicio ---------- */
 (async () => {
   restoreParams();
-  $('fit').value = 'native';
+  $('fit').value = 'native'; state.demoFit = true;
   state.lastSvg = DEMO_SVG;
   await loadShapes(() => parseSVG(DEMO_SVG, $('svghost'), SVG_QUALITY[+$('svgQ').value - 1][0]), false);
   Object.entries(DEMO_TEXT).forEach(([k, v]) => { const id = { text: 'tText', font: 'tFont', h: 'tH', sp: 'tSp', x: 'tX', y: 'tY' }[k]; $(id).value = v; });
