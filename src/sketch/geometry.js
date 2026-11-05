@@ -216,3 +216,74 @@ export function sketchElements(entities, modes = {}) {
   });
   return out;
 }
+
+/* ---------- cotas ---------- */
+
+/** Caja [x0, y0, x1, y1] de la figura en mm (de su trazo real, también para arcos y polígonos). */
+export function entityBox(e) {
+  const { pts } = entityPts(e, 0.01);
+  let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
+  pts.forEach(([x, y]) => { if (x < a) a = x; if (y < b) b = y; if (x > c) c = x; if (y > d) d = y; });
+  return [a, b, c, d];
+}
+
+/**
+ * Cotas de la figura dentro de la pieza: distancia al borde más cercano en X y en Y, y su tamaño.
+ * @returns {{kind:'edge'|'size', axis:'x'|'y'|'d'|'r', side?:'left'|'right'|'bottom'|'top', value:number,
+ *   from:[number,number], to:[number,number], label:string}[]} from/to: extremos de la línea de cota en mm
+ */
+export function dimensions(e, W, H) {
+  const [x0, y0, x1, y1] = entityBox(e), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const out = [];
+  // al borde: el más cercano de cada eje
+  if (x0 <= W - x1) out.push({ kind: 'edge', axis: 'x', side: 'left', value: x0, from: [0, cy], to: [x0, cy] });
+  else out.push({ kind: 'edge', axis: 'x', side: 'right', value: W - x1, from: [x1, cy], to: [W, cy] });
+  if (y0 <= H - y1) out.push({ kind: 'edge', axis: 'y', side: 'bottom', value: y0, from: [cx, 0], to: [cx, y0] });
+  else out.push({ kind: 'edge', axis: 'y', side: 'top', value: H - y1, from: [cx, y1], to: [cx, H] });
+  // tamaño
+  if (e.type === 'circle') out.push({ kind: 'size', axis: 'd', value: 2 * e.r, from: [e.cx - e.r, e.cy], to: [e.cx + e.r, e.cy] });
+  else if (e.type === 'arc') out.push({ kind: 'size', axis: 'r', value: e.r, from: [e.cx, e.cy], to: entityPts(e).pts[0] });
+  else {
+    out.push({ kind: 'size', axis: 'x', value: x1 - x0, from: [x0, y1], to: [x1, y1] });
+    out.push({ kind: 'size', axis: 'y', value: y1 - y0, from: [x1, y0], to: [x1, y1] });
+  }
+  return out.map(d => ({ ...d, label: (d.axis === 'd' ? 'Ø' : d.axis === 'r' ? 'R' : '') + fmt(d.value) }));
+}
+
+/** Escala la figura respecto a un punto fijo (sx, sy por eje). */
+function scaleAbout(e, ox, oy, sx, sy) {
+  const P = ([x, y]) => [ox + (x - ox) * sx, oy + (y - oy) * sy];
+  if (e.type === 'line') return { ...e, pts: e.pts.map(P) };
+  if (e.type === 'rect') { const [x, y] = P([e.x, e.y]); return { ...e, x, y, w: e.w * sx, h: e.h * sy }; }
+  const [cx, cy] = P([e.cx, e.cy]);
+  return { ...e, cx, cy, r: e.r * Math.max(sx, sy) };
+}
+
+/**
+ * Aplica el valor que el usuario escribió en una cota y devuelve la figura nueva.
+ * Al borde: se mueve la figura. Tamaño: rectángulos y líneas se estiran desde su esquina inferior izquierda;
+ * círculos, arcos y polígonos cambian de radio sin mover el centro.
+ * @param {ReturnType<typeof dimensions>[number]} d
+ */
+export function applyDimension(e, d, value, W, H) {
+  if (!(value >= 0) || !Number.isFinite(value)) return e;
+  if (d.kind === 'edge') {
+    const [x0, y0, x1, y1] = entityBox(e);
+    if (d.side === 'left') return translate(e, value - x0, 0);
+    if (d.side === 'right') return translate(e, (W - value) - x1, 0);
+    if (d.side === 'bottom') return translate(e, 0, value - y0);
+    return translate(e, 0, (H - value) - y1);
+  }
+  if (value <= 0) return e;
+  if (d.axis === 'd') return { ...e, r: value / 2 };
+  if (d.axis === 'r') return { ...e, r: value };
+  if (e.type === 'poly') {
+    // el ancho o alto del polígono se ajusta cambiando el radio (sigue regular)
+    const [x0, y0, x1, y1] = entityBox(e), cur = d.axis === 'x' ? x1 - x0 : y1 - y0;
+    return cur > 0 ? { ...e, r: e.r * value / cur } : e;
+  }
+  const [x0, y0, x1, y1] = entityBox(e), cur = d.axis === 'x' ? x1 - x0 : y1 - y0;
+  if (!(cur > 0)) return e;
+  const s = value / cur;
+  return scaleAbout(e, x0, y0, d.axis === 'x' ? s : 1, d.axis === 'y' ? s : 1);
+}

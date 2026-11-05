@@ -102,6 +102,8 @@ export function createSketchEditor(hooks) {
     get entities() { return S.entities; },
     get modes() { return S.modes; },
     get selected() { return S.entities.find(e => e.id === S.selected) || null; },
+    /** La figura elegida tal como se ve ahora (con el arrastre en curso aplicado), para dibujar sus cotas. */
+    get shown() { const e = api.selected; return e && S.drag ? translate(e, S.drag.dx, S.drag.dy) : e; },
     get busy() { return S.pts.length > 0 || !!S.drag; },
 
     load(data) {
@@ -194,6 +196,15 @@ export function createSketchEditor(hooks) {
     },
 
     update(id, patch) { commit(() => { S.entities = S.entities.map(e => (e.id === id ? { ...e, ...patch } : e)); }); },
+    /** Reemplaza la figura completa (p. ej. tras escribir una cota). */
+    replace(id, ent) { commit(() => { S.entities = S.entities.map(e => (e.id === id ? { ...ent, id } : e)); }); },
+    /** Agrega varias figuras de una vez (pegar): un solo paso de deshacer; queda elegida la primera (el contorno exterior). */
+    addMany(list) {
+      if (!list.length) return;
+      commit(() => { list.forEach((e, i) => { const n = { ...JSON.parse(JSON.stringify(e)), id: S.nextId++ }; S.entities.push(n); if (!i) S.selected = n.id; }); });
+    },
+    nudge(dx, dy) { const id = S.selected; if (id) commit(() => { S.entities = S.entities.map(e => (e.id === id ? translate(e, dx, dy) : e)); }); },
+    get grid() { return S.opt.grid; },
     remove(id) { commit(() => { S.entities = S.entities.filter(e => e.id !== id); delete S.modes[id]; }); },
     duplicate(id) {
       const e = S.entities.find(q => q.id === id);

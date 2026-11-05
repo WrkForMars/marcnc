@@ -17,7 +17,9 @@ import { KIND_NAME, markRow, renderCode } from './ui/code-view.js';
 import { sheetHTML, sheetImage } from './ui/sheet.js';
 import { renderSketchProps } from './ui/sketch-props.js';
 import { createSketchEditor } from './sketch/editor.js';
-import { sketchElements } from './sketch/geometry.js';
+import { applyDimension, dimensions, entityBox, sketchElements, translate } from './sketch/geometry.js';
+import { dimAt, drawDims } from './preview/dims.js';
+import { fromC } from './geometry/clipper.js';
 
 const $ = id => document.getElementById(id);
 const tick = () => new Promise(r => setTimeout(r, 0));
@@ -25,7 +27,7 @@ const tick = () => new Promise(r => setTimeout(r, 0));
 const state = {
   raw: null, rawId: 0, design: [], designNote: '', texts: [], elements: [],
   selected: -1, textOpen: false, ready: false, lastImage: null, imgCrop: null, imgMask: null, imgInfo: null, imgView: 'mask', lastSvg: '', fileName: '', designScale: 0, designSize: [0, 0], demoFit: false, gcode: '', plan: null, gen: 0, textSeq: 0,
-  cache: new Map(), sketchEls: [], explained: [], codeSel: 0, lastG: null,
+  cache: new Map(), sketchEls: [], dims: null, dimHits: [], clip: null, explained: [], codeSel: 0, lastG: null,
 };
 const preview = createPreview($('cv'));
 
@@ -483,6 +485,58 @@ function drawOverlay() {
   const X = x => v.ox + x * v.k, Y = y => v.oy + (v.H - y) * v.k;
   sketch.draw(octx, X, Y, v.k, v.W, v.H);
   drawCodeHighlight(X, Y, v.k);
+  state.dims = currentDims();
+  state.dimHits = state.dims ? drawDims(octx, state.dims.list, X, Y, css, state.dims.editable) : [];
+}
+
+/* ---------- cotas de lo seleccionado ---------- */
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+/** Cotas de la figura elegida: al borde más cercano y su tamaño. Las del croquis y los textos se editan tocándolas. */
+function currentDims() {
+  if (sim.on || sketch.tool !== 'select') return null;
+  const p = params(), e = sketch.shown;
+  if (e) return { list: dimensions(e, p.W, p.H), editable: true, target: { kind: 'sketch', id: e.id } };
+  const el = state.elements[state.selected];
+  const bb = el && bbox(el);
+  if (!bb) return null;
+  const box = { id: -1, type: 'rect', x: bb[0], y: bb[1], w: bb[2] - bb[0], h: bb[3] - bb[1] };
+  const list = dimensions(box, p.W, p.H);
+  return el.src === 'text'
+    ? { list: list.filter(d => d.kind === 'edge'), editable: true, target: { kind: 'text', t: el.text, box } }
+    : { list, editable: false, target: { kind: 'design' } };
+}
+/** Campo flotante sobre la etiqueta de la cota para escribir el valor nuevo. */
+function openDimEdit(hit) {
+  const info = state.dims, d = info.list[hit.i];
+  if (!info.editable) { $('toast').textContent = 'Las figuras del archivo se acomodan con Tamaño del dibujo. Para moverla libre, cópiala (Ctrl+C) y pégala (Ctrl+V) como croquis.'; return; }
+  let inp = $('dimEdit');
+  if (!inp) { inp = document.createElement('input'); inp.id = 'dimEdit'; inp.type = 'text'; inp.inputMode = 'decimal'; inp.className = 'dim-edit'; inp.setAttribute('aria-label', 'Valor de la cota en mm'); $('stage').append(inp); }
+  const cv = $('cv');
+  inp.style.left = `${cv.offsetLeft + hit.x + hit.w / 2 - 48}px`; inp.style.top = `${cv.offsetTop + hit.y - 12}px`;
+  inp.value = String(+d.value.toFixed(3)); inp.hidden = false; inp.focus(); inp.select();
+  const close = () => { inp.hidden = true; inp.onkeydown = inp.onblur = null; };
+  inp.onkeydown = ev => {
+    if (ev.key === 'Escape') { ev.preventDefault(); close(); return; }
+    if (ev.key !== 'Enter') return;
+    ev.preventDefault();
+    const v = parseFloat(inp.value.replace(',', '.'));
+    if (!(v >= 0) || (d.kind === 'size' && !(v > 0))) { $('toast').textContent = 'Escribe un número mayor que cero (en mm).'; return; }
+    close();
+    applyDimValue(info.target, d, v);
+  };
+  inp.onblur = close;
+}
+function applyDimValue(target, d, v) {
+  const p = params();
+  if (target.kind === 'sketch') {
+    const e = sketch.selected;
+    if (e) sketch.replace(e.id, applyDimension(e, d, v, p.W, p.H));
+  } else if (target.kind === 'text') {
+    const nb = applyDimension(target.box, d, v, p.W, p.H), t = target.t;
+    t.x = +(t.x + nb.x - target.box.x).toFixed(3); t.y = +(t.y + nb.y - target.box.y).toFixed(3); t.rev++;
+    $('tX').value = t.x; $('tY').value = t.y;
+    assemble(); select(state.elements.findIndex(x => x.text === t)); refresh();
+  }
 }
 let propsFor = null;
 /** Tarjeta de medidas de la figura seleccionada (solo se reconstruye si cambió, para no perder el foco). */
@@ -537,13 +591,82 @@ document.addEventListener('keydown', ev => {
   const k = ev.key.toLowerCase();
   if ((ev.ctrlKey || ev.metaKey) && !ev.altKey) {
     if (k === 'z' && !ev.shiftKey) { ev.preventDefault(); sketch.undoOne(); } else if (k === 'y' || (k === 'z' && ev.shiftKey)) { ev.preventDefault(); sketch.redoOne(); }
+    else if (k === 'c' && !getSelection().toString()) { if (copySelection()) { ev.preventDefault(); $('toast').textContent = 'Copiado. Ctrl+V para pegar.'; } }
+    else if (k === 'x') { if (copySelection()) { ev.preventDefault(); deleteSelection(); $('toast').textContent = 'Cortado. Ctrl+V para pegar.'; } }
+    else if (k === 'v') { if (state.clip) { ev.preventDefault(); paste(); } }
+    else if (k === 'd') { ev.preventDefault(); if (copySelection(true)) paste(true); }
     return;
   }
   if (ev.altKey) return;
+  // flechas: mueven lo elegido un paso de cuadrícula (Shift: 10 pasos)
+  const arrow = { arrowleft: [-1, 0], arrowright: [1, 0], arrowup: [0, 1], arrowdown: [0, -1] }[k];
+  if (arrow && sketch.tool === 'select' && (sketch.selected || state.elements[state.selected]?.src === 'text')) {
+    ev.preventDefault();
+    const step = (ev.shiftKey ? 10 : 1) * (sketch.selected ? sketch.grid : 0.5);
+    if (sketch.selected) sketch.nudge(arrow[0] * step, arrow[1] * step);
+    else { const t = state.elements[state.selected].text; t.x += arrow[0] * step; t.y += arrow[1] * step; t.rev++; $('tX').value = t.x; $('tY').value = t.y; assemble(); select(state.elements.findIndex(x => x.text === t)); refresh(); }
+    return;
+  }
+  if ((k === 'delete' || k === 'backspace') && sketch.tool === 'select' && !sketch.selected && state.selected >= 0) { ev.preventDefault(); deleteSelection(); return; }
   if (TOOL_KEYS[k] && !ev.shiftKey) { setTool(TOOL_KEYS[k]); return; }
   if (k === 't' && !ev.shiftKey) { ev.preventDefault(); openText(); return; }
   if (sketch.key(ev.key)) { ev.preventDefault(); if (sketch.tool === 'select') setTool('select'); }
 });
+
+/* ---------- copiar, cortar, pegar, eliminar ---------- */
+/**
+ * Guarda lo elegido en el portapapeles interno. Una figura de un SVG o una imagen se copia como croquis
+ * (sus contornos como líneas cerradas), así al pegarla se puede mover y acotar libremente.
+ * @param {boolean} [keep] no reemplaza el portapapeles (duplicar)
+ */
+function copySelection(keep = false) {
+  let clip = null;
+  const el = state.elements[state.selected];
+  const e = sketch.selected || (el && el.src === 'sketch' ? sketch.entities.find(x => x.id === el.sketchId) : null);
+  if (e) clip = { entities: [JSON.parse(JSON.stringify(e))], texts: [] };
+  else if (el && el.src === 'text') clip = { entities: [], texts: [{ ...el.text, local: null }] };
+  else if (el) {
+    const entities = el.type === 'region'
+      ? el.parts.flatMap(p => [p.outer, ...p.holes].map(q => ({ type: 'line', pts: fromC(q), closed: true })))
+      : el.parts.map(p => ({ type: 'line', pts: p.pts.map(q => q.slice()), closed: p.closed }));
+    clip = { entities, texts: [] };
+  }
+  if (!clip) return false;
+  clip.n = 0;
+  if (keep) state.dup = clip; else state.clip = clip;
+  return true;
+}
+/** Pega desplazado 5 mm (cada pegada se aleja un poco más, para no encimarse). */
+async function paste(fromDup = false) {
+  const clip = fromDup ? state.dup : state.clip;
+  if (!clip) return;
+  const off = 5 * ++clip.n, p = params();
+  // la primera dirección (abajo-derecha, arriba-derecha, …) en la que lo pegado queda dentro de la pieza
+  const boxes = clip.entities.map(entityBox).concat(clip.texts.map(t => [t.x - 1, t.y - 1, t.x + 1, t.y + 1]));
+  const fits = (dx, dy) => boxes.every(b => b[0] + dx >= 0 && b[2] + dx <= p.W && b[1] + dy >= 0 && b[3] + dy <= p.H);
+  const [dx, dy] = [[off, -off], [off, off], [-off, off], [-off, -off]].find(([a, b]) => fits(a, b)) || [off, -off];
+  if (clip.entities.length) {
+    if (sketch.tool !== 'select') setTool('select');
+    sketch.addMany(clip.entities.map(e => translate(e, dx, dy)));
+    syncSketchSelection(); select(state.selected); renderAll();
+  }
+  for (const src of clip.texts) {
+    const t = { ...src, id: ++state.textSeq, x: src.x + dx, y: src.y + dy, rev: 0 };
+    await addText(t);
+    refresh();
+  }
+  $('toast').textContent = fromDup ? 'Duplicado.' : 'Pegado.';
+}
+/** Supr: borra la figura del croquis o el texto; una figura del archivo se omite (no se graba). */
+function deleteSelection() {
+  const el = state.elements[state.selected];
+  const e = sketch.selected || (el && el.src === 'sketch' ? sketch.entities.find(x => x.id === el.sketchId) : null);
+  if (e) { sketch.remove(e.id); return; }
+  if (!el) return;
+  if (el.src === 'text') { state.texts = state.texts.filter(t => t !== el.text); assemble(); select(-1); refresh(); return; }
+  el.mode = 'skip'; select(-1); refresh();
+  $('toast').textContent = 'La figura del archivo quedó en Omitir: no se graba. Cambia su modo para recuperarla.';
+}
 
 /* ---------- vista previa: croquis, selección y arrastre de textos ---------- */
 const cv = $('cv');
@@ -553,6 +676,8 @@ const pickTol = () => 8 / preview.getView().k; // 8 px en mm
 cv.addEventListener('pointerdown', ev => {
   const { mx, my } = evMM(ev);
   const mm = preview.toMM(mx, my);
+  const dh = sketch.tool === 'select' && dimAt(state.dimHits, mx, my);
+  if (dh) { ev.preventDefault(); openDimEdit(dh); return; }
   if (sketch.down(mm, pickTol())) {
     cv.setPointerCapture(ev.pointerId);
     if (sketch.tool === 'select') { syncSketchSelection(); select(state.selected); renderAll(); }

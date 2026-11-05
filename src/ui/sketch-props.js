@@ -35,7 +35,21 @@ const field = (label, input, full = false) => {
  */
 export function renderSketchProps(box, e, onPatch) {
   box.textContent = '';
-  if (e.type === 'line') {
+  if (e.type === 'line' && e.pts.length > 12) {
+    // muchos puntos (una figura copiada de un archivo): se edita su posición y su tamaño, no cada punto
+    const xs = e.pts.map(p => p[0]), ys = e.pts.map(p => p[1]);
+    const x0 = Math.min(...xs), y0 = Math.min(...ys), w = Math.max(...xs) - x0, h = Math.max(...ys) - y0;
+    const move = (dx, dy) => onPatch({ pts: e.pts.map(([x, y]) => [x + dx, y + dy]) });
+    const scale = (sx, sy) => onPatch({ pts: e.pts.map(([x, y]) => [x0 + (x - x0) * sx, y0 + (y - y0) * sy]) });
+    box.append(
+      field('Esquina X (mm)', numInput(x0, v => move(v - x0, 0))), field('Esquina Y (mm)', numInput(y0, v => move(0, v - y0))),
+      field('Ancho (mm)', numInput(w, v => scale(w > 0 ? v / w : 1, 1), 'pos')), field('Alto (mm)', numInput(h, v => scale(1, h > 0 ? v / h : 1), 'pos')),
+    );
+    const n = document.createElement('p');
+    n.className = 'hint full';
+    n.textContent = `${e.pts.length} puntos${e.closed ? ', cerrada' : ''}. Muévela con las flechas o arrastrándola.`;
+    box.append(n);
+  } else if (e.type === 'line') {
     e.pts.forEach((p, i) => {
       const set = j => v => onPatch({ pts: e.pts.map((q, k) => (k === i ? (j ? [q[0], v] : [v, q[1]]) : q)) });
       box.append(field(`Punto ${i + 1} X`, numInput(p[0], set(0))), field(`Punto ${i + 1} Y`, numInput(p[1], set(1))));

@@ -36,6 +36,7 @@ src/
                      figuras → elementos (una cerrada dentro de otra es hueco) — probado
   sketch/editor.js   herramientas, imán, mover, deshacer; dibuja en una capa (#ov) sobre la vista previa
   ui/sketch-props.js medidas editables de la figura seleccionada
+  preview/dims.js    cotas sobre la vista previa (al borde y tamaño); dimensions/applyDimension en sketch/geometry.js — probado
   geometry/clipper.js  envolturas de Clipper (offset, unión, resta, regiones)
   geometry/simplify.js RDP, distancia a segmento, punto en polígono
   cam/tool.js        ancho de línea según herramienta y profundidad — probado

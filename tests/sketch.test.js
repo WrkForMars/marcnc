@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fromC } from '../src/geometry/clipper.js';
-import { entityPts, hitEntity, parseNum, parsePoint, sketchElements, snap, translate } from '../src/sketch/geometry.js';
+import { applyDimension, dimensions, entityPts, hitEntity, parseNum, parsePoint, sketchElements, snap, translate } from '../src/sketch/geometry.js';
 
 const rect = (id, x, y, w, h) => ({ id, type: 'rect', x, y, w, h });
 const circle = (id, cx, cy, r) => ({ id, type: 'circle', cx, cy, r });
@@ -116,5 +116,44 @@ describe('sketchElements', () => {
     const [e] = sketchElements([rect(1, 5, 5, 10, 4)]);
     const xs = fromC(e.parts[0].outer).map(p => p[0]), ys = fromC(e.parts[0].outer).map(p => p[1]);
     expect([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]).toEqual([5, 5, 15, 9]);
+  });
+});
+
+describe('cotas', () => {
+  const W = 90, H = 50;
+  it('miden al borde más cercano de la pieza y el tamaño', () => {
+    const d = dimensions(rect(1, 10, 30, 20, 8), W, H);
+    expect(d.map(x => [x.kind, x.axis, x.side, +x.value.toFixed(6)])).toEqual([
+      ['edge', 'x', 'left', 10], ['edge', 'y', 'top', 12], ['size', 'x', undefined, 20], ['size', 'y', undefined, 8],
+    ]);
+    const c = dimensions(circle(2, 80, 10, 4), W, H);
+    expect(c.find(x => x.axis === 'x').side).toBe('right');
+    expect(c.find(x => x.axis === 'x').value).toBeCloseTo(6, 9);
+    expect(c.find(x => x.axis === 'd').label).toBe('Ø8');
+  });
+
+  it('escribir una distancia al borde mueve la figura', () => {
+    const e = rect(1, 10, 30, 20, 8), d = dimensions(e, W, H);
+    expect(applyDimension(e, d[0], 25, W, H)).toMatchObject({ x: 25, y: 30 });
+    const top = applyDimension(e, d[1], 5, W, H); // 5 mm del borde de arriba
+    expect(top.y + top.h).toBeCloseTo(45, 9);
+    const c = circle(2, 80, 10, 4), dc = dimensions(c, W, H);
+    expect(applyDimension(c, dc.find(x => x.side === 'right'), 2, W, H).cx).toBeCloseTo(84, 9);
+  });
+
+  it('escribir un tamaño estira la figura desde su esquina, o cambia el radio sin mover el centro', () => {
+    const e = rect(1, 10, 30, 20, 8), d = dimensions(e, W, H);
+    expect(applyDimension(e, d[2], 30, W, H)).toMatchObject({ x: 10, y: 30, w: 30, h: 8 });
+    const c = circle(2, 40, 20, 4);
+    expect(applyDimension(c, dimensions(c, W, H).find(x => x.axis === 'd'), 12, W, H)).toMatchObject({ cx: 40, cy: 20, r: 6 });
+    const l = { id: 3, type: 'line', pts: [[0, 0], [10, 5]], closed: false };
+    expect(applyDimension(l, dimensions(l, W, H).find(x => x.kind === 'size' && x.axis === 'y'), 10, W, H).pts).toEqual([[0, 0], [10, 10]]);
+  });
+
+  it('ignora valores inválidos', () => {
+    const e = rect(1, 10, 30, 20, 8), d = dimensions(e, W, H);
+    expect(applyDimension(e, d[2], 0, W, H)).toBe(e);
+    expect(applyDimension(e, d[0], NaN, W, H)).toBe(e);
+    expect(applyDimension(e, d[0], -3, W, H)).toBe(e);
   });
 });

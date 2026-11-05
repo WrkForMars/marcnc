@@ -148,6 +148,7 @@ input[aria-invalid="true"]{border-color:var(--warn)}
 canvas{display:block}
 #cv{width:100%;height:auto;cursor:crosshair;touch-action:none}
 canvas.overlay{position:absolute;left:var(--pad);top:var(--pad);pointer-events:none}
+.dim-edit{position:absolute;z-index:5;width:96px!important;min-height:36px!important;padding:0 8px!important;text-align:center;border:2px solid var(--plate-accent)!important;background:var(--plate-on)!important;color:var(--cut)!important;font-family:var(--f-mono)!important;font-size:16px}
 .busy{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
 .busy span{background:var(--panel);color:var(--ink);border:1px solid var(--line-strong);border-radius:999px;padding:8px 16px;font-size:12px;font-family:var(--f-mono)}
 .drop{position:absolute;inset:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:8px;
