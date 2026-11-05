@@ -174,7 +174,6 @@ canvas.grab{cursor:grab}
 @media (pointer:coarse){.ctxmenu button{min-height:44px}}
 #skPrompt{color:var(--ink);font-weight:500}
 #skPrompt.err{color:var(--warn)}
-#skCursor{font-family:var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
 input[aria-invalid="true"]{border-color:var(--warn)}
 
 /* ---------- banco de trabajo con la pieza ---------- */
@@ -373,8 +372,6 @@ dialog .params{margin:16px 0}
 .def-state.under{background:var(--accent-soft);color:var(--accent-text);border-color:var(--accent)}
 .def-state.full{background:var(--panel);color:var(--ink);border-color:var(--line-strong)}
 .def-state.cons{background:var(--bg);color:var(--muted);border-style:dashed;border-color:var(--line-strong)}
-#skOps details.more{border-top:1px solid var(--line)}
-#skOps details.more>button{margin-bottom:8px}
 
 .pm .panel-head{flex-wrap:nowrap}
 .pm .panel-head h3{min-width:0}
