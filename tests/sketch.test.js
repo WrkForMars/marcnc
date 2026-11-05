@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fromC } from '../src/geometry/clipper.js';
 import { applyDimension, applyDims, definedState, dimensions, entityBox, entityPts, hitEntity, infer, measure, mirror, parseNum, parsePoint, rotate, sketchElements, snap, translate } from '../src/sketch/geometry.js';
+import { createSketchEditor } from '../src/sketch/editor.js';
 
 const rect = (id, x, y, w, h) => ({ id, type: 'rect', x, y, w, h });
 const circle = (id, cx, cy, r) => ({ id, type: 'circle', cx, cy, r });
@@ -231,5 +232,60 @@ describe('cotas que mandan', () => {
     const st = definedState(base, [...dims, { id: 4, kind: 'edge', ent: 1, axis: 'y', side: 'bottom', value: 10 }, { id: 5, kind: 'size', ent: 1, axis: 'y', value: 10 }]);
     expect(st.get(1)).toEqual({ full: true, missing: [] });
     expect(st.get(2).missing).toEqual(['posición Y', 'diámetro']); // X fija por la cota a la figura 1, que está fija
+  });
+});
+
+describe('editor con hábitos de CAD', () => {
+  const editor = () => {
+    const ed = createSketchEditor({ onChange() {}, onRedraw() {}, onStatus() {}, css: () => '#000' });
+    ed.setOptions({ snap: false });
+    return ed;
+  };
+  const click = (ed, p) => { ed.down(p, 0.5); ed.up(); };
+  it('rectángulo de centro: centro y una esquina', () => {
+    const ed = editor();
+    ed.setTool('crect');
+    click(ed, [40, 25]); click(ed, [50, 30]);
+    expect(ed.entities[0]).toMatchObject({ type: 'rect', x: 30, y: 20, w: 20, h: 10 });
+  });
+  it('cota inteligente: figura y luego un lugar libre acota su tamaño; cerca de un borde, la distancia a él', () => {
+    const ed = editor();
+    ed.setTool('circle'); click(ed, [45, 25]); click(ed, [50, 25]);
+    ed.setTool('dim');
+    click(ed, [50, 25]); click(ed, [70, 40]);
+    expect(ed.dims).toEqual([expect.objectContaining({ kind: 'size', axis: 'd', value: 10 })]);
+    click(ed, [50, 25]); click(ed, [0.5, 30]);
+    expect(ed.dims[1]).toMatchObject({ kind: 'edge', side: 'left', axis: 'x', value: 40 });
+  });
+  it('matrices y simetría: vista previa sin cambiar nada y un solo paso de deshacer al aceptar', () => {
+    const ed = editor();
+    ed.setTool('circle'); click(ed, [10, 10]); click(ed, [12, 10]);
+    ed.setTool('select'); click(ed, [12, 10]);
+    expect(ed.previewOp({ kind: 'linear', n: 3, dx: 10, dy: 0 })).toBe(3);
+    expect(ed.entities).toHaveLength(1);
+    expect(ed.applyOp({ kind: 'linear', n: 3, dx: 10, dy: 0 })).toBe(3);
+    expect(ed.entities.map(e => e.cx)).toEqual([10, 20, 30, 40]);
+    ed.undoOne();
+    expect(ed.entities).toHaveLength(1);
+    expect(ed.selection).toHaveLength(0); // las copias ya no existen
+    click(ed, [12, 10]);
+    expect(ed.previewOp({ kind: 'circular', n: 4, cx: 20, cy: 10 })).toBe(3);
+    expect(ed.previewOp({ kind: 'mirror', axis: 'x', c: 45 })).toBe(1);
+  });
+  it('clic derecho termina la cadena de líneas y Enter repite el último comando', () => {
+    const ed = editor();
+    ed.setTool('line'); click(ed, [0, 0]); click(ed, [10, 0]); click(ed, [10, 10]);
+    expect(ed.endChain()).toBe(true);
+    expect(ed.entities[0].pts).toHaveLength(3);
+    expect(ed.endChain()).toBe(false);
+    ed.setTool('select');
+    expect(ed.lastTool).toBe('line');
+  });
+  it('estado del croquis: cuenta las figuras sin definir, sin las de construcción', () => {
+    const ed = editor();
+    ed.setTool('rect'); click(ed, [0, 0]); click(ed, [10, 10]);
+    ed.setTool('circle'); click(ed, [20, 20]); click(ed, [22, 20]);
+    ed.setConstruction(true); // el círculo recién hecho queda elegido
+    expect(ed.sketchState()).toEqual({ total: 1, under: 1 });
   });
 });

@@ -467,7 +467,7 @@ const sketch = createSketchEditor({
   onDimCreated: id => { state.pendingDim = id; drawOverlay(); },
   onStatus: ({ prompt, cursor, kind }) => {
     if (!$('skPrompt').classList.contains('err')) $('skPrompt').textContent = prompt;
-    $('skCursor').textContent = cursor ? `X ${cursor[0].toFixed(2)}  Y ${cursor[1].toFixed(2)}${kind && kind !== 'cuadrícula' ? `  · ${kind}` : ''}` : '';
+    $('hudXY').textContent = cursor ? `X ${cursor[0].toFixed(2)}  Y ${cursor[1].toFixed(2)}${kind && kind !== 'cuadrícula' ? `  · ${kind}` : ''}` : '';
   },
   css: v => getComputedStyle(document.documentElement).getPropertyValue(v).trim(),
 });
@@ -488,6 +488,7 @@ function drawOverlay() {
   octx.clearRect(0, 0, w / sc, h / sc);
   const X = x => v.ox + x * v.k, Y = y => v.oy + (v.H - y) * v.k;
   sketch.draw(octx, X, Y, v.k, v.W, v.H);
+  hudDefinition();
   drawCodeHighlight(X, Y, v.k);
   state.dims = currentDims();
   state.dimHits = state.dims ? drawDims(octx, state.dims.list, X, Y, css, state.dims.editable) : [];
@@ -569,7 +570,8 @@ let propsFor = null;
 function renderSketchProps2() {
   const list = sketch.selection, e = sketch.selected;
   $('skProps').hidden = !list.length;
-  $('skOps').hidden = !list.length;
+  $('consBtn').setAttribute('aria-pressed', String(!!list.length && list.every(x => x.construction)));
+  pmSync();
   if (!list.length) { propsFor = null; return; }
   // estado de definición: qué cotas le faltan (como el azul/negro de un croquis de CAD)
   const def = sketch.defined();
@@ -577,7 +579,7 @@ function renderSketchProps2() {
   const full = st.every(s => s.full), cons = list.every(x => x.construction);
   $('skState').textContent = cons ? 'Construcción: sirve de referencia y no se graba.'
     : full ? 'Completamente definida: todas sus medidas y su posición están acotadas.'
-      : list.length === 1 ? `Le falta: ${st[0].missing.join(', ')}. Toca una cota sugerida para fijarla.` : 'Algunas figuras todavía tienen medidas libres.';
+      : list.length === 1 ? `Insuficientemente definida. Falta: ${st[0].missing.join(', ')}. Toca una cota sugerida o usa Cota inteligente (D).` : 'Insuficientemente definidas: algunas figuras tienen medidas libres.';
   $('skState').className = `def-state ${cons ? 'cons' : full ? 'full' : 'under'}`;
   $('skCons').checked = cons;
   const sig = JSON.stringify(list) + JSON.stringify(sketch.dims);
@@ -585,12 +587,6 @@ function renderSketchProps2() {
   propsFor = sig;
   if (e) $('skTitle').textContent = renderSketchProps($('skFields'), e, patch => sketch.update(e.id, patch));
   else { $('skTitle').textContent = `${list.length} figuras`; $('skFields').textContent = ''; }
-  // centro sugerido para el patrón circular y la simetría: el de la selección
-  const b = sketch.selectionBox();
-  if (b && document.activeElement?.closest?.('#skOps') == null) {
-    $('pcCx').value = +((b[0] + b[2]) / 2).toFixed(2); $('pcCy').value = +((b[1] + b[3]) / 2).toFixed(2);
-    $('mirC').value = $('mirAxis').value === 'x' ? +b[2].toFixed(2) : +b[3].toFixed(2);
-  }
 }
 /** ¿El elemento viene de esa figura del croquis (como exterior o como hueco)? */
 const hasEntity = (x, id) => x.src === 'sketch' && (x.sketchId === id || new RegExp(`"id":${id}[,}]`).test(x.sig));
@@ -602,15 +598,16 @@ function syncSketchSelection() {
   state.selected = i;
 }
 function setTool(t) {
+  if (t !== 'select') pmClose();
   sketch.setTool(t);
-  document.querySelectorAll('#skTools button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === t)));
+  document.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === t)));
   $('skSidesLbl').hidden = t !== 'poly';
-  $('sketchbar').hidden = t === 'select';
+  $('sketchbar').classList.toggle('idle', t === 'select');
   $('sketchbar').classList.toggle('dimmode', t === 'dim');
   $('skPrompt').classList.remove('err');
   if (t !== 'select') { state.selected = -1; renderAll(); } else $('empty').hidden = !state.ready || state.elements.length > 0;
 }
-document.querySelectorAll('#skTools button').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
+document.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
 $('skGrid').addEventListener('change', () => sketch.setOptions({ grid: +$('skGrid').value }));
 $('skSnap').addEventListener('change', () => sketch.setOptions({ snap: $('skSnap').checked }));
 $('skSides').addEventListener('change', () => sketch.setOptions({ sides: Math.min(64, Math.max(3, Math.round(num('skSides', 6)))) }));
@@ -618,12 +615,85 @@ $('skUndo').addEventListener('click', () => sketch.undoOne());
 $('skRedo').addEventListener('click', () => sketch.redoOne());
 $('skDel').addEventListener('click', () => { const l = sketch.selection; if (l.length) sketch.removeMany(l.map(x => x.id)); });
 $('skCons').addEventListener('change', () => sketch.setConstruction($('skCons').checked));
+/** Construcción (Q): alterna la selección entre geometría que se graba y de referencia. */
+function toggleConstruction() {
+  const list = sketch.selection;
+  if (!list.length) { $('toast').textContent = 'Elige primero las figuras que serán de construcción.'; return; }
+  sketch.setConstruction(!list.every(x => x.construction));
+}
+$('consBtn').addEventListener('click', toggleConstruction);
+
+/* ---------- PropertyManager: simetría y matrices con vista previa, Aceptar y Cancelar ---------- */
+const PM_TITLE = { mirror: 'Simetría de entidades', linear: 'Matriz lineal de croquis', circular: 'Matriz circular de croquis' };
+const pm = { op: null, selSig: '' };
 const opNum = (id, def) => { const v = parseFloat(String($(id).value).replace(',', '.')); return Number.isFinite(v) ? v : def; };
-const opDone = n => { $('toast').textContent = n ? `Se agregaron ${n} figura${n > 1 ? 's' : ''}.` : 'Elige primero las figuras a repetir.'; };
-$('plGo').addEventListener('click', () => opDone(sketch.linear(Math.max(1, Math.round(opNum('plN', 3))), opNum('plDx', 10), opNum('plDy', 0))));
-$('pcGo').addEventListener('click', () => opDone(sketch.circular(Math.max(2, Math.round(opNum('pcN', 6))), opNum('pcCx', 45), opNum('pcCy', 25), opNum('pcA', 360))));
-$('mirGo').addEventListener('click', () => opDone(sketch.mirror($('mirAxis').value, opNum('mirC', 45))));
-$('mirAxis').addEventListener('change', () => { const b = sketch.selectionBox(); if (b) $('mirC').value = $('mirAxis').value === 'x' ? +b[2].toFixed(2) : +b[3].toFixed(2); });
+/** La operación tal como está en los campos. */
+function pmOp() {
+  if (pm.op === 'linear') return { kind: 'linear', n: Math.min(200, Math.max(1, Math.round(opNum('plN', 3)))), dx: opNum('plDx', 10), dy: opNum('plDy', 0) };
+  if (pm.op === 'circular') return { kind: 'circular', n: Math.min(360, Math.max(2, Math.round(opNum('pcN', 6)))), cx: opNum('pcCx', 45), cy: opNum('pcCy', 25), total: Math.min(360, Math.max(1, opNum('pcA', 360))) };
+  return { kind: 'mirror', axis: $('mirAxis').value, c: opNum('mirC', 45) };
+}
+/** Centro de la matriz circular y eje de simetría sugeridos: los de la selección (a la derecha / arriba de ella). */
+function pmDefaults() {
+  const b = sketch.selectionBox();
+  if (!b) return;
+  $('pcCx').value = +((b[0] + b[2]) / 2).toFixed(2); $('pcCy').value = +((b[1] + b[3]) / 2).toFixed(2);
+  $('mirC').value = $('mirAxis').value === 'x' ? +b[2].toFixed(2) : +b[3].toFixed(2);
+}
+function pmPreview() {
+  const n = sketch.selection.length;
+  $('pmSel').textContent = n ? `Entidades: ${n} seleccionada${n > 1 ? 's' : ''}. Toca otras en la pieza para cambiarlas (Shift suma).` : 'Entidades: ninguna. Toca en la pieza las figuras que quieres usar (Shift suma).';
+  $('pmSel').classList.toggle('err', !n);
+  $('pmOk').disabled = !n;
+  sketch.previewOp(n ? pmOp() : null);
+}
+function pmOpen(op) {
+  if (sketch.tool !== 'select') setTool('select');
+  pm.op = op; pm.selSig = '';
+  $('pm').hidden = false; $('pmTitle').textContent = PM_TITLE[op];
+  document.querySelectorAll('[data-pm]').forEach(d => { d.hidden = d.dataset.pm !== op; });
+  document.querySelectorAll('[data-op]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.op === op)));
+  showTab(false);
+  pmSync();
+}
+function pmClose() {
+  if (!pm.op) return;
+  pm.op = null;
+  $('pm').hidden = true;
+  document.querySelectorAll('[data-op]').forEach(b => b.setAttribute('aria-pressed', 'false'));
+  sketch.previewOp(null);
+}
+/** Si cambió la selección con el PropertyManager abierto, vuelve a proponer centros y a dibujar la vista previa. */
+function pmSync() {
+  if (!pm.op) return;
+  const sig = sketch.selection.map(x => x.id).join();
+  if (sig === pm.selSig) return;
+  pm.selSig = sig;
+  pmDefaults(); pmPreview();
+}
+function pmAccept() {
+  if (!pm.op || !sketch.selection.length) return;
+  const op = pmOp();
+  pmClose();
+  const n = sketch.applyOp(op);
+  $('toast').textContent = n ? `Se agregaron ${n} figura${n > 1 ? 's' : ''}.` : 'No se agregó nada.';
+}
+document.querySelectorAll('[data-op]').forEach(b => b.addEventListener('click', () => (pm.op === b.dataset.op ? pmClose() : pmOpen(b.dataset.op))));
+$('pmOk').addEventListener('click', pmAccept);
+$('pmCancel').addEventListener('click', pmClose);
+$('pm').addEventListener('input', pmPreview);
+$('mirAxis').addEventListener('change', () => { pmDefaults(); pmPreview(); });
+$('pm').addEventListener('keydown', ev => {
+  if (ev.key === 'Enter') { ev.preventDefault(); pmAccept(); } else if (ev.key === 'Escape') { ev.preventDefault(); pmClose(); }
+});
+
+/* ---------- barra de estado: definición del croquis ---------- */
+function hudDefinition() {
+  const { total, under } = sketch.sketchState();
+  const el = $('hudDef');
+  el.textContent = !total ? '' : under ? `Insuficientemente definido (${under} de ${total})` : 'Completamente definido';
+  el.className = !total ? '' : under ? 'under' : 'full';
+}
 $('skDup').addEventListener('click', () => { if (copySelection(true)) paste(true); });
 $('skInput').addEventListener('keydown', ev => {
   if (ev.key === 'Enter') {
@@ -636,6 +706,9 @@ $('skInput').addEventListener('keydown', ev => {
 $('skInput').addEventListener('input', () => { if ($('skPrompt').classList.contains('err')) { $('skPrompt').classList.remove('err'); sketch.refreshStatus(); } });
 // atajos: herramientas con una letra, Esc/Enter/Supr y deshacer, salvo mientras se escribe en un campo
 const TOOL_KEYS = { v: 'select', l: 'line', r: 'rect', c: 'circle', a: 'arc', p: 'poly', s: 'slot', d: 'dim' };
+/** Vuelve a dibujar todo tras cambiar el zoom (la simulación se repinta desde cero). */
+let navRaf = 0;
+function redrawView() { if (navRaf) return; navRaf = requestAnimationFrame(() => { navRaf = 0; sim.drawnT = 0; drawOnly(); }); }
 document.addEventListener('keydown', ev => {
   const t = ev.target;
   if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
@@ -661,7 +734,14 @@ document.addEventListener('keydown', ev => {
     return;
   }
   if ((k === 'delete' || k === 'backspace') && sketch.tool === 'select' && !sketch.selected && state.selected >= 0) { ev.preventDefault(); deleteSelection(); return; }
+  if (k === 'r' && ev.shiftKey) { setTool('crect'); return; }
   if (TOOL_KEYS[k] && !ev.shiftKey) { setTool(TOOL_KEYS[k]); return; }
+  if (k === 'q' && !ev.shiftKey) { toggleConstruction(); return; }
+  if (k === 'f' && !ev.shiftKey) { if (preview.fit()) redrawView(); return; }
+  if (pm.op && ev.key === 'Escape') { ev.preventDefault(); pmClose(); return; }
+  if (pm.op && ev.key === 'Enter') { ev.preventDefault(); pmAccept(); return; }
+  // Enter sin nada en curso repite el último comando, como en un CAD
+  if (ev.key === 'Enter' && t?.tagName !== 'BUTTON' && sketch.tool === 'select' && !sketch.busy) { ev.preventDefault(); setTool(sketch.lastTool); return; }
   if (k === 't' && !ev.shiftKey) { ev.preventDefault(); openText(); return; }
   if (sketch.key(ev.key)) { ev.preventDefault(); if (sketch.tool === 'select') setTool('select'); }
 });
@@ -730,7 +810,24 @@ const evMM = ev => { const r = cv.getBoundingClientRect(); return { mx: ev.clien
 /** Captura el puntero para seguir el arrastre fuera del lienzo (sin fallar si el navegador no lo permite). */
 const capture = ev => { try { cv.setPointerCapture(ev.pointerId); } catch { /* puntero ya liberado */ } };
 const pickTol = () => 8 / preview.getView().k; // 8 px en mm
+// navegación como en un CAD: rueda = zoom en el cursor, botón central (o Espacio + arrastrar) = desplazar, F = ajustar
+let panning = null, spaceHeld = false;
+cv.addEventListener('wheel', ev => {
+  ev.preventDefault();
+  const { mx, my } = evMM(ev);
+  if (preview.zoomAt(mx, my, Math.exp(-Math.max(-60, Math.min(60, ev.deltaY)) * 0.004))) redrawView();
+}, { passive: false });
+const zoomCenter = f => { if (preview.zoomAt(cv.clientWidth / 2, cv.clientHeight / 2, f)) redrawView(); };
+$('zoomIn').addEventListener('click', () => zoomCenter(1.5));
+$('zoomOut').addEventListener('click', () => zoomCenter(1 / 1.5));
+$('zoomFit').addEventListener('click', () => { if (preview.fit()) redrawView(); });
+const typing = t => t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.tagName === 'BUTTON' || t.isContentEditable);
+document.addEventListener('keydown', ev => { if (ev.key === ' ' && !typing(ev.target) && !document.querySelector('dialog[open]')) { ev.preventDefault(); spaceHeld = true; cv.classList.add('grab'); } });
+document.addEventListener('keyup', ev => { if (ev.key === ' ') { spaceHeld = false; cv.classList.remove('grab'); } });
 cv.addEventListener('pointerdown', ev => {
+  if (ev.button === 1 || (ev.button === 0 && spaceHeld)) { ev.preventDefault(); panning = { x: ev.clientX, y: ev.clientY }; capture(ev); return; }
+  if (ev.button !== 0) return; // el derecho abre el menú contextual
+  ctxClose();
   const { mx, my } = evMM(ev);
   const mm = preview.toMM(mx, my);
   const sx = (preview.getView().cssW || cv.clientWidth) / (cv.clientWidth || 1); // lienzo estirado mientras no se redibuja
@@ -754,6 +851,11 @@ cv.addEventListener('pointerdown', ev => {
   if (i >= 0) document.querySelector(`.el[data-i="${i}"]`)?.scrollIntoView({ block: 'nearest' });
 });
 cv.addEventListener('pointermove', ev => {
+  if (panning) {
+    if (preview.pan(ev.clientX - panning.x, ev.clientY - panning.y)) redrawView();
+    panning.x = ev.clientX; panning.y = ev.clientY;
+    return;
+  }
   const { mx, my } = evMM(ev);
   const [x, y] = preview.toMM(mx, my);
   if (!drag) { sketch.move([x, y], pickTol()); return; }
@@ -766,6 +868,7 @@ cv.addEventListener('pointermove', ev => {
   drawOnly(true);
 });
 const endDrag = () => {
+  if (panning) { panning = null; return; }
   // un recuadro de selección termina eligiendo figuras del croquis
   if (sketch.up()) { syncSketchSelection(); if (!sketch.selected) state.selected = -1; renderAll(); }
   if (!drag) return;
@@ -777,6 +880,60 @@ cv.addEventListener('pointerup', endDrag);
 cv.addEventListener('pointercancel', endDrag);
 cv.addEventListener('pointerleave', () => { if (!drag) sketch.leave(); });
 cv.addEventListener('dblclick', () => sketch.dblclick());
+cv.addEventListener('auxclick', ev => { if (ev.button === 1) ev.preventDefault(); }); // sin desplazamiento automático del navegador
+
+/* ---------- menú contextual (clic derecho) ---------- */
+// mientras se dibuja, el clic derecho termina la cadena (o cancela lo que va a medias); si no, abre el menú
+const menu = $('ctxMenu');
+function ctxClose() { menu.hidden = true; }
+cv.addEventListener('contextmenu', ev => {
+  ev.preventDefault();
+  if (sketch.endChain()) return;
+  const { mx, my } = evMM(ev);
+  if (sketch.tool === 'select') {
+    // como en un CAD: el clic derecho sobre una figura no elegida la elige primero
+    const mm = preview.toMM(mx, my), hit = sketch.entities.length && sketch.down(mm, pickTol(), false);
+    sketch.up();
+    if (hit) { syncSketchSelection(); select(state.selected); renderAll(); }
+  }
+  const n = sketch.selection.length, has = n > 0 || state.selected >= 0;
+  const items = [];
+  if (sketch.tool !== 'select') items.push(['Seleccionar', 'Esc', () => setTool('select')]);
+  if (n) {
+    items.push(['Cota inteligente', 'D', () => setTool('dim')]);
+    items.push([sketch.selection.every(x => x.construction) ? 'Quitar construcción' : 'Para construcción', 'Q', toggleConstruction]);
+    items.push(null, ['Simetría…', '', () => pmOpen('mirror')], ['Matriz lineal…', '', () => pmOpen('linear')], ['Matriz circular…', '', () => pmOpen('circular')]);
+  }
+  if (has) items.push(null, ['Copiar', 'Ctrl+C', () => copySelection()], ['Cortar', 'Ctrl+X', () => { if (copySelection()) deleteSelection(); }], ['Duplicar', 'Ctrl+D', () => { if (copySelection(true)) paste(true); }]);
+  if (state.clip) items.push(...(has ? [] : [null]), ['Pegar', 'Ctrl+V', () => paste()]);
+  if (has) items.push(['Eliminar', 'Supr', deleteSelection]);
+  items.push(null);
+  if (sketch.entities.length) items.push(['Seleccionar todo', 'Ctrl+A', () => { setTool('select'); sketch.selectMany(sketch.entities.map(x => x.id)); state.selected = -1; renderAll(); }]);
+  items.push(['Zoom para ajustar', 'F', () => { if (preview.fit()) redrawView(); }]);
+  menu.textContent = '';
+  items.forEach((it, i) => {
+    if (!it) { if (i && items[i - 1] && i < items.length - 1) menu.append(Object.assign(document.createElement('hr'), { role: 'separator' })); return; }
+    const b = document.createElement('button');
+    b.type = 'button'; b.setAttribute('role', 'menuitem');
+    b.innerHTML = '<span></span><kbd></kbd>';
+    b.firstChild.textContent = it[0]; b.lastChild.textContent = it[1];
+    b.addEventListener('click', () => { ctxClose(); it[2](); });
+    menu.append(b);
+  });
+  // dentro del lienzo, sin salirse por la derecha ni por abajo
+  menu.hidden = false;
+  const st = $('stage').getBoundingClientRect(), r = cv.getBoundingClientRect();
+  const x = r.left - st.left + mx, y = r.top - st.top + my;
+  menu.style.left = Math.max(4, Math.min(x, st.width - menu.offsetWidth - 4)) + 'px';
+  menu.style.top = Math.max(4, Math.min(y, st.height - menu.offsetHeight - 4)) + 'px';
+  menu.querySelector('button')?.focus();
+});
+menu.addEventListener('keydown', ev => {
+  const bs = [...menu.querySelectorAll('button')], i = bs.indexOf(document.activeElement);
+  if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); ctxClose(); cv.focus?.(); }
+  else if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') { ev.preventDefault(); bs[(i + (ev.key === 'ArrowDown' ? 1 : bs.length - 1)) % bs.length]?.focus(); }
+});
+document.addEventListener('pointerdown', ev => { if (!menu.hidden && !menu.contains(ev.target)) ctxClose(); });
 let rt;
 window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { drawOnly(); drawImgView(); }, 120); });
 // también cuando cambia el ancho sin que la ventana cambie (panel que se abre, ventana oculta que vuelve)

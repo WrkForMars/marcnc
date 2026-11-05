@@ -26,6 +26,15 @@
   <symbol id="i-poly" viewBox="0 0 24 24"><path d="M12 3l8 5v8l-8 5-8-5V8z"/></symbol>
   <symbol id="i-slot" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="8" rx="4"/><path d="M7 12h.01M17 12h.01"/></symbol>
   <symbol id="i-dim" viewBox="0 0 24 24"><path d="M4 7v10M20 7v10M4 12h16"/><path d="M7 9l-3 3 3 3M17 9l3 3-3 3"/></symbol>
+  <symbol id="i-crect" viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="1"/><path d="M10 12h4M12 10v4"/></symbol>
+  <symbol id="i-mirror" viewBox="0 0 24 24"><path d="M12 3v18" stroke-dasharray="2 2"/><path d="M9 7 4 17h5zM15 7l5 10h-5z"/></symbol>
+  <symbol id="i-plin" viewBox="0 0 24 24"><rect x="3" y="9" width="5" height="6" rx="1"/><rect x="10" y="9" width="5" height="6" rx="1"/><rect x="17" y="9" width="4" height="6" rx="1"/></symbol>
+  <symbol id="i-pcirc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" stroke-dasharray="2 3"/><circle cx="12" cy="5" r="1.5"/><circle cx="18.1" cy="15.5" r="1.5"/><circle cx="5.9" cy="15.5" r="1.5"/></symbol>
+  <symbol id="i-cons" viewBox="0 0 24 24"><path d="M4 20 20 4" stroke-dasharray="4 2 1 2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+  <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
   <symbol id="i-text" viewBox="0 0 24 24"><path d="M5 6V4h14v2M12 4v16M9 20h6"/></symbol>
   <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
   <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></symbol>
@@ -56,6 +65,9 @@
   </div>
   <label class="doc"><span class="sr-only">Nombre del proyecto</span><input type="text" id="docName" class="doc-name" placeholder="Sin título" maxlength="60" spellcheck="false" autocomplete="off"></label>
   <div class="actions">
+    <button type="button" id="skUndo" class="icon ghost" aria-label="Deshacer (Ctrl+Z)" title="Deshacer (Ctrl+Z)"><svg class="i"><use href="#i-undo"/></svg></button>
+    <button type="button" id="skRedo" class="icon ghost" aria-label="Rehacer (Ctrl+Y)" title="Rehacer (Ctrl+Y)"><svg class="i"><use href="#i-redo"/></svg></button>
+    <span class="sep" aria-hidden="true"></span>
     <button id="clear" type="button" class="ghost" title="Pieza vacía"><svg class="i"><use href="#i-new"/></svg><span class="lbl">Nuevo</span></button>
     <label class="btn ghost" title="Abrir SVG o imagen (Ctrl+O)"><svg class="i"><use href="#i-open"/></svg><span class="lbl">Abrir</span><input type="file" id="file" accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp"></label>
     <button id="demo" type="button" class="ghost">Ejemplo</button>
@@ -69,22 +81,26 @@
 <div class="app">
   <!-- herramientas de dibujo -->
   <nav class="rail" aria-label="Herramientas">
+    <!-- mismo orden que la pestaña Croquis de un CAD: seleccionar y cotas, entidades, y herramientas sobre la selección -->
     <div class="rail-group" id="skTools">
-      <button type="button" data-tool="select" aria-pressed="true" title="Seleccionar y mover (V)"><svg class="i"><use href="#i-select"/></svg><span>Mover</span></button>
+      <button type="button" data-tool="select" aria-pressed="true" title="Seleccionar (V o Esc)"><svg class="i"><use href="#i-select"/></svg><span>Seleccionar</span></button>
+      <button type="button" data-tool="dim" aria-pressed="false" title="Cota inteligente: tamaño, al borde o entre figuras (D)"><svg class="i"><use href="#i-dim"/></svg><span>Cota inteligente</span></button>
+    </div>
+    <div class="rail-group" id="skEntities" aria-label="Entidades de croquis">
       <button type="button" data-tool="line" aria-pressed="false" title="Línea (L)"><svg class="i"><use href="#i-line"/></svg><span>Línea</span></button>
-      <button type="button" data-tool="rect" aria-pressed="false" title="Rectángulo (R)"><svg class="i"><use href="#i-rect"/></svg><span>Rect.</span></button>
+      <button type="button" data-tool="rect" aria-pressed="false" title="Rectángulo de esquina (R)"><svg class="i"><use href="#i-rect"/></svg><span>Rect. esquina</span></button>
+      <button type="button" data-tool="crect" aria-pressed="false" title="Rectángulo de centro (Shift+R)"><svg class="i"><use href="#i-crect"/></svg><span>Rect. centro</span></button>
+      <button type="button" data-tool="slot" aria-pressed="false" title="Ranura recta (S)"><svg class="i"><use href="#i-slot"/></svg><span>Ranura</span></button>
       <button type="button" data-tool="circle" aria-pressed="false" title="Círculo (C)"><svg class="i"><use href="#i-circle"/></svg><span>Círculo</span></button>
-      <button type="button" data-tool="arc" aria-pressed="false" title="Arco (A)"><svg class="i"><use href="#i-arc"/></svg><span>Arco</span></button>
+      <button type="button" data-tool="arc" aria-pressed="false" title="Arco centro-extremos (A)"><svg class="i"><use href="#i-arc"/></svg><span>Arco</span></button>
       <button type="button" data-tool="poly" aria-pressed="false" title="Polígono (P)"><svg class="i"><use href="#i-poly"/></svg><span>Polígono</span></button>
-      <button type="button" data-tool="slot" aria-pressed="false" title="Ranura (S)"><svg class="i"><use href="#i-slot"/></svg><span>Ranura</span></button>
-      <button type="button" data-tool="dim" aria-pressed="false" title="Cota: tamaño, al borde o entre figuras (D)"><svg class="i"><use href="#i-dim"/></svg><span>Cota</span></button>
+      <button type="button" id="textTool" title="Texto (T)"><svg class="i"><use href="#i-text"/></svg><span>Texto</span></button>
     </div>
-    <div class="rail-group">
-      <button type="button" id="textTool" title="Agregar texto (T)"><svg class="i"><use href="#i-text"/></svg><span>Texto</span></button>
-    </div>
-    <div class="rail-group rail-end">
-      <button type="button" id="skUndo" aria-label="Deshacer (Ctrl+Z)" title="Deshacer (Ctrl+Z)"><svg class="i"><use href="#i-undo"/></svg><span>Deshacer</span></button>
-      <button type="button" id="skRedo" aria-label="Rehacer (Ctrl+Y)" title="Rehacer (Ctrl+Y)"><svg class="i"><use href="#i-redo"/></svg><span>Rehacer</span></button>
+    <div class="rail-group" id="skOpsBar" aria-label="Herramientas de croquis">
+      <button type="button" data-op="mirror" aria-pressed="false" title="Simetría de entidades"><svg class="i"><use href="#i-mirror"/></svg><span>Simetría</span></button>
+      <button type="button" data-op="linear" aria-pressed="false" title="Matriz lineal de croquis"><svg class="i"><use href="#i-plin"/></svg><span>Matriz lineal</span></button>
+      <button type="button" data-op="circular" aria-pressed="false" title="Matriz circular de croquis"><svg class="i"><use href="#i-pcirc"/></svg><span>Matriz circular</span></button>
+      <button type="button" id="consBtn" aria-pressed="false" title="Geometría de construcción: la selección sirve de referencia y no se graba (Q)"><svg class="i"><use href="#i-cons"/></svg><span>Construcción</span></button>
     </div>
   </nav>
 
@@ -100,12 +116,13 @@
       <label class="check spec-end"><input type="checkbox" id="showPath"> Ver recorrido</label>
     </div>
 
-    <div class="sketchbar" id="sketchbar" hidden>
-      <label class="sk-coord"><span>Coordenada o medida</span><input type="text" id="skInput" placeholder="x y  ·  @dx dy  ·  @d&lt;ángulo" autocomplete="off" spellcheck="false"></label>
-      <label id="skSidesLbl" class="sk-small" hidden><span>Lados</span><input type="number" id="skSides" value="6" min="3" max="64" step="1"></label>
-      <label class="sk-small"><span>Cuadrícula</span><select id="skGrid"><option value="0.5">0.5 mm</option><option value="1" selected>1 mm</option><option value="2">2 mm</option><option value="5">5 mm</option><option value="10">10 mm</option></select></label>
-      <label class="check"><input type="checkbox" id="skSnap" checked> Imán</label>
-      <p class="sk-status"><span id="skPrompt" role="status"></span><span id="skCursor"></span></p>
+    <!-- una sola fila de alto fijo: al cambiar de herramienta la pieza no se mueve bajo el cursor -->
+    <div class="sketchbar idle" id="sketchbar">
+      <p class="sk-status"><span id="skPrompt" role="status"></span></p>
+      <label class="sk-coord sk-ctl"><span class="sr-only">Coordenada o medida</span><input type="text" id="skInput" placeholder="x y · @dx dy · @d&lt;ángulo" autocomplete="off" spellcheck="false" title="Escribe una coordenada (x y), un desplazamiento (@dx dy), una distancia con ángulo (@d&lt;ángulo) o una medida, y Enter"></label>
+      <label id="skSidesLbl" class="sk-small sk-ctl" hidden><span>Lados</span><input type="number" id="skSides" value="6" min="3" max="64" step="1"></label>
+      <label class="sk-small sk-ctl sk-grid"><span>Cuadrícula</span><select id="skGrid"><option value="0.5">0.5 mm</option><option value="1" selected>1 mm</option><option value="2">2 mm</option><option value="5">5 mm</option><option value="10">10 mm</option></select></label>
+      <label class="check sk-ctl"><input type="checkbox" id="skSnap" checked> Imán</label>
     </div>
 
     <div class="stage" id="stage">
@@ -122,6 +139,16 @@
           <button type="button" id="emptyDemo" class="ghost">Ver un ejemplo</button>
         </div>
       </div>
+      <!-- barra de estado del croquis: zoom a la izquierda, coordenadas y definición a la derecha -->
+      <div class="hud">
+        <div class="zoom" role="group" aria-label="Vista">
+          <button type="button" id="zoomOut" class="icon" aria-label="Alejar" title="Alejar (rueda del ratón)"><svg class="i"><use href="#i-minus"/></svg></button>
+          <button type="button" id="zoomIn" class="icon" aria-label="Acercar" title="Acercar (rueda del ratón)"><svg class="i"><use href="#i-plus"/></svg></button>
+          <button type="button" id="zoomFit" class="icon" aria-label="Zoom para ajustar (F)" title="Zoom para ajustar (F) · botón central o Espacio + arrastrar para desplazar"><svg class="i"><use href="#i-fit"/></svg></button>
+        </div>
+        <p class="hud-status"><span id="hudXY"></span><span id="hudDef"></span><span>mm</span></p>
+      </div>
+      <div class="ctxmenu" id="ctxMenu" role="menu" hidden></div>
       <div class="busy" id="busy" hidden><span id="busyText">Procesando…</span></div>
       <div class="drop" id="drop" hidden><svg class="i"><use href="#i-open"/></svg>Suelta el archivo para abrirlo</div>
     </div>
@@ -147,50 +174,48 @@
     </div>
 
     <section class="tabpanel" id="tabFig" role="tabpanel" aria-labelledby="tabFigBtn">
+      <!-- PropertyManager de la herramienta activa: parámetros, vista previa y Aceptar / Cancelar -->
+      <div class="panel pm" id="pm" hidden>
+        <div class="panel-head"><h3 id="pmTitle">Simetría</h3>
+          <div class="actions">
+            <button type="button" id="pmOk" class="icon primary" aria-label="Aceptar (Enter)" title="Aceptar (Enter)"><svg class="i"><use href="#i-check"/></svg></button>
+            <button type="button" id="pmCancel" class="icon ghost" aria-label="Cancelar (Esc)" title="Cancelar (Esc)"><svg class="i"><use href="#i-close"/></svg></button>
+          </div>
+        </div>
+        <p class="pm-sel" id="pmSel" role="status"></p>
+        <div class="params" data-pm="linear">
+          <label>Copias<input type="number" id="plN" value="3" min="1" max="200" step="1"></label>
+          <span></span>
+          <label>Paso X (mm)<input type="number" id="plDx" value="10" step="0.5"></label>
+          <label>Paso Y (mm)<input type="number" id="plDy" value="0" step="0.5"></label>
+        </div>
+        <div class="params" data-pm="circular">
+          <label>Total de instancias<input type="number" id="pcN" value="6" min="2" max="360" step="1"></label>
+          <label>Ángulo total (°)<input type="number" id="pcA" value="360" min="1" max="360" step="5"></label>
+          <label>Centro X (mm)<input type="number" id="pcCx" value="45" step="0.5"></label>
+          <label>Centro Y (mm)<input type="number" id="pcCy" value="25" step="0.5"></label>
+        </div>
+        <div class="params" data-pm="mirror">
+          <label>Eje<select id="mirAxis"><option value="x">Vertical (x = …)</option><option value="y">Horizontal (y = …)</option></select></label>
+          <label>Posición (mm)<input type="number" id="mirC" value="45" step="0.5"></label>
+        </div>
+        <p class="hint">La vista previa va punteada. Enter acepta, Esc cancela.</p>
+      </div>
+
       <!-- figura del croquis seleccionada -->
       <div class="panel" id="skProps" hidden>
         <div class="panel-head"><h3 id="skTitle">Figura</h3>
           <div class="actions">
-            <button type="button" id="skDup" class="icon ghost" aria-label="Duplicar" title="Duplicar"><svg class="i"><use href="#i-dup"/></svg></button>
-            <button type="button" id="skDel" class="icon ghost" aria-label="Eliminar" title="Eliminar (Supr)"><svg class="i"><use href="#i-del"/></svg></button>
+            <button type="button" id="skDup" class="icon ghost" aria-label="Duplicar (Ctrl+D)" title="Duplicar (Ctrl+D)"><svg class="i"><use href="#i-dup"/></svg></button>
+            <button type="button" id="skDel" class="icon ghost" aria-label="Eliminar (Supr)" title="Eliminar (Supr)"><svg class="i"><use href="#i-del"/></svg></button>
           </div>
         </div>
         <p class="def-state" id="skState" role="status"></p>
+        <h4 class="pm-sec">Parámetros</h4>
         <div class="params" id="skFields"></div>
-        <p class="hint">Azul: le faltan cotas · Negro: completamente definida · Punteado: construcción. Medidas en mm desde la esquina inferior izquierda; ángulos antihorario desde la derecha.</p>
-      </div>
-
-      <!-- operaciones sobre la selección -->
-      <div class="panel" id="skOps" hidden>
-        <label class="check"><input type="checkbox" id="skCons"> Geometría de construcción (referencia, no se graba)</label>
-        <details class="more">
-          <summary>Patrón lineal</summary>
-          <div class="params">
-            <label>Copias<input type="number" id="plN" value="3" min="1" max="200" step="1"></label>
-            <span></span>
-            <label>Paso X (mm)<input type="number" id="plDx" value="10" step="0.5"></label>
-            <label>Paso Y (mm)<input type="number" id="plDy" value="0" step="0.5"></label>
-          </div>
-          <button type="button" id="plGo" class="primary-soft">Repetir</button>
-        </details>
-        <details class="more">
-          <summary>Patrón circular</summary>
-          <div class="params">
-            <label>Total de piezas<input type="number" id="pcN" value="6" min="2" max="360" step="1"></label>
-            <label>Ángulo total (°)<input type="number" id="pcA" value="360" min="1" max="360" step="5"></label>
-            <label>Centro X (mm)<input type="number" id="pcCx" value="45" step="0.5"></label>
-            <label>Centro Y (mm)<input type="number" id="pcCy" value="25" step="0.5"></label>
-          </div>
-          <button type="button" id="pcGo" class="primary-soft">Repetir alrededor</button>
-        </details>
-        <details class="more">
-          <summary>Simetría</summary>
-          <div class="params">
-            <label>Eje<select id="mirAxis"><option value="x">Vertical (x = …)</option><option value="y">Horizontal (y = …)</option></select></label>
-            <label>Posición (mm)<input type="number" id="mirC" value="45" step="0.5"></label>
-          </div>
-          <button type="button" id="mirGo" class="primary-soft">Reflejar copia</button>
-        </details>
+        <h4 class="pm-sec">Opciones</h4>
+        <label class="check"><input type="checkbox" id="skCons"> Para construcción (referencia, no se graba)</label>
+        <p class="hint">Azul: insuficientemente definida · Negro: completamente definida · Punteada: construcción. Medidas en mm desde el origen (esquina inferior izquierda); ángulos antihorario desde la derecha.</p>
       </div>
 
       <!-- texto: aparece con la herramienta Texto o al elegir un texto -->

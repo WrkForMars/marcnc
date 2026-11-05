@@ -22,7 +22,9 @@ export function bbox(e) {
 
 export function createPreview(cv) {
   const ctx = cv.getContext('2d');
-  let view = { k: 1, ox: 0, oy: 0, W: 90, H: 50 };
+  let view = { k: 1, ox: 0, oy: 0, W: 90, H: 50, ox0: 0, oy0: 0 };
+  // zoom y desplazamiento sobre el encuadre que ajusta la pieza (z = 1: pieza completa)
+  const nav = { z: 1, px: 0, py: 0, W: 0, H: 0 };
 
   // si el lienzo cambió de ancho y todavía no se vuelve a dibujar, se ve escalado (sin deformarse): se corrige aquí
   const toMM = (mx, my) => {
@@ -40,14 +42,16 @@ export function createPreview(cv) {
     // márgenes para las reglas (abajo y a la izquierda, donde está el cero) y altura máxima para piezas altas
     const cssW = cv.clientWidth || 900, pL = 40, pR = 12, pT = 12, pB = 32;
     const maxH = Math.max(240, (window.innerHeight || 800) * 0.62);
-    const k = Math.min((cssW - pL - pR) / W, (maxH - pT - pB) / H), cssH = H * k + pT + pB;
-    const ox = pL + Math.max(0, (cssW - pL - pR - W * k) / 2);
+    const k0 = Math.min((cssW - pL - pR) / W, (maxH - pT - pB) / H), cssH = H * k0 + pT + pB;
+    const ox0 = pL + Math.max(0, (cssW - pL - pR - W * k0) / 2);
+    if (W !== nav.W || H !== nav.H) { nav.z = 1; nav.px = nav.py = 0; nav.W = W; nav.H = H; } // pieza nueva: vista completa
+    const k = k0 * nav.z, ox = ox0 + nav.px, oy = pT + nav.py;
     if (cv.width !== Math.round(cssW * dpr) || cv.height !== Math.round(cssH * dpr)) {
       cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr); // alto automático: conserva la proporción
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    view = { k, ox, oy: pT, W, H, cssW };
-    const X = x => ox + x * k, Y = y => pT + (H - y) * k;
+    view = { k, ox, oy, W, H, cssW, ox0, oy0: pT };
+    const X = x => ox + x * k, Y = y => oy + (H - y) * k;
     ctx.clearRect(0, 0, cssW, cssH);
 
     // reglas en mm sobre el banco: marcas cada 1, 5 y 10 mm y números sin encimarse
@@ -181,5 +185,31 @@ export function createPreview(cv) {
   /** Escala actual: px por mm (k), desplazamiento y tamaño de la pieza, para dibujar capas encima. */
   const getView = () => view;
 
-  return { draw, hit, toMM, getView };
+  const cssScale = () => (view.cssW && cv.clientWidth ? view.cssW / cv.clientWidth : 1);
+  /**
+   * Acerca o aleja dejando fijo el punto bajo el cursor (como la rueda en un CAD). Se vuelve a dibujar después.
+   * @returns {boolean} si cambió
+   */
+  function zoomAt(mx, my, f) {
+    const s = cssScale(), x = mx * s, y = my * s;
+    const z = Math.min(50, Math.max(1, nav.z * f)), r = z / nav.z;
+    if (Math.abs(r - 1) < 1e-9) return false;
+    nav.z = z;
+    if (z === 1) { nav.px = nav.py = 0; return true; }
+    nav.px = x - (x - view.ox) * r - view.ox0;
+    nav.py = y - (y - view.oy) * r - view.oy0;
+    return true;
+  }
+  /** Desplaza la vista (px de pantalla); solo con zoom, la vista completa no se mueve. */
+  function pan(dx, dy) {
+    if (nav.z === 1) return false;
+    const s = cssScale();
+    nav.px += dx * s; nav.py += dy * s;
+    return true;
+  }
+  /** Zoom para ajustar: la pieza completa. @returns {boolean} si cambió */
+  function fit() { const was = nav.z !== 1; nav.z = 1; nav.px = nav.py = 0; return was; }
+  const zoom = () => nav.z;
+
+  return { draw, hit, toMM, getView, zoomAt, pan, fit, zoom };
 }
