@@ -35,15 +35,24 @@ export function fitArcs(pts, tol) {
           const ck = (pts[k + 1][0] - pts[k - 1][0]) * (pts[k][1] - pts[k - 1][1]) - (pts[k + 1][1] - pts[k - 1][1]) * (pts[k][0] - pts[k - 1][0]);
           if (ck * cr < -1e-12) ok = false;
         }
-        let sweep = 0;
+        // cada tramo entre vértices también debe quedar sobre el arco: las esquinas de un rectángulo caen en una
+        // circunferencia, pero sus lados rectos pasan lejos de ella (la flecha del arco sobre esa cuerda es grande).
+        // Se admite 2·tol: la polilínea ya se aparta hasta tol de la curva verdadera que aproxima.
+        for (let k = i; k < j && ok; k++) {
+          const ch = Math.hypot(pts[k + 1][0] - pts[k][0], pts[k + 1][1] - pts[k][1]);
+          if (c[2] - Math.sqrt(Math.max(0, c[2] * c[2] - ch * ch / 4)) > 2 * tol) ok = false;
+        }
+        let sweep = 0, pos = false, neg = false;
         for (let k = i; k < j; k++) {
           const a1 = Math.atan2(pts[k][1] - c[1], pts[k][0] - c[0]);
           const a2 = Math.atan2(pts[k + 1][1] - c[1], pts[k + 1][0] - c[0]);
           let da = a2 - a1;
           while (da > Math.PI) da -= 2 * Math.PI;
           while (da < -Math.PI) da += 2 * Math.PI;
+          if (da > 0) pos = true; else if (da < 0) neg = true;
           sweep += da;
         }
+        if (pos && neg) ok = false; // el recorrido debe avanzar siempre en el mismo sentido alrededor del centro
         if (!ok || Math.abs(sweep) > Math.PI * 1.9) break;
         best = { j, c, ccw: sweep > 0 };
         j++;

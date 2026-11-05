@@ -51,6 +51,29 @@ describe('fitArcs', () => {
     expect(moves.every(m => !m.arc)).toBe(true);
   });
 
+  it('no convierte un rectángulo en círculo aunque sus esquinas caigan en una circunferencia', () => {
+    // las 4 esquinas están exactamente sobre el círculo de centro (5, 5); los lados rectos no
+    const sq = [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]];
+    expect(fitArcs(sq, 0.05).every(m => !m.arc)).toBe(true);
+    // orilla recta larga de un contorno redondeado: tampoco se vuelve un arco grande que sale de la pieza
+    const loop = [...circlePts(50, 10, 2, -Math.PI / 2, 0, 6), ...circlePts(50, 30, 2, 0, Math.PI / 2, 6).slice(0), ...circlePts(10, 30, 2, Math.PI / 2, Math.PI, 6), ...circlePts(10, 10, 2, Math.PI, 1.5 * Math.PI, 6)];
+    fitArcs(loop, 0.05).filter(m => m.arc).forEach(m => expect(m.c[2]).toBeLessThan(3)); // solo las esquinas (r = 2)
+  });
+
+  it('cada arco queda cerca de la polilínea original también entre vértices (a 2·tol: la polilínea ya aproxima la curva)', () => {
+    const pts = [...circlePts(0, 0, 20, 0, Math.PI / 3, 3), [30, 30], [40, 25]];
+    const tol = 0.05;
+    let i = 0;
+    fitArcs(pts, tol).forEach(m => {
+      const j = pts.indexOf(m.to);
+      if (m.arc) for (let k = i; k < j; k++) {
+        const ch = Math.hypot(pts[k + 1][0] - pts[k][0], pts[k + 1][1] - pts[k][1]);
+        expect(m.c[2] - Math.sqrt(m.c[2] ** 2 - ch * ch / 4)).toBeLessThanOrEqual(2 * tol);
+      }
+      i = j;
+    });
+  });
+
   it('no cruza un punto de inflexión con un solo arco', () => {
     const s = [...circlePts(0, 0, 5, Math.PI, Math.PI / 2, 12), ...circlePts(0, 10, 5, -Math.PI / 2, 0, 12).slice(1)];
     expect(fitArcs(s, 0.01).filter(m => m.arc).length).toBeGreaterThanOrEqual(2);
