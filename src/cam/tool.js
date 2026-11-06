@@ -20,7 +20,11 @@ export function toolGeometry(p) {
   const pct = Math.min(90, Math.max(10, +p.stepoverPct || 45)) / 100;
   return {
     w, r: w / 2, D, type: p.toolType, depth: d,
+    src: { toolType: p.toolType, dia: p.dia, vAngle: p.vAngle, vTip: p.vTip, stepoverPct: p.stepoverPct, stepdown: p.stepdown },
     step: Math.max(0.05, w * pct),
     down: Math.max(0.01, +p.stepdown || d),
   };
 }
+
+/** La misma herramienta a otra profundidad (una figura con profundidad propia, o un recorte). */
+export const toolAt = (tl, depth) => (Math.abs(depth - tl.depth) < 1e-9 ? tl : toolGeometry({ ...tl.src, depth }));

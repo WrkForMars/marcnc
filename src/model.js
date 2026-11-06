@@ -8,7 +8,7 @@
  * Un trazo es una polilínea en mm.
  * @typedef {{pts: [number,number][], closed: boolean}} LinePart
  *
- * @typedef {'fill'|'contour'|'invert'|'line'|'skip'} Mode
+ * @typedef {'fill'|'contour'|'cut'|'invert'|'line'|'skip'} Mode
  *
  * Un elemento es lo que el usuario ve como una figura o un texto en la lista.
  * @typedef {{
@@ -18,6 +18,9 @@
  *   mode: Mode,
  *   text?: TextItem,
  *   paths?: LinePart[],   // trayectorias calculadas (centro de la herramienta)
+ *   opts?: {depth?:number, tabs?:number},  // lo que el usuario cambió de esta figura (profundidad propia, puentes)
+ *   op?: {depth:number, tabTop?:number, tabW?:number, tabs?:number|null},  // cam/cut.js elementOp: cómo se corta
+ *   tl?: object,          // herramienta a la profundidad de esta figura (tool.js)
  *   warn?: string|null,
  * }} Element
  *
@@ -29,11 +32,11 @@
 
 /** Modos disponibles por tipo de elemento, en el orden en que se muestran. */
 export const MODES = {
-  region: [['fill', 'Relleno'], ['contour', 'Contorno'], ['invert', 'Invertir'], ['skip', 'Omitir']],
+  region: [['fill', 'Relleno'], ['contour', 'Contorno'], ['cut', 'Recortar'], ['invert', 'Invertir'], ['skip', 'Omitir']],
   line: [['line', 'Línea'], ['skip', 'Omitir']],
 };
 
 /** Nombre del modo en los comentarios del G-code (sin acentos: muchos controladores no los aceptan). */
-export const MODE_NAME = { fill: 'RELLENO', contour: 'CONTORNO', invert: 'INVERTIR', line: 'LINEA', skip: 'OMITIR' };
+export const MODE_NAME = { fill: 'RELLENO', contour: 'CONTORNO', cut: 'RECORTE', invert: 'INVERTIR', line: 'LINEA', skip: 'OMITIR' };
 
 export const MAX_ELEMENTS = 250;

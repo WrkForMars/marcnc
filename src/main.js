@@ -12,6 +12,7 @@ import { parseSVG, SVG_QUALITY } from './input/svg.js';
 import { traceImage } from './input/image.js';
 import { Cancelled } from './work.js';
 import { duration, jobRisks, setupSheet } from './cam/checks.js';
+import { elementOp } from './cam/cut.js';
 import { toolFigure } from './ui/tool-figure.js';
 import { createBack } from './ui/back.js';
 import { dxfEntities, parseDxf } from './input/dxf.js';
@@ -61,7 +62,7 @@ document.addEventListener('change', ev => {
 
 function params() {
   return {
-    W: num('pw', 90), H: num('ph', 50), margin: num('margin', 3), fit: $('fit').value, drawW: num('dw', 0), speck: num('speck', 0.5),
+    W: num('pw', 90), H: num('ph', 50), thick: num('thick', 3), margin: num('margin', 3), fit: $('fit').value, drawW: num('dw', 0), speck: num('speck', 0.5),
     toolType: $('ttype').value, dia: num('tdia', 3.175), depth: num('depth', 0.1), vAngle: num('vang', 60), vTip: num('vtip', 0.1),
     stepoverPct: num('stepover', 45), stepdown: num('stepdown', 0.2),
     toolNum: num('tnum', 1), rpm: num('rpm', 1000), fz: num('fz', 60), fxy: num('fxy', 130), retract: num('retract', 3),
@@ -76,7 +77,7 @@ function rebuildDesign() {
   svgQualityLabel(); syncSize();
 }
 function rebuildSketch() {
-  state.sketchEls = sketchElements(sketch.entities, sketch.modes);
+  state.sketchEls = sketchElements(sketch.entities, sketch.modes, sketch.opts);
 }
 function assemble() {
   state.elements = state.design.concat(state.sketchEls, state.texts.map(textElement).filter(Boolean));
@@ -133,21 +134,37 @@ function renderAll() {
     onHover: i => { if (state.hovered !== i) { state.hovered = i; drawOnly(); } },
     onMode: (i, m) => { const e = state.elements[i]; e.mode = m; if (e.src === 'text') e.text.mode = m; if (e.src === 'sketch') { sketch.setMode(e.sketchId, m); storeSketch(); } select(i); refresh(); },
     onModeAll: m => { state.elements.forEach(e => { if (e.type === 'region') { e.mode = m; if (e.src === 'text') e.text.mode = m; if (e.src === 'sketch') sketch.setMode(e.sketchId, m); } }); storeSketch(); refresh(); },
+    onOpts: (i, patch) => { setOpts(state.elements[i], patch); refresh(); },
+    job: { depth: num('depth', 0.1), thick: num('thick', 3) },
   });
 }
 
+/** Cambia los ajustes propios de una figura y los guarda donde vive (croquis, texto o dibujo cargado). */
+function setOpts(e, patch) {
+  const o = { ...(e.opts || {}), ...patch };
+  Object.keys(o).forEach(k => { if (o[k] == null) delete o[k]; });
+  e.opts = Object.keys(o).length ? o : undefined;
+  if (e.src === 'text') e.text.opts = e.opts;
+  else if (e.src === 'sketch') { sketch.setOpts(e.sketchId, o); storeSketch(); }
+}
+
 function warnings(p, plan, g) {
-  const r = plan.tl.r;
+  // lo que ocupa cada figura: medio ancho de su línea, o medio diámetro si se recorta (la herramienta va por fuera)
+  const rOf = e => (e.mode === 'cut' && e.tl ? e.tl.D / 2 : e.tl ? e.tl.r : plan.tl.r);
   const nm = (e, i) => (e.src === 'text' ? `El texto “${e.text.text}”` : `La figura ${i + 1}`);
   const out = state.elements.map((e, i) => {
     if (e.mode === 'skip') return null;
     const bb = bbox(e);
+    const r = rOf(e);
     return bb && (bb[0] - r < -0.01 || bb[1] - r < -0.01 || bb[2] + r > p.W + 0.01 || bb[3] + r > p.H + 0.01) ? nm(e, i) : null;
   }).filter(Boolean);
   const thin = state.elements.map((e, i) => (e.warn ? { e, i } : null)).filter(Boolean);
   const ws = [];
   if (state.designNote) ws.push(state.designNote);
-  ws.push(...feedRisks($('material').value, p), ...jobRisks(p, plan.tl, g, { material: !!$('material').value }));
+  // el filo y la punta se revisan con la figura más honda (un recorte atraviesa todo el grosor)
+  const live = state.elements.filter(e => e.mode !== 'skip' && e.tl);
+  const deep = live.reduce((t, e) => (e.tl.depth > t.depth ? e.tl : t), plan.tl);
+  ws.push(...feedRisks($('material').value, p), ...jobRisks(p, deep, g, { material: !!$('material').value, cut: live.some(e => e.mode === 'cut') }));
   if (out.length) ws.push(`${out.join(', ')} se sale${out.length > 1 ? 'n' : ''} de la pieza; ajusta su tamaño o su posición.`);
   if (thin.length > 3) {
     const tot = thin.reduce((a, { e }) => a + (parseFloat(e.warn) || 0), 0);
@@ -167,6 +184,8 @@ async function refresh() {
   if (my !== state.gen) return;
   const p = params();
   const tl = toolGeometry(p);
+  // cómo se corta cada figura: su profundidad (la del trabajo, la suya o atravesar el grosor) y sus puentes
+  state.elements.forEach(e => { e.op = elementOp(e, { depth: tl.depth, thick: p.thick, dia: tl.D }); });
   const plan = await computePlan(state.elements, tl, {
     tol: p.tol, cache: state.cache, keyOf, onProgress: busy, isCancelled: () => my !== state.gen,
   });
@@ -521,7 +540,7 @@ $('dh').addEventListener('change', () => {
 $('showPath').addEventListener('change', () => drawOnly());
 
 // los parámetros se recuerdan entre sesiones (cada taller tiene su máquina y su herramienta)
-const SAVED = ['material', 'pw', 'ph', 'margin', 'speck', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'depth', 'rpm', 'retract', 'fz', 'fxy',
+const SAVED = ['material', 'pw', 'ph', 'thick', 'margin', 'speck', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'depth', 'rpm', 'retract', 'fz', 'fxy',
   'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs', 'imgHow', 'thr', 'svgQ', 'dw', 'imgMode', 'imgClean', 'imgDetail', 'imgInvert'];
 const STORE = 'marcnc:parametros';
 const getVal = id => ($(id).type === 'checkbox' ? $(id).checked : $(id).value);
@@ -1399,7 +1418,7 @@ function jobSummary() {
   const p = params(), tl = toolGeometry(p), n = v => String(+(+v).toFixed(3));
   sketch.setPiece(p.W, p.H);
   const TOOL = { ball: 'Ball mill', flat: 'Fresa plana', v: 'V-bit' }[p.toolType];
-  $('jobPieceTxt').textContent = `${n(p.W)} × ${n(p.H)} mm`;
+  $('jobPieceTxt').textContent = `${n(p.W)} × ${n(p.H)} × ${n(p.thick)} mm`;
   $('jobToolTxt').textContent = `T${p.toolNum} ${TOOL} Ø${n(p.dia)} · ${n(p.depth)} mm`;
   $('jobLineTxt').textContent = `${tl.w.toFixed(2)} mm`;
   $('jobFeedsTxt').textContent = `${p.dialect === 'fanuc' ? 'Fanuc' : 'GRBL'} · S${p.rpm} · F${p.fxy}`;
@@ -1419,7 +1438,8 @@ function openExport() {
   $('pfTool').innerHTML = toolFigure(tl, p);
   const mat = $('material').selectedOptions[0];
   $('pfList').textContent = '';
-  setupSheet({ ...p, materialName: $('material').value ? mat.textContent : '' }, tl, g).forEach(({ k, v }) => {
+  const cutEl = state.elements.find(e => e.mode === 'cut' && e.tl);
+  setupSheet({ ...p, materialName: $('material').value ? mat.textContent : '' }, tl, g, cutEl ? { depth: cutEl.tl.depth } : null).forEach(({ k, v }) => {
     const dt = document.createElement('dt'), dd = document.createElement('dd');
     dt.textContent = k; dd.textContent = v; $('pfList').append(dt, dd);
   });

@@ -4,6 +4,7 @@ import { explainProgram } from '../src/cam/explain.js';
 import { generateGcode } from '../src/cam/gcode.js';
 import { computePlan } from '../src/cam/plan.js';
 import { buildTimeline, segPoint } from '../src/cam/simulate.js';
+import { elementOp } from '../src/cam/cut.js';
 import { toolGeometry } from '../src/cam/tool.js';
 import { toC } from '../src/geometry/clipper.js';
 import { distSeg } from '../src/geometry/simplify.js';
@@ -36,9 +37,12 @@ describe('piezas aleatorias', () => {
         const pts = shape();
         return rnd() < 0.3
           ? { src: 'design', type: 'line', mode: 'line', parts: [{ pts, closed: rnd() < 0.5 }] }
-          : { src: 'design', type: 'region', mode: ['fill', 'contour', 'invert'][Math.floor(rnd() * 3)], parts: [{ outer: toC(pts), holes: [] }] };
+          : { src: 'design', type: 'region', mode: ['fill', 'contour', 'invert', 'cut'][Math.floor(rnd() * 4)], parts: [{ outer: toC(pts), holes: [] }] };
       });
       const tl = toolGeometry({ stepoverPct: 30 + rnd() * 50, stepdown: 0.2, ...TOOLS[Math.floor(rnd() * TOOLS.length)] });
+      // recortes de 1 a 4 mm de grosor, con puentes automáticos (o ninguno) y rampas
+      const thick = 1 + Math.floor(rnd() * 4);
+      elements.forEach(e => { e.op = elementOp(e, { depth: tl.depth, thick, dia: tl.D }); if (e.mode === 'cut' && rnd() < 0.3) e.op.tabs = 0; });
       const dec = [2, 3][Math.floor(rnd() * 2)], tol = [0.005, 0.02, 0.05, 0.2][Math.floor(rnd() * 4)];
       const plan = await computePlan(elements, tl, { tol });
       const g = generateGcode(plan, elements, { W, H, dialect: rnd() < 0.5 ? 'fanuc' : 'grbl', dec, retract: 3, fz: 60, fxy: 130, toolNum: 3, rpm: 2200, prog: 1, arcs: true });

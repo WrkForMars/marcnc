@@ -1,5 +1,6 @@
 // Trayectorias del centro de la herramienta para cada elemento según su modo.
 import { area, fromC, offset, simplifyPaths } from '../geometry/clipper.js';
+import { profilePaths } from './cut.js';
 
 // 5 µm: muy por debajo de lo que repite una máquina; reduce ~5× los vértices y el tiempo del vaciado
 const POCKET_TOL = 0.005;
@@ -35,6 +36,14 @@ export function toolpaths(e, tl) {
     if (e.src === 'text' && e.text.h < 4 * tl.w) {
       out.warn = `letras de ${e.text.h} mm con una línea de ${tl.w.toFixed(2)} mm se van a empastar; súbelas a ${Math.ceil(4 * tl.w)} mm o más`;
     }
+    return out;
+  }
+
+  if (e.mode === 'cut') {
+    // por fuera del contorno y por dentro de los huecos, con el radio de la herramienta a fondo
+    let lostHoles = 0;
+    e.parts.forEach(p => { const r = profilePaths([p.outer, ...p.holes], tl.D / 2); out.paths.push(...r.paths); lostHoles += r.lost; });
+    if (lostHoles) out.warn = `${lostHoles} hueco${lostHoles > 1 ? 's son más chicos' : ' es más chico'} que la herramienta: no se ${lostHoles > 1 ? 'pueden' : 'puede'} recortar`;
     return out;
   }
 

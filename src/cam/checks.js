@@ -22,16 +22,18 @@ export function duration(mins) {
  * Lo que hay que preparar en la máquina para este programa, en el orden en que se hace.
  * @param {{toolNum:number, rpm:number, fz:number, fxy:number, W:number, H:number, dialect:string, materialName?:string}} p
  * @param {{type:string, D:number, w:number, depth:number}} tl
- * @param {{passes:number, mins:number}} g
+ * @param {{passes:number, mins:number, tabs?:number}} g
+ * @param {{depth:number}|null} [cut] si hay recortes: hasta dónde baja
  * @returns {{k:string, v:string}[]}
  */
-export function setupSheet(p, tl, g) {
+export function setupSheet(p, tl, g, cut = null) {
   const inch = inchName(tl.D);
   return [
     { k: 'Herramienta', v: `T${p.toolNum} · ${TOOL_LABEL[tl.type] || tl.type} de ${n(tl.D, 3)} mm${inch ? ` (${inch})` : ''}${p.dialect === 'grbl' ? ' · cámbiala a mano' : ''}` },
     { k: 'Pieza', v: `${n(p.W)} × ${n(p.H)} mm${p.materialName ? ` de ${p.materialName.toLowerCase()}` : ''}, bien sujeta` },
     { k: 'Ceros', v: 'X0 Y0 en la esquina inferior izquierda; Z0 en la cara de arriba' },
     { k: 'Corte', v: `${n(tl.depth)} mm de profundidad en ${g.passes} pasada${g.passes > 1 ? 's' : ''} · línea de ${n(tl.w)} mm` },
+    ...(cut ? [{ k: 'Recorte', v: `atraviesa ${n(cut.depth)} mm${g.tabs ? ` con ${g.tabs} puente${g.tabs > 1 ? 's' : ''}: córtalos a mano al final` : ''}; pon una tabla de sacrificio debajo` }] : []),
     { k: 'Husillo y avances', v: `S${p.rpm} a la derecha (M03) · F${p.fz} al bajar · F${p.fxy} al cortar` },
     { k: 'Duración', v: `~${duration(g.mins)}` },
   ];
@@ -42,10 +44,12 @@ export function setupSheet(p, tl, g) {
  * @param {{rpm:number, fz:number, fxy:number, vAngle?:number, vTip?:number}} p
  * @param {{type:string, D:number, depth:number, down:number}} tl
  * @param {{passes:number, mins:number, lines:number}} g
- * @param {{material?:boolean}} [o] material: ya hay un perfil de material que revisa los avances
+ * @param {{material?:boolean, cut?:boolean}} [o] material: ya hay un perfil de material que revisa los avances;
+ *   cut: hay figuras en modo Recortar (tl es la herramienta a la profundidad más honda)
  */
 export function jobRisks(p, tl, g, o = {}) {
   const out = [];
+  if (o.cut && tl.type !== 'flat') out.push(`Para recortar conviene una fresa plana: ${tl.type === 'v' ? 'el V-bit deja la orilla inclinada' : 'la ball mill deja la orilla redondeada abajo'} y corta peor de lado.`);
   if (!(p.rpm >= 100)) out.push(`El husillo está en S${p.rpm}: la herramienta no giraría y se rompe al tocar la pieza. Ponlo en Ajustes de máquina.`);
   if (!o.material && p.fz > p.fxy) out.push(`El avance en Z (F${p.fz}) es mayor que en X-Y (F${p.fxy}): de punta la herramienta corta peor; bájalo.`);
   // el filo de una fresa chica mide unas 3 veces su diámetro: más abajo roza el cuerpo, o el portaherramientas

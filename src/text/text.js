@@ -62,5 +62,5 @@ export function textElement(t) {
     : t.local.parts.map(p => ({ pts: p.pts.map(mv), closed: p.closed }));
   const fallback = t.local.type === 'line' ? 'line' : 'fill';
   const valid = t.local.type === 'line' ? ['line', 'skip'] : ['fill', 'contour', 'invert', 'skip'];
-  return { src: 'text', text: t, type: t.local.type, parts, mode: valid.includes(t.mode) ? t.mode : fallback };
+  return { src: 'text', text: t, type: t.local.type, parts, mode: valid.includes(t.mode) ? t.mode : fallback, ...(t.opts ? { opts: t.opts } : {}) };
 }

@@ -54,6 +54,8 @@ src/
   cam/arcs.js        ajuste de arcos G02/G03 — probado
   cam/plan.js        cálculo con caché y orden de corte, cede el hilo cada ~30 ms
   cam/gcode.js       escritura del programa (función pura) — probado
+  cam/cut.js         recortar: profundidad por figura (elementOp), herramienta por fuera/dentro (profilePaths), puentes,
+                     rampa de entrada (passWalk: recorrido 3D de cada pasada) — probado
   cam/checks.js      revisión antes de cortar: ficha de preparación (Exportar) y avisos de valores sin sentido — probado
   cam/material.js    perfiles de material: avances sugeridos por carga de viruta con el husillo de la máquina y avisos — probado
   cam/simulate.js    línea de tiempo del programa (duración por avance, posición en cada instante) — probado
@@ -97,6 +99,11 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
     Si ninguno cumple, o el arco se aparta más de la tolerancia, se escribe con rectas. Los arcos se ajustan sobre
     la trayectoria densa (`path.dense`), no la simplificada. `tests/fuzz.test.js` vigila todo esto con piezas aleatorias.
   - Fanuc: `%`, `O####`, `T# M06`, `G28 G91 Z0`. GRBL: nada de eso (lo rechaza).
+  - **Cada figura tiene su profundidad** (`e.op.depth`: la del trabajo, la suya o el grosor + 0.2 si se recorta) y su
+    herramienta a esa profundidad (`e.tl`). Lo recortado va al final y, en cada pieza, los huecos antes que el contorno.
+  - Contornos cerrados con pasadas de más de 0.25 mm, o recortes: bajan a Z0 y entran en **rampa de 5°** a lo largo del
+    contorno (nunca de punta); en la última pasada repasan la rampa a fondo. Sobre un puente suben en vertical y vuelven
+    a bajar con `fz`. Esos recorridos van en rectas (sin arcos). Con la tarea de referencia (0.1 mm) nada de esto aplica.
 - **No bloquear la página:** nada de `getPointAtLength` en bucles (era O(n) por punto y congelaba Chrome).
   Procesos largos van en `computePlan` con cesiones del hilo, o en el worker: se agregan a `JOBS` en `jobs.js` y se
   llaman con `run()` de `work.js` (con `lane` si un cambio nuevo debe cancelar el anterior). Lo que usa canvas o DOM se

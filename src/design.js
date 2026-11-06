@@ -71,7 +71,7 @@ export function buildDesign(raw, p, previous = []) {
   lines.forEach(g => out.elements.push({ src: 'design', type: 'line', parts: g, mode: 'line' }));
 
   if (previous.length === out.elements.length) {
-    out.elements.forEach((e, i) => { if (previous[i].type === e.type) e.mode = previous[i].mode; });
+    out.elements.forEach((e, i) => { if (previous[i].type === e.type) { e.mode = previous[i].mode; if (previous[i].opts) e.opts = previous[i].opts; } });
   }
   return out;
 }

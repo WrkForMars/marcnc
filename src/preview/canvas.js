@@ -2,7 +2,7 @@
 import { area, fromC } from '../geometry/clipper.js';
 import { distSeg, pointInPolygon } from '../geometry/simplify.js';
 
-export const MODE_COLOR = { fill: '--m-fill', contour: '--m-contour', invert: '--m-invert', line: '--m-line', skip: '--m-skip' };
+export const MODE_COLOR = { fill: '--m-fill', contour: '--m-contour', cut: '--m-cut', invert: '--m-invert', line: '--m-line', skip: '--m-skip' };
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
 /** Contornos de un elemento en mm, para dibujar el borde y para la selección. */
@@ -114,7 +114,11 @@ export function createPreview(cv) {
     if (simulating) {
       ctx.lineWidth = 1; ctx.strokeStyle = css('--plate-edge');
       elements.forEach(e => (e.paths || []).forEach(p => { path(p.pts, false); ctx.stroke(); }));
-    } else elements.forEach(e => { if (!isDragged(e)) (e.paths || []).forEach(p => { path(p.pts, false); ctx.stroke(); }); });
+    } else elements.forEach(e => {
+      if (isDragged(e)) return;
+      ctx.lineWidth = Math.max(1, (e.tl ? e.tl.w : toolWidth) * k); // cada figura con el ancho a su profundidad (un recorte, el diámetro)
+      (e.paths || []).forEach(p => { path(p.pts, false); ctx.stroke(); });
+    });
 
     if (plan && showPath && !dragging && !simulating) {
       ctx.lineWidth = 1; ctx.strokeStyle = css('--plate-accent'); ctx.globalAlpha = 0.9;

@@ -50,8 +50,12 @@ describe('plantillas', () => {
   it('cada plantilla cabe en su pieza y sus figuras de adentro quedan como huecos', () => {
     Object.values(TEMPLATES).forEach(t => {
       const ents = t.entities.map((e, i) => ({ ...e, id: i + 1 }));
-      // con el medio ancho de la línea de la ball mill de 1/8" a 0.1 mm (0.56 mm) todavía adentro
-      ents.forEach(e => { const b = entityBox(e); expect(b[0]).toBeGreaterThanOrEqual(0.56); expect(b[1]).toBeGreaterThanOrEqual(0.56); expect(b[2]).toBeLessThanOrEqual(t.W - 0.56); expect(b[3]).toBeLessThanOrEqual(t.H - 0.56); });
+      // grabado: medio ancho de la línea de la ball mill de 1/8" a 0.1 mm (0.56 mm) todavía adentro;
+      // recortado: la herramienta pasa por fuera, a medio diámetro (1.59 mm)
+      ents.forEach((e, k) => {
+        const m = t.modes[k] === 'cut' ? 3.175 / 2 : 0.56, b = entityBox(e);
+        expect(b[0]).toBeGreaterThanOrEqual(m); expect(b[1]).toBeGreaterThanOrEqual(m); expect(b[2]).toBeLessThanOrEqual(t.W - m); expect(b[3]).toBeLessThanOrEqual(t.H - m);
+      });
       expect(t.modes).toHaveLength(t.entities.length);
       t.texts.forEach(x => { expect(x.x).toBeLessThan(t.W); expect(x.y).toBeLessThan(t.H); });
     });

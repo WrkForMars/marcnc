@@ -126,12 +126,16 @@ export function explainProgram(text) {
           e.kind = 'plunge';
           txt = nz < 0
             ? `Baja la herramienta cortando hasta Z${fx(nz)}: entra ${fx(-nz)} mm en el material${feed}.`
-            : `Baja cortando hasta Z${fx(nz)}${feed}.`;
-        } else if (!xy && dz > 0) { e.kind = 'retract'; txt = `Sube cortando hasta Z${fx(nz)}${feed}.`; }
-        else {
+            : nz === 0 ? `Baja hasta la cara de la pieza (Z0)${feed}; de ahí entra en rampa.` : `Baja cortando hasta Z${fx(nz)}${feed}.`;
+        } else if (!xy && dz > 0) {
+          e.kind = 'retract';
+          txt = nz < 0 ? `Sube a Z${fx(nz)} sin salir del material: deja un puente para que la pieza no se suelte${feed}.` : `Sube cortando hasta Z${fx(nz)}${feed}.`;
+        } else {
           e.kind = 'cut';
           const L = Math.hypot(nx - x, ny - y, dz);
-          txt = `Corta en línea recta hasta ${pt(nx, ny)}${dz ? ` Z${fx(nz)}` : ''} (${fx(L)} mm)${feed}${modal}.`;
+          txt = dz < 0
+            ? `Baja en rampa hasta ${pt(nx, ny)} Z${fx(nz)} (${fx(L)} mm): entra de lado, que es como mejor corta la herramienta${feed}${modal}.`
+            : `Corta en línea recta hasta ${pt(nx, ny)}${dz ? ` Z${fx(nz)}` : ''} (${fx(L)} mm)${feed}${modal}.`;
         }
       } else {
         const ccw = g === 3;

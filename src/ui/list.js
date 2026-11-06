@@ -31,10 +31,11 @@ function thumb(e) {
  * @param {HTMLElement} box
  * @param {HTMLElement} allBox contenedor de los botones "Todas las figuras"
  * @param {{elements:any[], selected:number, onSelect:(i:number)=>void, onMode:(i:number, m:string)=>void, onModeAll:(m:string)=>void,
- *   onHover?:(i:number)=>void}} s onHover: el cursor entra a un renglón (i) o sale (−1), para resaltarlo en la pieza
+ *   onHover?:(i:number)=>void, onOpts?:(i:number, patch:object)=>void, job?:{depth:number, thick:number}}} s
+ *   onHover: el cursor entra a un renglón (i) o sale (−1), para resaltarlo en la pieza; onOpts: profundidad propia o puentes
  */
 export function renderList(box, allBox, s) {
-  const { elements, selected, onSelect, onMode, onModeAll, onHover } = s;
+  const { elements, selected, onSelect, onMode, onModeAll, onHover, onOpts, job } = s;
   box.textContent = '';
   if (!elements.length) {
     const p = document.createElement('p');
@@ -94,6 +95,7 @@ export function renderList(box, allBox, s) {
       seg.append(b);
     });
     row.append(top, seg);
+    if (i === selected && onOpts && job && e.mode !== 'skip') row.append(optsRow(e, i, onOpts, job));
     row.addEventListener('click', () => onSelect(i));
     if (onHover) { row.addEventListener('mouseenter', () => onHover(i)); row.addEventListener('mouseleave', () => onHover(-1)); }
     row.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onSelect(i); } });
@@ -116,4 +118,41 @@ export function renderList(box, allBox, s) {
     });
     allBox.append(lab, g);
   }
+}
+
+/**
+ * Ajustes de la figura elegida: su propia profundidad o, si se recorta, cuántos puentes.
+ * Vacío = lo del trabajo (la profundidad de Parámetros, los puentes automáticos).
+ */
+function optsRow(e, i, onOpts, job) {
+  const box = document.createElement('div');
+  box.className = 'el-opts';
+  box.addEventListener('click', ev => ev.stopPropagation());
+  box.addEventListener('keydown', ev => ev.stopPropagation());
+  const lab = document.createElement('label');
+  if (e.mode === 'cut') {
+    lab.append('Puentes');
+    const sel = document.createElement('select');
+    [['', 'Automático'], ['0', 'Ninguno'], ['2', '2'], ['3', '3'], ['4', '4'], ['6', '6'], ['8', '8']].forEach(([v, t]) => {
+      const o = document.createElement('option'); o.value = v; o.textContent = t; sel.append(o);
+    });
+    sel.value = e.opts?.tabs != null ? String(e.opts.tabs) : '';
+    sel.addEventListener('change', () => onOpts(i, { tabs: sel.value === '' ? null : +sel.value }));
+    lab.append(sel);
+    const note = document.createElement('small');
+    note.textContent = `Atraviesa ${+(job.thick + 0.2).toFixed(2)} mm (grosor + 0.2)`;
+    box.append(lab, note);
+  } else {
+    lab.append('Profundidad (mm)');
+    const inp = document.createElement('input');
+    inp.type = 'number'; inp.min = '0.01'; inp.max = '100'; inp.step = '0.05';
+    inp.placeholder = String(job.depth);
+    inp.value = e.opts?.depth > 0 ? String(e.opts.depth) : '';
+    inp.addEventListener('change', () => { const v = parseFloat(inp.value); onOpts(i, { depth: v > 0 ? v : null }); });
+    lab.append(inp);
+    const note = document.createElement('small');
+    note.textContent = inp.value ? 'Propia de esta figura' : 'La del trabajo';
+    box.append(lab, note);
+  }
+  return box;
 }

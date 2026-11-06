@@ -19,6 +19,14 @@ describe('revisión antes de cortar', () => {
     expect(jobRisks(P, ball, { ...G, mins: 35764 })[0]).toMatch(/596 h 4 min/);
     expect(jobRisks(P, ball, { ...G, lines: 273111 })[0]).toMatch(/273,111 líneas/);
   });
+  it('recortar con ball mill o V-bit avisa; con fresa plana no', () => {
+    expect(jobRisks(P, ball, G, { cut: true })[0]).toMatch(/fresa plana/);
+    expect(jobRisks(P, toolGeometry({ toolType: 'flat', dia: 3.175, depth: 3 }), G, { cut: true })).toEqual([]);
+  });
+  it('la ficha dice hasta dónde atraviesa el recorte y cuántos puentes quedan', () => {
+    const s = setupSheet(P, ball, { ...G, tabs: 4 }, { depth: 3.2 });
+    expect(s.find(r => r.k === 'Recorte').v).toMatch(/atraviesa 3\.2 mm con 4 puentes/);
+  });
   it('el V-bit avisa cuando entra más que su punta', () => {
     const v = { ...P, vAngle: 90, vTip: 0 };
     expect(jobRisks(v, toolGeometry({ toolType: 'v', dia: 6, depth: 2, vAngle: 90 }), G)).toEqual([]);

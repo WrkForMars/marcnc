@@ -7,6 +7,7 @@ export const HELP = {
   fit: ['Tamaño del dibujo', 'Ajustar: el dibujo crece o se encoge hasta llenar la pieza, dejando el margen. Elegir: tú das el ancho y el alto. Escala 1:1: cada unidad del SVG es 1 mm.'],
   margin: ['Margen', 'Espacio libre entre el dibujo y la orilla de la pieza cuando el dibujo se ajusta a ella.'],
   speck: ['Ignorar manchas', 'Las figuras con menos área que esta se descartan: suelen ser puntitos o polvo del escaneo, no parte del dibujo.'],
+  thick: ['Grosor', 'Lo que mide la placa de alto. Solo lo usan las figuras en modo Recortar: la herramienta baja hasta el grosor y 0.2 mm más, para atravesarla.'],
   material: ['Material', 'Llena avances y profundidad por pasada con valores prudentes para ese material y tu velocidad de husillo. Puedes cambiarlos después; si alguno es arriesgado, la app te avisa.'],
   ttype: ['Tipo de herramienta', 'Ball mill: punta redonda; a poca profundidad deja una línea más angosta que su diámetro. Fresa plana: deja una línea del ancho de su diámetro. V-bit: punta en V; la línea se ensancha mientras más baja.'],
   tdia: ['Diámetro', 'El grueso de la herramienta, medido en el cuerpo. Una de 1/8" mide 3.175 mm.'],

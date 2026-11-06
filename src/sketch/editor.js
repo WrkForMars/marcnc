@@ -34,17 +34,17 @@ const DRAW_TOOLS = ['line', 'rect', 'crect', 'circle', 'arc', 'poly', 'slot'];
  */
 export function createSketchEditor(hooks) {
   const S = {
-    entities: [], modes: {}, nextId: 1, dims: [], nextDim: 1,
+    entities: [], modes: {}, opts: {}, nextId: 1, dims: [], nextDim: 1,
     tool: 'select', lastTool: 'line', pts: [], hover: null, sel: new Set(), drag: null, box: null, dimFirst: null, ghost: null,
     undo: [], redo: [], last: [0, 0],
     opt: { grid: 1, snap: true, sides: 6, W: 90, H: 50 },
   };
 
   const status = () => hooks.onStatus({ prompt: PROMPTS[S.tool](S.tool === 'dim' ? (S.dimFirst ? 1 : 0) : S.pts.length), cursor: S.hover && S.hover.p, kind: S.hover ? S.hover.kind : '' });
-  const snapshot = () => JSON.stringify({ entities: S.entities, modes: S.modes, nextId: S.nextId, dims: S.dims, nextDim: S.nextDim });
+  const snapshot = () => JSON.stringify({ entities: S.entities, modes: S.modes, opts: S.opts, nextId: S.nextId, dims: S.dims, nextDim: S.nextDim });
   const restore = s => {
     const o = JSON.parse(s);
-    S.entities = o.entities; S.modes = o.modes; S.nextId = o.nextId; S.dims = o.dims || []; S.nextDim = o.nextDim || 1;
+    S.entities = o.entities; S.modes = o.modes; S.opts = o.opts || {}; S.nextId = o.nextId; S.dims = o.dims || []; S.nextDim = o.nextDim || 1;
     const ids = new Set(S.entities.map(e => e.id));
     S.sel.forEach(id => { if (!ids.has(id)) S.sel.delete(id); }); // sin elegir figuras que ya no existen
   };
@@ -218,6 +218,7 @@ export function createSketchEditor(hooks) {
     get lastTool() { return S.lastTool; },
     get entities() { return S.entities; },
     get modes() { return S.modes; },
+    get opts() { return S.opts; },
     /** La figura elegida, si hay exactamente una. */
     get selected() { return S.sel.size === 1 ? S.entities.find(e => S.sel.has(e.id)) || null : null; },
     get selection() { return selList(); },
@@ -229,11 +230,11 @@ export function createSketchEditor(hooks) {
 
     load(data) {
       if (!data || !Array.isArray(data.entities)) return;
-      S.entities = data.entities; S.modes = data.modes || {}; S.nextId = data.nextId || (Math.max(0, ...S.entities.map(e => e.id)) + 1);
+      S.entities = data.entities; S.modes = data.modes || {}; S.opts = data.opts || {}; S.nextId = data.nextId || (Math.max(0, ...S.entities.map(e => e.id)) + 1);
       S.dims = Array.isArray(data.dims) ? data.dims : []; S.nextDim = data.nextDim || (Math.max(0, ...S.dims.map(d => d.id)) + 1);
       S.undo = []; S.redo = [];
     },
-    save: () => ({ entities: S.entities, modes: S.modes, nextId: S.nextId, dims: S.dims, nextDim: S.nextDim }),
+    save: () => ({ entities: S.entities, modes: S.modes, opts: S.opts, nextId: S.nextId, dims: S.dims, nextDim: S.nextDim }),
 
     setTool(t) {
       if (S.tool === 'line' && S.pts.length >= 2) finishLine();
@@ -252,6 +253,8 @@ export function createSketchEditor(hooks) {
     select(id) { S.sel = new Set(id ? [id] : []); status(); hooks.onRedraw(); },
     selectMany(ids) { S.sel = new Set(ids); status(); hooks.onRedraw(); },
     setMode(id, m) { S.modes[id] = m; },
+    /** Ajustes propios de la figura (profundidad, puentes); un objeto vacío los quita. */
+    setOpts(id, o) { if (Object.keys(o).length) S.opts[id] = o; else delete S.opts[id]; },
 
     /** @param {[number,number]} p cursor en mm @param {number} tol radio de captura en mm */
     move(p, tol) {
@@ -376,12 +379,12 @@ export function createSketchEditor(hooks) {
     },
     nudge(dx, dy) { if (S.sel.size) commit(() => { S.entities = S.entities.map(e => (S.sel.has(e.id) ? translate(e, dx, dy) : e)); }); },
     remove(id) { api.removeMany([id]); },
-    removeMany(ids) { const s = new Set(ids); commit(() => { S.entities = S.entities.filter(e => !s.has(e.id)); ids.forEach(id => delete S.modes[id]); }); },
+    removeMany(ids) { const s = new Set(ids); commit(() => { S.entities = S.entities.filter(e => !s.has(e.id)); ids.forEach(id => { delete S.modes[id]; delete S.opts[id]; }); }); },
     duplicate(id) {
       const e = S.entities.find(q => q.id === id);
       if (e) add(translate(JSON.parse(JSON.stringify(e)), S.opt.grid * 5, -S.opt.grid * 5));
     },
-    clear() { if (S.entities.length) commit(() => { S.entities = []; S.modes = {}; S.dims = []; S.sel = new Set(); }); },
+    clear() { if (S.entities.length) commit(() => { S.entities = []; S.modes = {}; S.opts = {}; S.dims = []; S.sel = new Set(); }); },
     undoOne() { if (!S.undo.length) return false; S.redo.push(snapshot()); restore(S.undo.pop()); S.pts = []; hooks.onChange(); status(); hooks.onRedraw(); return true; },
     redoOne() { if (!S.redo.length) return false; S.undo.push(snapshot()); restore(S.redo.pop()); hooks.onChange(); status(); hooks.onRedraw(); return true; },
     refreshStatus: status,
