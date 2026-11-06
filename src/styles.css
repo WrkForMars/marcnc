@@ -76,6 +76,8 @@ input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent);margin:0;
 .hint{color:var(--muted);font-size:12px;line-height:16px;margin:0}
 .err{color:var(--warn)}
 .row2{display:flex;gap:8px;flex-wrap:wrap}
+.kind{display:flex;flex-direction:column;gap:4px;margin-bottom:8px}
+.kind-lbl{font-size:12px;font-weight:600;color:var(--muted)}
 .row-between{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .chip{font-size:12px;line-height:20px;border-radius:999px;padding:0 8px;white-space:nowrap;font-weight:500}
 .chip.warn{background:var(--warn-soft);color:var(--warn)}
@@ -281,6 +283,7 @@ dialog h2{font-family:var(--f-display);font-size:24px;line-height:32px;margin:0}
 @media (max-width:1180px){:root{--inspector:340px}.brand-tag{display:none}}
 @media (max-width:960px){
   .app{grid-template-columns:minmax(0,1fr)}
+  #imgOpts{scroll-margin-top:calc(var(--bar) + 88px)} /* que el título no quede bajo el riel fijo */
   .rail{position:sticky;top:var(--bar);z-index:10;height:auto;flex-direction:row;overflow-x:auto;padding:8px;border-right:0;border-bottom:1px solid var(--line)}
   .rail-group{flex-direction:row;padding:0 8px 0 0;border-bottom:0;border-right:1px solid var(--line)}
   .rail-group:last-child{border-right:0}

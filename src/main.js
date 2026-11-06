@@ -281,7 +281,7 @@ function openFile(f) {
   } else {
     rd.onload = () => {
       const im = new Image();
-      im.onload = () => { state.lastImage = im; state.imgCrop = null; state.imgSeeds = []; state.imgMask = null; loadImage(); };
+      im.onload = () => { state.lastImage = im; state.imgCrop = null; state.imgSeeds = []; state.imgMask = null; state.imgFresh = true; showTab(false); loadImage(); };
       im.onerror = () => { $('loadErr').textContent = 'No pude abrir esa imagen.'; };
       im.src = String(rd.result);
     };
@@ -344,7 +344,18 @@ $('clear').addEventListener('click', () => {
 });
 $('thr').addEventListener('input', () => { $('thrVal').textContent = $('thr').value; });
 $('thr').addEventListener('change', loadImage);
-['imgMode', 'imgClean', 'imgDetail', 'imgInvert'].forEach(id => $(id).addEventListener('change', () => { $('thrLbl').hidden = $('imgMode').value !== 'manual'; loadImage(); }));
+['imgClean', 'imgDetail', 'imgInvert'].forEach(id => $(id).addEventListener('change', loadImage));
+$('imgDetect').addEventListener('change', () => setImgKind(false));
+/** Dibujo (con el modo de detección elegido en Más opciones) u objeto en una foto. imgMode guarda el modo que se aplica. */
+function setImgKind(object) {
+  const before = $('imgMode').value;
+  $('imgMode').value = object ? 'object' : $('imgDetect').value;
+  $('imgMode').dispatchEvent(new Event('change')); // se recuerda para la próxima imagen
+  syncLabels();
+  if ($('imgMode').value !== before || !object) loadImage();
+}
+$('kindDraw').addEventListener('click', () => setImgKind(false));
+$('kindObj').addEventListener('click', () => setImgKind(true));
 
 /* ---------- imagen: lo que detecta y recorte ---------- */
 const iv = $('imgView'), ivx = iv.getContext('2d');
@@ -415,8 +426,9 @@ function drawImgView() {
   const auto = $('imgMode').value === 'auto';
   $('imgInfo').textContent = object
     ? (info ? `Objeto: ${(info.ink * 100).toFixed(1)} % de la imagen. ¿Sobra algo? Elige Fondo y tócalo.` : 'Toca el objeto para separarlo del fondo.')
-    : info ? `Dibujo: ${(info.ink * 100).toFixed(1)} % de la imagen${auto && info.used === 'photo' ? ' · parece foto: se ignoran sombras' : ''}${info.inverted ? ' · invertida' : ''}${state.imgMask ? ` · ${state.imgMask.w} × ${state.imgMask.h} px` : ''}. ¿Es la foto de un objeto? Tócalo.` : '';
+    : info ? `Dibujo: ${(info.ink * 100).toFixed(1)} % de la imagen${auto && info.used === 'photo' ? ' · parece foto: se ignoran sombras' : ''}${info.inverted ? ' · invertida' : ''}${state.imgMask ? ` · ${state.imgMask.w} × ${state.imgMask.h} px` : ''}` : '';
   $('imgUncrop').hidden = !state.imgCrop;
+  if (state.imgFresh) { state.imgFresh = false; $('imgOpts').scrollIntoView({ block: matchMedia('(max-width: 960px)').matches ? 'start' : 'nearest' }); } // recién abierta: a la vista (en celular, bajo la pieza)
 }
 const ivPos = ev => { const r = iv.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; };
 iv.addEventListener('pointerdown', ev => { if (!state.lastImage || ev.button) return; ivDrag = { start: ivPos(ev), cur: null }; iv.setPointerCapture(ev.pointerId); });
@@ -428,7 +440,7 @@ iv.addEventListener('pointermove', ev => { if (ivDrag) { ivDrag.cur = ivPos(ev);
 function ivTap([px, py], fg) {
   const L = ivLayout(), x = (px - L.ox) / (L.iw * L.k), y = (py - L.oy) / (L.ih * L.k);
   if (x < 0 || y < 0 || x > 1 || y > 1) return;
-  if ($('imgMode').value !== 'object') { $('imgMode').value = 'object'; syncLabels(); fg = true; setSeedFg(true); }
+  if ($('imgMode').value !== 'object') { $('imgMode').value = 'object'; $('imgMode').dispatchEvent(new Event('change')); syncLabels(); fg = true; setSeedFg(true); }
   const hit = state.imgSeeds.findIndex(s => Math.hypot((s.x - x) * L.iw * L.k, (s.y - y) * L.ih * L.k) < 10);
   if (hit >= 0) state.imgSeeds.splice(hit, 1);
   else state.imgSeeds.push({ x, y, fg });
@@ -493,7 +505,15 @@ const STORE = 'marcnc:parametros';
 const getVal = id => ($(id).type === 'checkbox' ? $(id).checked : $(id).value);
 const setVal = (id, v) => { if ($(id).type === 'checkbox') $(id).checked = !!v; else $(id).value = v; };
 const DEFAULTS = Object.fromEntries(SAVED.map(id => [id, getVal(id)]));
-const syncLabels = () => { $('vAngLbl').hidden = $('vTipLbl').hidden = $('ttype').value !== 'v'; $('thrVal').textContent = $('thr').value; $('thrLbl').hidden = $('imgMode').value !== 'manual'; svgQualityLabel(); };
+const syncLabels = () => { $('vAngLbl').hidden = $('vTipLbl').hidden = $('ttype').value !== 'v'; $('thrVal').textContent = $('thr').value; syncImgKind(); svgQualityLabel(); };
+/** Botones de tipo de imagen y opciones que solo aplican a un dibujo, según imgMode. */
+function syncImgKind() {
+  const mode = $('imgMode').value, object = mode === 'object';
+  if (!object) $('imgDetect').value = mode;
+  $('kindDraw').setAttribute('aria-pressed', String(!object)); $('kindObj').setAttribute('aria-pressed', String(object));
+  document.querySelectorAll('.draw-only').forEach(el => { el.hidden = object; });
+  $('thrLbl').hidden = mode !== 'manual';
+}
 function storeParams() {
   try { localStorage.setItem(STORE, JSON.stringify(Object.fromEntries(SAVED.map(id => [id, getVal(id)])))); } catch { /* sin almacenamiento: no pasa nada */ }
 }
