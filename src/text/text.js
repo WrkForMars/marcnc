@@ -1,6 +1,6 @@
 // Textos sobre la pieza: geometría local (centrada en 0,0) + posición en mm.
 import { CL, fromC, regionsFromPaths, toC, treeToPaths, union } from '../geometry/clipper.js';
-import { binarize, tracedRings } from '../input/image.js';
+import { binarize, tracedRings } from '../input/trace.js';
 import { hersheyText } from './hershey.js';
 
 /** Estilos de letra disponibles en la interfaz. Las rellenas usan fuentes de Google Fonts cargadas en index.html. */

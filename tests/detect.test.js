@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { adaptive, clean, detectInk, luminance, maskToRGBA, otsu } from '../src/input/detect.js';
-import { tracedRings } from '../src/input/image.js';
+import { tracedRings } from '../src/input/trace.js';
 
 const W = 300, H = 180;
 /** Imagen RGBA a partir de una función (x, y) → [r, g, b]. */
