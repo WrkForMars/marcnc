@@ -23,6 +23,9 @@ Las fuentes van empaquetadas (`@fontsource`) para que funcione sin internet; no 
 ```
 src/
   main.js            interfaz: estado, eventos, ciclo de cálculo (refresh), parámetros recordados
+  work.js            manda trabajos pesados al worker; un trabajo nuevo del mismo carril cancela el anterior; sin
+                     worker los hace en la página — probado
+  worker.js / jobs.js  segundo hilo y los trabajos que sabe hacer (funciones puras: datos entran, datos salen)
   desktop.js         puente con Tauri (solo se usa dentro del .exe)
   model.js           tipos del modelo (Element, TextItem), MODES, MODE_NAME
   design.js          dibujo cargado → elementos en mm sobre la pieza
@@ -33,7 +36,8 @@ src/
                      $INSUNITS → mm, une tramos sueltos en contornos; entra al croquis a 1:1 — probado
   input/svg.js       lee un SVG con estilos y transformaciones (usa DOM); niveles de calidad SVG_QUALITY
   input/detect.js    qué píxeles son dibujo: Otsu, adaptativo para fotos con sombra, por color del fondo, limpieza — probado
-  input/image.js     imagen (recorte, detalle) → detect.js (o segment.js) → contornos con ImageTracer, o línea central
+  input/image.js     imagen (recorte, detalle) → píxeles al tamaño de trabajo (canvas) → trace.js en el worker
+  input/trace.js     vectorizado puro: detect.js (o segment.js) → contornos con ImageTracer, o línea central — probado
   input/segment.js   objeto en una foto: toques ＋/− → GrabCut (mezclas de gaussianas + corte mínimo Boykov–Kolmogorov),
                      se calcula a ~360 px y la orilla se suaviza; la silueta entra en Contorno — probado
   input/centerline.js  esqueletización (Zhang–Suen) → polilíneas por pieza, puro — probado
@@ -94,7 +98,9 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
     la trayectoria densa (`path.dense`), no la simplificada. `tests/fuzz.test.js` vigila todo esto con piezas aleatorias.
   - Fanuc: `%`, `O####`, `T# M06`, `G28 G91 Z0`. GRBL: nada de eso (lo rechaza).
 - **No bloquear la página:** nada de `getPointAtLength` en bucles (era O(n) por punto y congelaba Chrome).
-  Procesos largos van en `computePlan` con cesiones del hilo, o en un Web Worker.
+  Procesos largos van en `computePlan` con cesiones del hilo, o en el worker: se agregan a `JOBS` en `jobs.js` y se
+  llaman con `run()` de `work.js` (con `lane` si un cambio nuevo debe cancelar el anterior). Lo que usa canvas o DOM se
+  queda en la página y le pasa al worker solo los datos.
 - **Distribución de la interfaz:** la pieza es el centro (banco oscuro `--stage` con reglas en mm). Herramientas en el riel
   izquierdo; inspector a la derecha con pestañas Figuras / Código G que muestra solo lo seleccionado. **Parámetros del
   trabajo** (pieza, herramienta, profundidad) en `#jobDlg`, resumidos en la barra de arriba de la pieza; **ajustes de
@@ -127,5 +133,7 @@ es un cambio de comportamiento que hay que justificar.
 ## Pendiente (en orden de valor)
 
 1. Perfiles de máquina (husillo máximo, recorrido) además de los de material.
-2. Mover vectorizado y vaciado a un Web Worker.
-3. Firmar el .exe (certificado de código) para que Windows no muestre la advertencia de SmartScreen.
+2. Pasar al worker también la escritura y explicación del código G de programas enormes y los textos rellenos
+   (el vectorizado de imágenes y la separación de objetos ya corren ahí).
+
+No se firmará el .exe: Windows mostrará la advertencia de SmartScreen la primera vez (Más información → Ejecutar de todas formas).

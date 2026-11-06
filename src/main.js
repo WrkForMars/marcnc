@@ -10,6 +10,7 @@ import { isDesktop, saveTextDesktop } from './desktop.js';
 import { toolGeometry } from './cam/tool.js';
 import { parseSVG, SVG_QUALITY } from './input/svg.js';
 import { traceImage } from './input/image.js';
+import { Cancelled } from './work.js';
 import { duration, jobRisks, setupSheet } from './cam/checks.js';
 import { toolFigure } from './ui/tool-figure.js';
 import { createBack } from './ui/back.js';
@@ -216,7 +217,7 @@ async function loadShapes(fn, isImage, msg) {
   await tick();
   try {
     const t0 = performance.now();
-    state.raw = fn(); state.rawId++;
+    state.raw = await fn(); state.rawId++;
     select(-1);
     busy('Separando figuras…');
     await tick();
@@ -229,6 +230,7 @@ async function loadShapes(fn, isImage, msg) {
     await refresh();
     $('toast').textContent = `Procesado en ${((performance.now() - t0) / 1000).toFixed(1)} s.`;
   } catch (err) {
+    if (err.cancelled) return; // llegó un cambio más nuevo: ese trabajo ya sigue
     busy(null);
     $('loadErr').textContent = err.message || String(err);
     if (isImage) { $('imgOpts').hidden = false; $('svgOpts').hidden = true; } // para corregir ahí mismo
@@ -269,8 +271,10 @@ function loadImage() {
     drawImgView();
     return;
   }
-  loadShapes(() => {
-    const r = traceImage(state.lastImage, opts);
+  const im = state.lastImage;
+  loadShapes(async () => {
+    const r = await traceImage(im, opts);
+    if (state.lastImage !== im) throw new Cancelled(); // mientras tanto se abrió otro archivo
     state.imgMask = r.mask; state.imgInfo = r.info;
     return r;
   }, true, object ? 'Separando el objeto del fondo…' : null).then(drawImgView);
