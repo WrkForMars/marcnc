@@ -30,7 +30,7 @@ const tick = () => new Promise(r => setTimeout(r, 0));
 
 const state = {
   raw: null, rawId: 0, design: [], designNote: '', texts: [], elements: [],
-  selected: -1, textOpen: false, ready: false, lastImage: null, imgCrop: null, imgMask: null, imgInfo: null, imgView: 'mask', lastSvg: '', fileName: '', designScale: 0, designSize: [0, 0], demoFit: false, gcode: '', plan: null, gen: 0, textSeq: 0,
+  selected: -1, textOpen: false, ready: false, lastImage: null, imgCrop: null, imgSeeds: [], seedFg: true, imgMask: null, imgInfo: null, imgView: 'mask', lastSvg: '', fileName: '', designScale: 0, designSize: [0, 0], demoFit: false, gcode: '', plan: null, gen: 0, textSeq: 0,
   cache: new Map(), sketchEls: [], dims: null, dimHits: [], clip: null, explained: [], codeSel: 0, lastG: null,
 };
 const preview = createPreview($('cv'));
@@ -196,9 +196,9 @@ async function refresh() {
   $('eff').textContent = `Ancho de línea a ${tl.depth} mm: ${tl.w.toFixed(2)} mm${tl.type === 'ball' ? ' (la bola solo corta con la punta)' : tl.type === 'v' ? ' (depende de la profundidad)' : ''}`;
 }
 
-async function loadShapes(fn, isImage) {
+async function loadShapes(fn, isImage, msg) {
   $('loadErr').textContent = ''; $('toast').textContent = '';
-  busy(isImage ? 'Vectorizando la imagen…' : 'Leyendo el SVG…');
+  busy(msg || (isImage ? 'Vectorizando la imagen…' : 'Leyendo el SVG…'));
   await tick();
   try {
     const t0 = performance.now();
@@ -215,6 +215,7 @@ async function loadShapes(fn, isImage) {
   } catch (err) {
     busy(null);
     $('loadErr').textContent = err.message || String(err);
+    if (isImage) { $('imgOpts').hidden = false; $('svgOpts').hidden = true; } // para corregir ahí mismo
   }
 }
 function loadSvg() {
@@ -241,13 +242,22 @@ function loadImage() {
   if ($('fit').value === 'native') $('fit').value = 'fill'; // una imagen no tiene unidades físicas
   const opts = {
     mode: $('imgMode').value, thr: +$('thr').value, invert: $('imgInvert').checked, clean: +$('imgClean').value,
-    how: $('imgHow').value, detail: +$('imgDetail').value, crop: state.imgCrop,
+    how: $('imgHow').value, detail: +$('imgDetail').value, crop: state.imgCrop, seeds: state.imgSeeds,
   };
+  const object = opts.mode === 'object';
+  if (object && !state.imgSeeds.some(s => s.fg)) {
+    // todavía no hay qué separar: se muestra la foto para tocar el objeto
+    state.raw = null; state.imgMask = null; state.imgInfo = null; state.rawId++;
+    rebuildDesign(); assemble(); select(-1); refresh();
+    $('imgOpts').hidden = false; $('svgOpts').hidden = true; $('loadErr').textContent = '';
+    drawImgView();
+    return;
+  }
   loadShapes(() => {
     const r = traceImage(state.lastImage, opts);
     state.imgMask = r.mask; state.imgInfo = r.info;
     return r;
-  }, true).then(drawImgView);
+  }, true, object ? 'Separando el objeto del fondo…' : null).then(drawImgView);
 }
 
 /* ---------- archivos ---------- */
@@ -271,7 +281,7 @@ function openFile(f) {
   } else {
     rd.onload = () => {
       const im = new Image();
-      im.onload = () => { state.lastImage = im; state.imgCrop = null; state.imgMask = null; loadImage(); };
+      im.onload = () => { state.lastImage = im; state.imgCrop = null; state.imgSeeds = []; state.imgMask = null; loadImage(); };
       im.onerror = () => { $('loadErr').textContent = 'No pude abrir esa imagen.'; };
       im.src = String(rd.result);
     };
@@ -326,7 +336,7 @@ $('demo').addEventListener('click', async () => {
   await loadSvg(); await addDemoText(); select(-1); refresh();
 });
 $('clear').addEventListener('click', () => {
-  Object.assign(state, { raw: null, design: [], texts: [], lastImage: null, lastSvg: '', designNote: '', fileName: '', designSize: [0, 0] });
+  Object.assign(state, { raw: null, design: [], texts: [], lastImage: null, imgSeeds: [], lastSvg: '', designNote: '', fileName: '', designSize: [0, 0] });
   $('docName').value = '';
   syncSize();
   sketch.clear(); // se puede deshacer con Ctrl+Z
@@ -342,7 +352,7 @@ let ivDrag = null;
 /** Dónde queda la imagen dentro del lienzo de vista (px CSS). */
 function ivLayout() {
   const im = state.lastImage, W = iv.clientWidth || 320;
-  const H = Math.round(Math.min(W * 0.75, W * im.naturalHeight / im.naturalWidth));
+  const H = Math.round(Math.min(W * 1.2, W * im.naturalHeight / im.naturalWidth)); // una foto vertical también se ve grande para tocarla
   const k = Math.min(W / im.naturalWidth, H / im.naturalHeight);
   return { W, H, k, ox: (W - im.naturalWidth * k) / 2, oy: (H - im.naturalHeight * k) / 2, iw: im.naturalWidth, ih: im.naturalHeight };
 }
@@ -356,8 +366,19 @@ function drawImgView() {
   ivx.clearRect(0, 0, L.W, L.H);
   const c = state.imgCrop || { x: 0, y: 0, w: 1, h: 1 };
   const rx = L.ox + c.x * L.iw * L.k, ry = L.oy + c.y * L.ih * L.k, rw = c.w * L.iw * L.k, rh = c.h * L.ih * L.k;
+  const object = $('imgMode').value === 'object';
   if (state.imgView === 'orig' || !state.imgMask) {
     ivx.drawImage(im, L.ox, L.oy, L.iw * L.k, L.ih * L.k);
+  } else if (object) {
+    // la foto tal cual en el objeto y oscurecida en lo demás
+    ivx.drawImage(im, L.ox, L.oy, L.iw * L.k, L.ih * L.k);
+    const m = state.imgMask, off = document.createElement('canvas');
+    off.width = m.w; off.height = m.h;
+    const od = off.getContext('2d').createImageData(m.w, m.h), [sr, sg, sb] = [1, 3, 5].map(i => parseInt(css('--stage').slice(i, i + 2), 16));
+    for (let i = 0; i < m.w * m.h; i++) { od.data[4 * i] = sr; od.data[4 * i + 1] = sg; od.data[4 * i + 2] = sb; od.data[4 * i + 3] = m.data[i] ? 0 : 175; }
+    off.getContext('2d').putImageData(od, 0, 0);
+    ivx.drawImage(off, rx, ry, rw, rh);
+    if (state.imgCrop) { ivx.fillStyle = css('--stage'); ivx.globalAlpha = 0.7; ivx.beginPath(); ivx.rect(L.ox, L.oy, L.iw * L.k, L.ih * L.k); ivx.rect(rx, ry, rw, rh); ivx.fill('evenodd'); ivx.globalAlpha = 1; }
   } else {
     // lo detectado en tinta sobre papel, dentro del recorte; fuera del recorte la imagen apagada
     ivx.globalAlpha = 0.25; ivx.drawImage(im, L.ox, L.oy, L.iw * L.k, L.ih * L.k); ivx.globalAlpha = 1;
@@ -381,17 +402,48 @@ function drawImgView() {
     ivx.strokeRect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]));
     ivx.setLineDash([]);
   }
+  // toques: ＋ objeto, − fondo
+  if (object) state.imgSeeds.forEach(s => {
+    const x = L.ox + s.x * L.iw * L.k, y = L.oy + s.y * L.ih * L.k;
+    ivx.beginPath(); ivx.arc(x, y, 8, 0, 2 * Math.PI);
+    ivx.fillStyle = css(s.fg ? '--accent' : '--warn'); ivx.fill();
+    ivx.strokeStyle = css('--on-accent'); ivx.lineWidth = 2; ivx.stroke();
+    ivx.beginPath(); ivx.moveTo(x - 4, y); ivx.lineTo(x + 4, y); if (s.fg) { ivx.moveTo(x, y - 4); ivx.lineTo(x, y + 4); } ivx.stroke();
+  });
+  $('objBar').hidden = !object;
   const info = state.imgInfo;
   const auto = $('imgMode').value === 'auto';
-  $('imgInfo').textContent = info ? `Dibujo: ${(info.ink * 100).toFixed(1)} % de la imagen${auto && info.used === 'photo' ? ' · parece foto: se ignoran sombras' : ''}${info.inverted ? ' · invertida' : ''}${state.imgMask ? ` · ${state.imgMask.w} × ${state.imgMask.h} px` : ''}` : '';
+  $('imgInfo').textContent = object
+    ? (info ? `Objeto: ${(info.ink * 100).toFixed(1)} % de la imagen. ¿Sobra algo? Elige Fondo y tócalo.` : 'Toca el objeto para separarlo del fondo.')
+    : info ? `Dibujo: ${(info.ink * 100).toFixed(1)} % de la imagen${auto && info.used === 'photo' ? ' · parece foto: se ignoran sombras' : ''}${info.inverted ? ' · invertida' : ''}${state.imgMask ? ` · ${state.imgMask.w} × ${state.imgMask.h} px` : ''}. ¿Es la foto de un objeto? Tócalo.` : '';
   $('imgUncrop').hidden = !state.imgCrop;
 }
 const ivPos = ev => { const r = iv.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; };
-iv.addEventListener('pointerdown', ev => { if (!state.lastImage) return; ivDrag = { start: ivPos(ev), cur: null }; iv.setPointerCapture(ev.pointerId); });
+iv.addEventListener('pointerdown', ev => { if (!state.lastImage || ev.button) return; ivDrag = { start: ivPos(ev), cur: null }; iv.setPointerCapture(ev.pointerId); });
 iv.addEventListener('pointermove', ev => { if (ivDrag) { ivDrag.cur = ivPos(ev); drawImgView(); } });
-iv.addEventListener('pointerup', () => {
+/**
+ * Un toque marca objeto (o fondo, según el botón elegido o con clic derecho); tocar un toque lo quita.
+ * En otro modo de detección, el primer toque cambia a "Objeto en una foto".
+ */
+function ivTap([px, py], fg) {
+  const L = ivLayout(), x = (px - L.ox) / (L.iw * L.k), y = (py - L.oy) / (L.ih * L.k);
+  if (x < 0 || y < 0 || x > 1 || y > 1) return;
+  if ($('imgMode').value !== 'object') { $('imgMode').value = 'object'; syncLabels(); fg = true; setSeedFg(true); }
+  const hit = state.imgSeeds.findIndex(s => Math.hypot((s.x - x) * L.iw * L.k, (s.y - y) * L.ih * L.k) < 10);
+  if (hit >= 0) state.imgSeeds.splice(hit, 1);
+  else state.imgSeeds.push({ x, y, fg });
+  state.imgView = 'mask'; $('ivMask').setAttribute('aria-pressed', 'true'); $('ivOrig').setAttribute('aria-pressed', 'false');
+  drawImgView(); loadImage();
+}
+function setSeedFg(fg) { state.seedFg = fg; $('seedFg').setAttribute('aria-pressed', String(fg)); $('seedBg').setAttribute('aria-pressed', String(!fg)); }
+$('seedFg').addEventListener('click', () => setSeedFg(true));
+$('seedBg').addEventListener('click', () => setSeedFg(false));
+$('seedClear').addEventListener('click', () => { state.imgSeeds = []; loadImage(); });
+iv.addEventListener('contextmenu', ev => { ev.preventDefault(); if (state.lastImage) ivTap(ivPos(ev), false); });
+iv.addEventListener('pointerup', ev => {
   const d = ivDrag; ivDrag = null;
-  if (!d || !d.cur) return;
+  if (!d) return;
+  if (!d.cur || Math.hypot(d.cur[0] - d.start[0], d.cur[1] - d.start[1]) < 6) { ivTap(ivPos(ev), state.seedFg); return; }
   const L = ivLayout();
   const toImg = ([px, py]) => [Math.min(1, Math.max(0, (px - L.ox) / (L.iw * L.k))), Math.min(1, Math.max(0, (py - L.oy) / (L.ih * L.k)))];
   const [x0, y0] = toImg(d.start), [x1, y1] = toImg(d.cur);

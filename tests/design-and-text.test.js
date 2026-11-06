@@ -18,6 +18,12 @@ describe('buildDesign', () => {
     expect((x0 + x1) / 2).toBeCloseTo(45, 2);
   });
 
+  it('las áreas empiezan en el modo que pide el dibujo (la silueta de un objeto, en contorno)', () => {
+    const raw = [{ kind: 'fill', white: false, rule: 'nonzero', rings: [square(0, 0, 200)] }];
+    expect(buildDesign(raw, P).elements[0].mode).toBe('fill');
+    expect(buildDesign(Object.assign(raw, { regionMode: 'contour' }), P).elements[0].mode).toBe('contour');
+  });
+
   it('con ancho fijo escala al ancho pedido, conserva la proporción y centra en la pieza', () => {
     const raw = [{ kind: 'fill', white: false, rule: 'nonzero', rings: [[[0, 0], [200, 0], [200, 100], [0, 100]]] }];
     const r = buildDesign(raw, { ...P, fit: 'width', drawW: 30 });

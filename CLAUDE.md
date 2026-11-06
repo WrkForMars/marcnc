@@ -33,7 +33,9 @@ src/
                      $INSUNITS → mm, une tramos sueltos en contornos; entra al croquis a 1:1 — probado
   input/svg.js       lee un SVG con estilos y transformaciones (usa DOM); niveles de calidad SVG_QUALITY
   input/detect.js    qué píxeles son dibujo: Otsu, adaptativo para fotos con sombra, por color del fondo, limpieza — probado
-  input/image.js     imagen (recorte, detalle) → detect.js → contornos con ImageTracer, o línea central
+  input/image.js     imagen (recorte, detalle) → detect.js (o segment.js) → contornos con ImageTracer, o línea central
+  input/segment.js   objeto en una foto: toques ＋/− → GrabCut (mezclas de gaussianas + corte mínimo Boykov–Kolmogorov),
+                     se calcula a ~360 px y la orilla se suaviza; la silueta entra en Contorno — probado
   input/centerline.js  esqueletización (Zhang–Suen) → polilíneas por pieza, puro — probado
   sketch/geometry.js croquis puro: figuras (incl. ranura y rect. redondeado), inferencias, girar/reflejar,
                      cotas que mandan (applyDims, definedState), figuras → elementos — probado
@@ -108,7 +110,7 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
 
 ## Pruebas
 
-Cualquier cambio en `cam/`, `geometry/`, `input/svg-path.js`, `input/dxf.js`, `input/centerline.js`, `design.js` o `text/hershey.js` lleva su prueba.
+Cualquier cambio en `cam/`, `geometry/`, `input/svg-path.js`, `input/dxf.js`, `input/segment.js`, `input/centerline.js`, `design.js` o `text/hershey.js` lleva su prueba.
 Las pruebas de `tests/gcode.test.js` fijan los parámetros de la tarea de referencia (pieza 90 × 50 mm,
 T3 ball mill 1/8", S2200, F60 en Z, F130 en XY, retracción Z3, profundidad 0.1 mm): si una cambia,
 es un cambio de comportamiento que hay que justificar.

@@ -1,7 +1,8 @@
 // Imagen → píxeles de dibujo (detect.js) → contornos con ImageTracer, o línea central de cada trazo.
 import ImageTracer from 'imagetracerjs';
 import { centerlines } from './centerline.js';
-import { detectInk, maskToRGBA } from './detect.js';
+import { detectInk, maskToRGBA, clean } from './detect.js';
+import { segmentObject } from './segment.js';
 
 const TRACE_OPTS = {
   numberofcolors: 2, colorsampling: 0,
@@ -53,13 +54,14 @@ export function binarize(imgd, thr) {
  *   how?: 'area'|'center',             // áreas con contorno, o línea central de cada trazo
  *   detail?: number,                   // píxeles del lado mayor con los que se trabaja
  *   crop?: {x:number, y:number, w:number, h:number}|null,  // recorte, en fracciones de la imagen (0–1)
+ *   seeds?: {x:number, y:number, fg:boolean}[],  // modo 'object': toques en fracciones de la imagen (0–1)
  * }} TraceOptions
  */
 
 /**
  * @param {HTMLImageElement} img
  * @param {TraceOptions} o
- * @returns {import('./svg.js').RawShape[] & {mask:{w:number, h:number, data:Uint8Array}, info:{inverted:boolean, ink:number, used:string}}}
+ * @returns {import('./svg.js').RawShape[] & {regionMode:string, mask:{w:number, h:number, data:Uint8Array}, info:{inverted:boolean, ink:number, used:string}}}
  */
 export function traceImage(img, o) {
   // 600 px en el lado mayor bastan para la ball mill y trazan en ~0.3 s; con una V-bit fina conviene más detalle
@@ -72,8 +74,17 @@ export function traceImage(img, o) {
   const x = c.getContext('2d');
   x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); // lo transparente cuenta como fondo
   x.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
-  const det = detectInk(x.getImageData(0, 0, w, h).data, w, h, o);
-  if (!det.ink) throw new Error('No encontré dibujo en la imagen. Prueba otro modo de detección o márcala como invertida.');
+  const rgba = x.getImageData(0, 0, w, h).data;
+  let det;
+  if (o.mode === 'object') {
+    // toques de la imagen completa → píxeles del recorte; los que caen fuera no cuentan
+    const seeds = (o.seeds || []).map(s => ({ x: (s.x * img.naturalWidth - sx) * k, y: (s.y * img.naturalHeight - sy) * k, fg: s.fg }))
+      .filter(s => s.x >= 0 && s.y >= 0 && s.x < w && s.y < h);
+    if (!seeds.some(s => s.fg)) throw new Error('Toca el objeto en la imagen (dentro del recorte).');
+    const mask = clean(segmentObject(rgba, w, h, { seeds }), w, h, o.clean || 0);
+    det = { mask, inverted: false, ink: mask.reduce((a, v) => a + v, 0) / (w * h), used: 'object' };
+  } else det = detectInk(rgba, w, h, o);
+  if (!det.ink) throw new Error(o.mode === 'object' ? 'No pude separar el objeto: toca más partes de él.' : 'No encontré dibujo en la imagen. Prueba otro modo de detección o márcala como invertida.');
   let shapes;
   if (o.how === 'center') {
     const groups = centerlines(det.mask, w, h);
@@ -82,5 +93,5 @@ export function traceImage(img, o) {
   } else {
     shapes = [{ kind: 'fill', white: false, rule: 'evenodd', rings: tracedRings(maskToRGBA(det.mask, w, h)) }];
   }
-  return Object.assign(shapes, { mask: { w, h, data: det.mask }, info: { inverted: det.inverted, ink: det.ink, used: det.used } });
+  return Object.assign(shapes, { regionMode: det.used === 'object' ? 'contour' : 'fill', mask: { w, h, data: det.mask }, info: { inverted: det.inverted, ink: det.ink, used: det.used } });
 }

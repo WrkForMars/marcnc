@@ -3,7 +3,7 @@ import { CL, diff, regionsFromPaths, toC, treeToPaths, union } from './geometry/
 import { MAX_ELEMENTS } from './model.js';
 
 /**
- * @param {import('./input/svg.js').RawShape[] & {native?:{unit:number,h:number}}} raw
+ * @param {import('./input/svg.js').RawShape[] & {native?:{unit:number,h:number}, regionMode?:string}} raw regionMode: modo inicial de las áreas
  * @param {{W:number, H:number, margin:number, fit:'fill'|'width'|'native', drawW?:number, speck:number}} p
  *   fit: 'fill' ajusta a la pieza con margen, 'width' usa `drawW` mm de ancho (alto proporcional), 'native' 1:1;
  *   en 'fill' y 'width' el dibujo queda centrado en la pieza
@@ -67,7 +67,7 @@ export function buildDesign(raw, p, previous = []) {
     lines = lines.slice(0, MAX_ELEMENTS);
     out.note = `El dibujo tiene ${before} figuras; se conservaron las ${MAX_ELEMENTS} más grandes. Sube el valor de "Ignorar manchas" o usa una imagen más limpia.`;
   }
-  regs.forEach(r => out.elements.push({ src: 'design', type: 'region', parts: [{ outer: r.outer, holes: r.holes }], mode: 'fill' }));
+  regs.forEach(r => out.elements.push({ src: 'design', type: 'region', parts: [{ outer: r.outer, holes: r.holes }], mode: raw.regionMode || 'fill' })); // la silueta de un objeto empieza en contorno
   lines.forEach(g => out.elements.push({ src: 'design', type: 'line', parts: g, mode: 'line' }));
 
   if (previous.length === out.elements.length) {
