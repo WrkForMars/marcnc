@@ -239,7 +239,24 @@ canvas.overlay{position:absolute;left:var(--pad);top:var(--pad);pointer-events:n
 .params label.check{flex-direction:row;color:var(--ink);font-size:14px}
 .params .full{grid-column:1/-1}
 .params h3{grid-column:1/-1;font-family:var(--f-body);font-size:12px;line-height:16px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:8px 0 0}
-.eff{font-family:var(--f-mono);font-size:12px;line-height:16px;background:var(--accent-soft);color:var(--ink);border-radius:8px;padding:8px 12px}
+.eff{display:flex;align-items:center;gap:12px;font-size:14px;line-height:20px;background:var(--accent-soft);color:var(--ink);border-radius:8px;padding:8px 12px}
+.eff p{margin:0}
+/* punta de la herramienta en la pieza (ui/tool-figure.js) */
+.toolfig{width:128px;height:auto;flex:none}
+.tf-mat{fill:var(--line);stroke:var(--line-strong)}
+.tf-tool{fill:var(--panel);stroke:var(--ink);stroke-width:1.5}
+.tf-cut{fill:var(--accent);stroke:var(--ink);stroke-width:1.5}
+.tf-dim{fill:none;stroke:var(--ink);stroke-width:1.5}
+.tf-txt{font-size:12px;fill:var(--ink);font-family:var(--f-body)}
+/* Exportar: qué preparar en la máquina */
+.preflight{border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.preflight h3{margin:0;font-size:16px;line-height:24px}
+.pf-body{display:flex;gap:16px;align-items:flex-start}
+.pf-list{margin:0;display:grid;grid-template-columns:max-content 1fr;gap:4px 12px;font-size:14px;line-height:20px}
+.pf-list dt{color:var(--muted)}
+.pf-list dd{margin:0}
+.pf-warn{margin:0;padding:12px 12px 12px 32px;border-radius:8px;background:var(--warn-soft);color:var(--ink);font-size:14px;line-height:20px;border-left:4px solid var(--warn)}
+@media (max-width:560px){.pf-body{flex-direction:column;align-items:center}.pf-list{grid-template-columns:1fr}.pf-list dd{margin-bottom:4px}.eff{flex-direction:column;text-align:center}}
 details.more summary{cursor:pointer;font-weight:600;list-style:none;display:flex;justify-content:space-between;align-items:center;min-height:44px}
 details.more summary::-webkit-details-marker{display:none}
 details.more summary::after{content:"+";color:var(--muted);font-family:var(--f-mono);font-size:16px}

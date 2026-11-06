@@ -27,7 +27,7 @@ src/
   model.js           tipos del modelo (Element, TextItem), MODES, MODE_NAME
   design.js          dibujo cargado → elementos en mm sobre la pieza
   demo.js            dibujo y texto de ejemplo
-  templates.js       plantillas para empezar (llavero, placa, engrane) como croquis + textos — probado
+  templates.js       plantillas (llavero, placa, engrane de evolvente con cuñero, posavasos, regla) como croquis + textos — probado
   input/svg-path.js  lector de rutas SVG puro (sin DOM); curvas divididas por tolerancia — probado
   input/dxf.js       lector DXF puro (LINE, ARC, CIRCLE, LWPOLYLINE/POLYLINE con abombado, ELLIPSE, SPLINE, bloques),
                      $INSUNITS → mm, une tramos sueltos en contornos; entra al croquis a 1:1 — probado
@@ -50,6 +50,7 @@ src/
   cam/arcs.js        ajuste de arcos G02/G03 — probado
   cam/plan.js        cálculo con caché y orden de corte, cede el hilo cada ~30 ms
   cam/gcode.js       escritura del programa (función pura) — probado
+  cam/checks.js      revisión antes de cortar: ficha de preparación (Exportar) y avisos de valores sin sentido — probado
   cam/material.js    perfiles de material: avances sugeridos por carga de viruta con el husillo de la máquina y avisos — probado
   cam/simulate.js    línea de tiempo del programa (duración por avance, posición en cada instante) — probado
   cam/explain.js     explica cada línea del programa siguiendo su estado (posición, modo G, avance) — probado
@@ -57,6 +58,7 @@ src/
   text/text.js       textos rellenos (canvas → ImageTracer) y posición en la pieza
   preview/canvas.js  dibujo de la vista previa y selección con el puntero
   ui/list.js         lista de figuras con miniatura y botones de modo; al pasar el cursor se resalta en la pieza
+  ui/tool-figure.js  dibujo de la punta de la herramienta en la pieza y el ancho de línea que deja
   ui/help.js         botón "?" con explicación corta en los campos que confunden (textos en HELP)
   ui/code-view.js    visor del programa: tocar una línea la explica y resalta su movimiento
   ui/sheet.js        hoja de entrega imprimible (#sheet, solo visible con @media print)

@@ -140,6 +140,8 @@
           <button type="button" data-template="llavero">Llavero</button>
           <button type="button" data-template="placa">Placa con nombre</button>
           <button type="button" data-template="engrane">Engrane</button>
+          <button type="button" data-template="posavasos">Posavasos</button>
+          <button type="button" data-template="regla">Regla</button>
         </div>
       </div>
       <!-- barra de estado del croquis: zoom a la izquierda, coordenadas y definición a la derecha -->
@@ -358,7 +360,7 @@
       <div class="params">
         <label>Prof. por pasada (mm)<input type="number" id="stepdown" value="0.2" min="0.01" step="0.05"></label>
         <label>Paso de vaciado (%)<input type="number" id="stepover" value="45" min="10" max="90" step="5"></label>
-        <label>Número (T)<input type="number" id="tnum" value="3" min="1" step="1"></label>
+        <label>Número (T)<input type="number" id="tnum" value="3" min="1" max="99" step="1"></label>
         <label>Ignorar manchas &lt; (mm²)<input type="number" id="speck" value="0.5" min="0" step="0.1"></label>
       </div>
     </details>
@@ -374,7 +376,7 @@
     <div class="params">
       <h3>Máquina</h3>
       <label class="full">Controlador<select id="dialect"><option value="fanuc">Fanuc / Haas</option><option value="grbl">GRBL</option></select></label>
-      <label>Husillo (rpm)<input type="number" id="rpm" value="2200" min="0" step="100"></label>
+      <label>Husillo (rpm)<input type="number" id="rpm" value="2200" min="100" step="100"></label>
       <label>Retracción Z (mm)<input type="number" id="retract" value="3" min="0.5" step="0.5"></label>
       <label>Avance en Z (mm/min)<input type="number" id="fz" value="60" min="1" step="5"></label>
       <label>Avance en X-Y (mm/min)<input type="number" id="fxy" value="130" min="1" step="5"></label>
@@ -383,7 +385,7 @@
       <summary>Formato del código</summary>
       <div class="params">
       <label>Decimales<select id="dec"><option>1</option><option selected>2</option><option>3</option></select></label>
-      <label>Número de programa<input type="number" id="prog" value="1" min="1" step="1"></label>
+      <label>Número de programa<input type="number" id="prog" value="1" min="1" max="9999" step="1"></label>
       <label>Tolerancia de curvas (mm)<input type="number" id="tol" value="0.05" min="0.005" step="0.01"></label>
       <label class="check"><input type="checkbox" id="arcs" checked> Arcos G02/G03</label>
       </div>
@@ -399,6 +401,12 @@
 <dialog id="exportDlg" aria-labelledby="exportTitle">
   <form method="dialog" novalidate>
     <div class="dlg-head"><h2 id="exportTitle">Exportar</h2><button type="submit" class="icon ghost" aria-label="Cerrar"><svg class="i"><use href="#i-close"/></svg></button></div>
+    <!-- lo que hay que preparar en la máquina: el error más caro es cortar con otra herramienta o con el cero mal puesto -->
+    <section class="preflight" aria-labelledby="pfTitle">
+      <h3 id="pfTitle">Antes de cortar, revisa la máquina</h3>
+      <div class="pf-body"><div id="pfTool"></div><dl class="pf-list" id="pfList"></dl></div>
+      <ul class="pf-warn" id="pfWarn" hidden></ul>
+    </section>
     <p class="export-sum" id="exportSum"></p>
     <div class="export-opts">
       <button type="button" class="export-opt primary-opt" id="save" autofocus><svg class="i"><use href="#i-save"/></svg><span><b>Guardar código</b><small>Archivo .txt para la máquina (Ctrl+S)</small></span></button>

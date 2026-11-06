@@ -10,6 +10,8 @@ import { isDesktop, saveTextDesktop } from './desktop.js';
 import { toolGeometry } from './cam/tool.js';
 import { parseSVG, SVG_QUALITY } from './input/svg.js';
 import { traceImage } from './input/image.js';
+import { duration, jobRisks, setupSheet } from './cam/checks.js';
+import { toolFigure } from './ui/tool-figure.js';
 import { dxfEntities, parseDxf } from './input/dxf.js';
 import { bbox, createPreview } from './preview/canvas.js';
 import { buildText, textElement, TEXT_FONTS } from './text/text.js';
@@ -132,7 +134,7 @@ function renderAll() {
   });
 }
 
-function warnings(p, plan) {
+function warnings(p, plan, g) {
   const r = plan.tl.r;
   const nm = (e, i) => (e.src === 'text' ? `El texto “${e.text.text}”` : `La figura ${i + 1}`);
   const out = state.elements.map((e, i) => {
@@ -143,7 +145,7 @@ function warnings(p, plan) {
   const thin = state.elements.map((e, i) => (e.warn ? { e, i } : null)).filter(Boolean);
   const ws = [];
   if (state.designNote) ws.push(state.designNote);
-  ws.push(...feedRisks($('material').value, p));
+  ws.push(...feedRisks($('material').value, p), ...jobRisks(p, plan.tl, g, { material: !!$('material').value }));
   if (out.length) ws.push(`${out.join(', ')} se sale${out.length > 1 ? 'n' : ''} de la pieza; ajusta su tamaño o su posición.`);
   if (thin.length > 3) {
     const tot = thin.reduce((a, { e }) => a + (parseFloat(e.warn) || 0), 0);
@@ -186,9 +188,9 @@ async function refresh() {
     showCode();
     $('stats').textContent = '';
     // lo que importa al cortar; las líneas del programa están en Exportar y en Código G
-    [['Tiempo aprox.', `${Math.max(1, Math.round(g.mins))} min`], ['Corte', `${g.cutLen.toFixed(0)} mm`], ...(g.passes > 1 ? [['Pasadas', g.passes]] : [])]
+    [['Tiempo aprox.', duration(g.mins)], ['Corte', `${g.cutLen.toFixed(0)} mm`], ...(g.passes > 1 ? [['Pasadas', g.passes]] : [])]
       .forEach(([a, b]) => { const s = document.createElement('span'); s.append(a + ' '); const bb = document.createElement('b'); bb.textContent = b; s.append(bb); $('stats').append(s); });
-    const ws = warnings(p, plan);
+    const ws = state.lastWarns = warnings(p, plan, g);
     $('warns').textContent = '';
     if (ws.length) {
       // aviso: ícono, título y un punto por problema
@@ -202,7 +204,9 @@ async function refresh() {
   simButtons();
   jobSummary();
   renderAll();
-  $('eff').textContent = `Ancho de línea a ${tl.depth} mm: ${tl.w.toFixed(2)} mm${tl.type === 'ball' ? ' (la bola solo corta con la punta)' : tl.type === 'v' ? ' (depende de la profundidad)' : ''}`;
+  // cómo corta la herramienta elegida: el dibujo de la punta y una frase
+  $('eff').innerHTML = toolFigure(tl, p) + '<p></p>';
+  $('eff').querySelector('p').textContent = `A ${tl.depth} mm de profundidad deja una línea de ${tl.w.toFixed(2)} mm${tl.type === 'ball' ? ': la bola solo corta con la punta' : tl.type === 'v' ? ': más hondo, más ancha' : ', igual a su diámetro'}.`;
 }
 
 async function loadShapes(fn, isImage, msg) {
@@ -216,7 +220,9 @@ async function loadShapes(fn, isImage, msg) {
     busy('Separando figuras…');
     await tick();
     state.design = [];
-    rebuildDesign(); assemble();
+    rebuildDesign();
+    if (!state.design.length) { state.raw = null; assemble(); refresh(); throw new Error('No quedó ninguna figura que grabar: lo que trae el archivo es demasiado delgado, chico o vacío a este tamaño.'); }
+    assemble();
     $('imgOpts').hidden = !isImage;
     $('svgOpts').hidden = isImage;
     await refresh();
@@ -271,6 +277,7 @@ function loadImage() {
 
 /* ---------- archivos ---------- */
 function openFile(f) {
+  if (!f.size) { $('loadErr').textContent = `${f.name} está vacío.`; return; }
   const isSvg = /svg/i.test(f.type) || /\.svg$/i.test(f.name), isDxf = /\.dxf$/i.test(f.name);
   if (!isSvg && !isDxf && !/^image\//.test(f.type)) { $('loadErr').textContent = 'Ese archivo no es un SVG, un DXF ni una imagen (PNG, JPG o WEBP).'; return; }
   state.fileName = f.name.replace(/\.[^.]+$/, ''); $('docName').value = state.fileName;
@@ -1402,8 +1409,19 @@ document.querySelectorAll('#jobDlg input, #jobDlg select, #setDlg input, #setDlg
 
 function openExport() {
   if (!state.gcode) { $('toast').textContent = 'Todavía no hay nada que exportar: dibuja o abre algo primero.'; return; }
-  const g = state.lastG, p = params();
-  $('exportSum').textContent = `${g.lines} líneas · ~${Math.max(1, Math.round(g.mins))} min · ${p.dialect === 'fanuc' ? 'Fanuc / Haas' : 'GRBL'}`;
+  const g = state.lastG, p = params(), tl = state.plan.tl;
+  $('exportSum').textContent = `${g.lines.toLocaleString('es-MX')} líneas · ${p.dialect === 'fanuc' ? 'Fanuc / Haas' : 'GRBL'}`;
+  $('pfTool').innerHTML = toolFigure(tl, p);
+  const mat = $('material').selectedOptions[0];
+  $('pfList').textContent = '';
+  setupSheet({ ...p, materialName: $('material').value ? mat.textContent : '' }, tl, g).forEach(({ k, v }) => {
+    const dt = document.createElement('dt'), dd = document.createElement('dd');
+    dt.textContent = k; dd.textContent = v; $('pfList').append(dt, dd);
+  });
+  // los mismos avisos de la pieza, aquí también: es el último momento para verlos
+  $('pfWarn').textContent = '';
+  (state.lastWarns || []).forEach(w => { const li = document.createElement('li'); li.textContent = w; $('pfWarn').append(li); });
+  $('pfWarn').hidden = !(state.lastWarns || []).length;
   $('exportDlg').showModal();
 }
 $('exportBtn').addEventListener('click', openExport);
