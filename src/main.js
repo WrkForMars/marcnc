@@ -10,6 +10,8 @@ import { isDesktop, saveTextDesktop } from './desktop.js';
 import { toolGeometry } from './cam/tool.js';
 import { parseSVG, SVG_QUALITY } from './input/svg.js';
 import { traceImage } from './input/image.js';
+import { duration, jobRisks, setupSheet } from './cam/checks.js';
+import { toolFigure } from './ui/tool-figure.js';
 import { dxfEntities, parseDxf } from './input/dxf.js';
 import { bbox, createPreview } from './preview/canvas.js';
 import { buildText, textElement, TEXT_FONTS } from './text/text.js';
@@ -99,6 +101,14 @@ function select(i) {
   }
 }
 
+/** Con la bienvenida a la vista sobra la instrucción del croquis; en el teléfono la bienvenida ocupa el lugar de la pieza. */
+function syncEmpty() {
+  // con una imagen abierta sin figuras todavía (objeto sin tocar) se trabaja en el panel de la imagen, no aquí
+  $('empty').hidden = !state.ready || state.elements.length > 0 || sketch.tool !== 'select' || !!state.lastImage;
+  const on = !$('empty').hidden;
+  $('sketchbar').classList.toggle('blank', on); $('stage').classList.toggle('is-empty', on);
+}
+
 /* ---------- ciclo principal ---------- */
 function busy(msg) { $('busy').hidden = !msg; if (msg) $('busyText').textContent = msg; }
 function drawOnly(dragging = false) {
@@ -114,7 +124,7 @@ function renderAll() {
   drawOnly();
   $('elCount').textContent = state.elements.length ? String(state.elements.length) : '';
   $('modeLegend').hidden = !state.elements.length;
-  $('empty').hidden = !state.ready || state.elements.length > 0 || sketch.tool !== 'select';
+  syncEmpty();
   renderList($('els'), $('allModes'), {
     elements: state.elements, selected: state.selected,
     onSelect: i => { select(i); renderAll(); },
@@ -124,7 +134,7 @@ function renderAll() {
   });
 }
 
-function warnings(p, plan) {
+function warnings(p, plan, g) {
   const r = plan.tl.r;
   const nm = (e, i) => (e.src === 'text' ? `El texto “${e.text.text}”` : `La figura ${i + 1}`);
   const out = state.elements.map((e, i) => {
@@ -135,7 +145,7 @@ function warnings(p, plan) {
   const thin = state.elements.map((e, i) => (e.warn ? { e, i } : null)).filter(Boolean);
   const ws = [];
   if (state.designNote) ws.push(state.designNote);
-  ws.push(...feedRisks($('material').value, p));
+  ws.push(...feedRisks($('material').value, p), ...jobRisks(p, plan.tl, g, { material: !!$('material').value }));
   if (out.length) ws.push(`${out.join(', ')} se sale${out.length > 1 ? 'n' : ''} de la pieza; ajusta su tamaño o su posición.`);
   if (thin.length > 3) {
     const tot = thin.reduce((a, { e }) => a + (parseFloat(e.warn) || 0), 0);
@@ -177,9 +187,10 @@ async function refresh() {
     if (state.codeSel > state.explained.length) state.codeSel = 0;
     showCode();
     $('stats').textContent = '';
-    [['Tiempo aprox.', `${Math.max(1, Math.round(g.mins))} min`], ['Corte', `${g.cutLen.toFixed(0)} mm`], ['Líneas', g.lines], ['Pasadas', g.passes]]
+    // lo que importa al cortar; las líneas del programa están en Exportar y en Código G
+    [['Tiempo aprox.', duration(g.mins)], ['Corte', `${g.cutLen.toFixed(0)} mm`], ...(g.passes > 1 ? [['Pasadas', g.passes]] : [])]
       .forEach(([a, b]) => { const s = document.createElement('span'); s.append(a + ' '); const bb = document.createElement('b'); bb.textContent = b; s.append(bb); $('stats').append(s); });
-    const ws = warnings(p, plan);
+    const ws = state.lastWarns = warnings(p, plan, g);
     $('warns').textContent = '';
     if (ws.length) {
       // aviso: ícono, título y un punto por problema
@@ -193,7 +204,9 @@ async function refresh() {
   simButtons();
   jobSummary();
   renderAll();
-  $('eff').textContent = `Ancho de línea a ${tl.depth} mm: ${tl.w.toFixed(2)} mm${tl.type === 'ball' ? ' (la bola solo corta con la punta)' : tl.type === 'v' ? ' (depende de la profundidad)' : ''}`;
+  // cómo corta la herramienta elegida: el dibujo de la punta y una frase
+  $('eff').innerHTML = toolFigure(tl, p) + '<p></p>';
+  $('eff').querySelector('p').textContent = `A ${tl.depth} mm de profundidad deja una línea de ${tl.w.toFixed(2)} mm${tl.type === 'ball' ? ': la bola solo corta con la punta' : tl.type === 'v' ? ': más hondo, más ancha' : ', igual a su diámetro'}.`;
 }
 
 async function loadShapes(fn, isImage, msg) {
@@ -207,7 +220,9 @@ async function loadShapes(fn, isImage, msg) {
     busy('Separando figuras…');
     await tick();
     state.design = [];
-    rebuildDesign(); assemble();
+    rebuildDesign();
+    if (!state.design.length) { state.raw = null; assemble(); refresh(); throw new Error('No quedó ninguna figura que grabar: lo que trae el archivo es demasiado delgado, chico o vacío a este tamaño.'); }
+    assemble();
     $('imgOpts').hidden = !isImage;
     $('svgOpts').hidden = isImage;
     await refresh();
@@ -262,6 +277,7 @@ function loadImage() {
 
 /* ---------- archivos ---------- */
 function openFile(f) {
+  if (!f.size) { $('loadErr').textContent = `${f.name} está vacío.`; return; }
   const isSvg = /svg/i.test(f.type) || /\.svg$/i.test(f.name), isDxf = /\.dxf$/i.test(f.name);
   if (!isSvg && !isDxf && !/^image\//.test(f.type)) { $('loadErr').textContent = 'Ese archivo no es un SVG, un DXF ni una imagen (PNG, JPG o WEBP).'; return; }
   state.fileName = f.name.replace(/\.[^.]+$/, ''); $('docName').value = state.fileName;
@@ -281,7 +297,7 @@ function openFile(f) {
   } else {
     rd.onload = () => {
       const im = new Image();
-      im.onload = () => { state.lastImage = im; state.imgCrop = null; state.imgSeeds = []; state.imgMask = null; loadImage(); };
+      im.onload = () => { state.lastImage = im; state.imgCrop = null; state.imgSeeds = []; state.imgMask = null; state.imgFresh = true; showTab(false); loadImage(); };
       im.onerror = () => { $('loadErr').textContent = 'No pude abrir esa imagen.'; };
       im.src = String(rd.result);
     };
@@ -331,10 +347,11 @@ async function addDemoText() {
   Object.entries(DEMO_TEXT).forEach(([k, v]) => { const id = { text: 'tText', font: 'tFont', h: 'tH', sp: 'tSp', x: 'tX', y: 'tY' }[k]; $(id).value = v; });
   await addText(textFromForm({ id: ++state.textSeq }));
 }
-$('demo').addEventListener('click', async () => {
+/** Abre el dibujo de ejemplo con su texto. */
+async function openDemo() {
   state.lastImage = null; state.lastSvg = DEMO_SVG; state.fileName = 'Ejemplo'; $('docName').value = 'Ejemplo'; $('fit').value = 'native'; state.demoFit = true;
   await loadSvg(); await addDemoText(); select(-1); refresh();
-});
+}
 $('clear').addEventListener('click', () => {
   Object.assign(state, { raw: null, design: [], texts: [], lastImage: null, imgSeeds: [], lastSvg: '', designNote: '', fileName: '', designSize: [0, 0] });
   $('docName').value = '';
@@ -344,7 +361,18 @@ $('clear').addEventListener('click', () => {
 });
 $('thr').addEventListener('input', () => { $('thrVal').textContent = $('thr').value; });
 $('thr').addEventListener('change', loadImage);
-['imgMode', 'imgClean', 'imgDetail', 'imgInvert'].forEach(id => $(id).addEventListener('change', () => { $('thrLbl').hidden = $('imgMode').value !== 'manual'; loadImage(); }));
+['imgClean', 'imgDetail', 'imgInvert'].forEach(id => $(id).addEventListener('change', loadImage));
+$('imgDetect').addEventListener('change', () => setImgKind(false));
+/** Dibujo (con el modo de detección elegido en Más opciones) u objeto en una foto. imgMode guarda el modo que se aplica. */
+function setImgKind(object) {
+  const before = $('imgMode').value;
+  $('imgMode').value = object ? 'object' : $('imgDetect').value;
+  $('imgMode').dispatchEvent(new Event('change')); // se recuerda para la próxima imagen
+  syncLabels();
+  if ($('imgMode').value !== before || !object) loadImage();
+}
+$('kindDraw').addEventListener('click', () => setImgKind(false));
+$('kindObj').addEventListener('click', () => setImgKind(true));
 
 /* ---------- imagen: lo que detecta y recorte ---------- */
 const iv = $('imgView'), ivx = iv.getContext('2d');
@@ -415,8 +443,9 @@ function drawImgView() {
   const auto = $('imgMode').value === 'auto';
   $('imgInfo').textContent = object
     ? (info ? `Objeto: ${(info.ink * 100).toFixed(1)} % de la imagen. ¿Sobra algo? Elige Fondo y tócalo.` : 'Toca el objeto para separarlo del fondo.')
-    : info ? `Dibujo: ${(info.ink * 100).toFixed(1)} % de la imagen${auto && info.used === 'photo' ? ' · parece foto: se ignoran sombras' : ''}${info.inverted ? ' · invertida' : ''}${state.imgMask ? ` · ${state.imgMask.w} × ${state.imgMask.h} px` : ''}. ¿Es la foto de un objeto? Tócalo.` : '';
+    : info ? `Dibujo: ${(info.ink * 100).toFixed(1)} % de la imagen${auto && info.used === 'photo' ? ' · parece foto: se ignoran sombras' : ''}${info.inverted ? ' · invertida' : ''}${state.imgMask ? ` · ${state.imgMask.w} × ${state.imgMask.h} px` : ''}` : '';
   $('imgUncrop').hidden = !state.imgCrop;
+  if (state.imgFresh) { state.imgFresh = false; $('imgOpts').scrollIntoView({ block: matchMedia('(max-width: 960px)').matches ? 'start' : 'nearest' }); } // recién abierta: a la vista (en celular, bajo la pieza)
 }
 const ivPos = ev => { const r = iv.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; };
 iv.addEventListener('pointerdown', ev => { if (!state.lastImage || ev.button) return; ivDrag = { start: ivPos(ev), cur: null }; iv.setPointerCapture(ev.pointerId); });
@@ -428,7 +457,7 @@ iv.addEventListener('pointermove', ev => { if (ivDrag) { ivDrag.cur = ivPos(ev);
 function ivTap([px, py], fg) {
   const L = ivLayout(), x = (px - L.ox) / (L.iw * L.k), y = (py - L.oy) / (L.ih * L.k);
   if (x < 0 || y < 0 || x > 1 || y > 1) return;
-  if ($('imgMode').value !== 'object') { $('imgMode').value = 'object'; syncLabels(); fg = true; setSeedFg(true); }
+  if ($('imgMode').value !== 'object') { $('imgMode').value = 'object'; $('imgMode').dispatchEvent(new Event('change')); syncLabels(); fg = true; setSeedFg(true); }
   const hit = state.imgSeeds.findIndex(s => Math.hypot((s.x - x) * L.iw * L.k, (s.y - y) * L.ih * L.k) < 10);
   if (hit >= 0) state.imgSeeds.splice(hit, 1);
   else state.imgSeeds.push({ x, y, fg });
@@ -493,7 +522,15 @@ const STORE = 'marcnc:parametros';
 const getVal = id => ($(id).type === 'checkbox' ? $(id).checked : $(id).value);
 const setVal = (id, v) => { if ($(id).type === 'checkbox') $(id).checked = !!v; else $(id).value = v; };
 const DEFAULTS = Object.fromEntries(SAVED.map(id => [id, getVal(id)]));
-const syncLabels = () => { $('vAngLbl').hidden = $('vTipLbl').hidden = $('ttype').value !== 'v'; $('thrVal').textContent = $('thr').value; $('thrLbl').hidden = $('imgMode').value !== 'manual'; svgQualityLabel(); };
+const syncLabels = () => { $('vAngLbl').hidden = $('vTipLbl').hidden = $('ttype').value !== 'v'; $('thrVal').textContent = $('thr').value; syncImgKind(); svgQualityLabel(); };
+/** Botones de tipo de imagen y opciones que solo aplican a un dibujo, según imgMode. */
+function syncImgKind() {
+  const mode = $('imgMode').value, object = mode === 'object';
+  if (!object) $('imgDetect').value = mode;
+  $('kindDraw').setAttribute('aria-pressed', String(!object)); $('kindObj').setAttribute('aria-pressed', String(object));
+  document.querySelectorAll('.draw-only').forEach(el => { el.hidden = object; });
+  $('thrLbl').hidden = mode !== 'manual';
+}
 function storeParams() {
   try { localStorage.setItem(STORE, JSON.stringify(Object.fromEntries(SAVED.map(id => [id, getVal(id)])))); } catch { /* sin almacenamiento: no pasa nada */ }
 }
@@ -731,7 +768,7 @@ function setTool(t) {
   $('sketchbar').classList.toggle('idle', t === 'select');
   $('sketchbar').classList.toggle('dimmode', t === 'dim');
   $('skPrompt').classList.remove('err');
-  if (t !== 'select') { state.selected = -1; renderAll(); } else $('empty').hidden = !state.ready || state.elements.length > 0;
+  if (t !== 'select') { state.selected = -1; renderAll(); } else syncEmpty();
 }
 document.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
 $('skGrid').addEventListener('change', () => sketch.setOptions({ grid: +$('skGrid').value }));
@@ -1372,8 +1409,19 @@ document.querySelectorAll('#jobDlg input, #jobDlg select, #setDlg input, #setDlg
 
 function openExport() {
   if (!state.gcode) { $('toast').textContent = 'Todavía no hay nada que exportar: dibuja o abre algo primero.'; return; }
-  const g = state.lastG, p = params();
-  $('exportSum').textContent = `${g.lines} líneas · ~${Math.max(1, Math.round(g.mins))} min · ${p.dialect === 'fanuc' ? 'Fanuc / Haas' : 'GRBL'}`;
+  const g = state.lastG, p = params(), tl = state.plan.tl;
+  $('exportSum').textContent = `${g.lines.toLocaleString('es-MX')} líneas · ${p.dialect === 'fanuc' ? 'Fanuc / Haas' : 'GRBL'}`;
+  $('pfTool').innerHTML = toolFigure(tl, p);
+  const mat = $('material').selectedOptions[0];
+  $('pfList').textContent = '';
+  setupSheet({ ...p, materialName: $('material').value ? mat.textContent : '' }, tl, g).forEach(({ k, v }) => {
+    const dt = document.createElement('dt'), dd = document.createElement('dd');
+    dt.textContent = k; dd.textContent = v; $('pfList').append(dt, dd);
+  });
+  // los mismos avisos de la pieza, aquí también: es el último momento para verlos
+  $('pfWarn').textContent = '';
+  (state.lastWarns || []).forEach(w => { const li = document.createElement('li'); li.textContent = w; $('pfWarn').append(li); });
+  $('pfWarn').hidden = !(state.lastWarns || []).length;
   $('exportDlg').showModal();
 }
 $('exportBtn').addEventListener('click', openExport);
@@ -1390,7 +1438,7 @@ $('txtClose').addEventListener('click', () => { state.textOpen = false; select(-
 
 $('emptyDraw').addEventListener('click', () => setTool('rect'));
 $('emptyOpen').addEventListener('click', () => $('file').click());
-$('emptyDemo').addEventListener('click', () => $('demo').click());
+$('emptyDemo').addEventListener('click', openDemo);
 
 // un error al abrir o procesar también sale flotando: la pestaña Figuras puede no estar a la vista
 new MutationObserver(() => { const m = $('loadErr').textContent; if (m) $('toast').textContent = m; })
@@ -1407,14 +1455,7 @@ attachHelp();
   restoreParams();
   loadSketch();
   setTool('select');
-  if (sketch.entities.length) { assemble(); state.ready = true; await refresh(); return; } // hay un croquis guardado: se abre ese, sin el ejemplo
-  $('fit').value = 'native'; state.demoFit = true;
-  state.lastSvg = DEMO_SVG; state.fileName = 'Ejemplo'; $('docName').value = 'Ejemplo';
-  await loadShapes(() => parseSVG(DEMO_SVG, $('svghost'), SVG_QUALITY[+$('svgQ').value - 1][0]), false);
-  await addDemoText();
-  select(-1);
-  state.ready = true;
-  await refresh();
-  $('toast').textContent = '';
+  // con un croquis guardado se abre ese; si no, la bienvenida (empezar, abrir, ejemplo o plantilla)
+  assemble(); state.ready = true; await refresh();
 })();
 document.fonts?.ready.then(() => drawOnly());

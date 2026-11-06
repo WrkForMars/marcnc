@@ -2,7 +2,8 @@
 
 Convierte un SVG o una imagen con fondo blanco en código G y M para grabado CNC. Funciona en el navegador o como programa de Windows (.exe) y Linux (.deb / AppImage), sin internet.
 
-- **Para empezar:** plantillas de llavero, placa con nombre y engrane, y un "?" junto a cada campo que confunde (paso de vaciado, retracción, V-bit…).
+- **Para empezar:** plantillas de llavero, placa con nombre, engrane (dientes de evolvente y cuñero), posavasos y regla, y un "?" junto a cada campo que confunde (paso de vaciado, retracción, V-bit…).
+- **Antes de cortar:** Exportar muestra qué preparar en la máquina (herramienta y su medida en pulgadas, ceros, profundidad, husillo y avances) con el dibujo de la punta en la pieza, y avisa valores sin sentido: husillo parado, más hondo que el filo, cientos de pasadas, días de corte.
 - **Perfiles de material** (MDF, acrílico, aluminio, latón): llenan avances y profundidad por pasada según tu husillo y avisan si un valor es arriesgado.
 - **Importa DXF** (SolidWorks, AutoCAD, Fusion, Inkscape) a escala 1:1: líneas, arcos, círculos, polilíneas, elipses, splines y bloques. Los tramos sueltos se unen en contornos y lo de adentro queda como hueco. Pulgadas y cm pasan a mm. Las cotas y los textos del DXF se ignoran. Todo llega como croquis: se puede mover, acotar y elegir su modo.
 - **Croquis como en CAD:** línea, rectángulo de esquina y de centro (con esquinas redondeadas), círculo, arco centro-extremos, polígono y ranura recta, con inferencias al dibujar: horizontal, vertical y alineado con otros puntos, con líneas guía.

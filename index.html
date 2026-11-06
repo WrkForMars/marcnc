@@ -69,7 +69,6 @@
     <span class="sep" aria-hidden="true"></span>
     <button id="clear" type="button" class="ghost" title="Pieza vacía"><svg class="i"><use href="#i-new"/></svg><span class="lbl">Nuevo</span></button>
     <label class="btn ghost" title="Abrir SVG, DXF o imagen (Ctrl+O)"><svg class="i"><use href="#i-open"/></svg><span class="lbl">Abrir</span><input type="file" id="file" accept=".svg,image/svg+xml,.dxf,image/vnd.dxf,application/dxf,image/png,image/jpeg,image/webp"></label>
-    <button id="demo" type="button" class="ghost">Ejemplo</button>
     <span class="sep" aria-hidden="true"></span>
     <button id="setBtn" type="button" class="icon ghost" aria-label="Ajustes de máquina" title="Ajustes de máquina"><svg class="i"><use href="#i-gear"/></svg></button>
     <button id="theme" type="button" class="icon ghost" aria-label="Cambiar entre tema claro y oscuro" title="Tema claro u oscuro"><svg class="i"><use href="#i-theme"/></svg></button>
@@ -108,7 +107,7 @@
       <div class="specs">
         <button type="button" class="spec" id="jobPiece" title="Cambiar la pieza y el tamaño del dibujo"><span class="spec-k"><svg class="i"><use href="#i-plate"/></svg>Pieza</span><span class="spec-v" id="jobPieceTxt">—</span></button>
         <button type="button" class="spec" id="jobTool" title="Cambiar la herramienta y la profundidad"><span class="spec-k"><svg class="i"><use href="#i-bit"/></svg>Herramienta</span><span class="spec-v" id="jobToolTxt">—</span></button>
-        <button type="button" class="spec" id="jobLine" title="Ancho que deja la herramienta a esa profundidad"><span class="spec-k">Línea</span><span class="spec-v strong" id="jobLineTxt">—</span></button>
+        <button type="button" class="spec" id="jobLine" title="Ancho que deja la herramienta a esa profundidad"><span class="spec-k">Ancho de línea</span><span class="spec-v strong" id="jobLineTxt">—</span></button>
         <button type="button" class="spec" id="jobFeeds" title="Ajustes de máquina"><span class="spec-k"><svg class="i"><use href="#i-speed"/></svg>Máquina</span><span class="spec-v" id="jobFeedsTxt">—</span></button>
       </div>
       <label class="check spec-end"><input type="checkbox" id="showPath"> Ver recorrido</label>
@@ -130,7 +129,7 @@
       <div class="empty" id="empty" hidden>
         <svg class="empty-logo" viewBox="0 0 64 64" aria-hidden="true"><use href="#i-wave"/></svg>
         <h2>Empieza tu pieza</h2>
-        <p>Dibuja con medidas exactas, o trae un DXF de SolidWorks, un SVG, un logo o la foto de un dibujo.</p>
+        <p>Dibuja con medidas exactas, o trae un DXF de SolidWorks, un SVG, un logo o una foto.</p>
         <div class="empty-actions">
           <button type="button" id="emptyDraw" class="primary"><svg class="i"><use href="#i-rect"/></svg>Dibujar</button>
           <button type="button" id="emptyOpen"><svg class="i"><use href="#i-open"/></svg>Abrir archivo</button>
@@ -141,6 +140,8 @@
           <button type="button" data-template="llavero">Llavero</button>
           <button type="button" data-template="placa">Placa con nombre</button>
           <button type="button" data-template="engrane">Engrane</button>
+          <button type="button" data-template="posavasos">Posavasos</button>
+          <button type="button" data-template="regla">Regla</button>
         </div>
       </div>
       <!-- barra de estado del croquis: zoom a la izquierda, coordenadas y definición a la derecha -->
@@ -239,16 +240,7 @@
         <p class="hint">También puedes arrastrar el texto en la pieza.</p>
       </div>
 
-      <!-- lista de figuras -->
-      <div class="panel panel-list">
-        <div class="panel-head"><h3>En la pieza</h3></div>
-        <div class="els" id="els"></div>
-        <div id="allModes"></div>
-        <p class="hint" id="modeLegend">Relleno vacía el área · Contorno sigue la orilla · Invertir graba la orilla y vacía los huecos · Línea sigue el trazo.</p>
-        <p class="hint err" id="loadErr" role="alert"></p>
-      </div>
-
-      <!-- archivo cargado: debajo, es lo que menos se toca -->
+      <!-- imagen cargada: va primero, porque es lo que hay que ajustar antes de ver las figuras -->
       <div class="panel" id="imgOpts" hidden>
         <div class="panel-head"><h3>Imagen</h3>
           <div class="seg" role="group" aria-label="Qué mostrar">
@@ -256,6 +248,14 @@
             <button type="button" id="ivOrig" aria-pressed="false">Original</button>
           </div>
         </div>
+        <div class="kind">
+          <span class="kind-lbl" id="kindLbl">¿Qué hay en la imagen?</span>
+          <div class="seg" role="group" aria-labelledby="kindLbl">
+            <button type="button" id="kindDraw" aria-pressed="true" title="Un dibujo, logo o letras sobre fondo liso">Dibujo o logo</button>
+            <button type="button" id="kindObj" aria-pressed="false" title="Una cosa fotografiada: tócala y se separa del fondo">Objeto en una foto</button>
+          </div>
+        </div>
+        <input type="hidden" id="imgMode" value="auto">
         <canvas id="imgView" class="imgview" aria-label="Imagen cargada; toca el objeto para separarlo o arrastra para recortar"></canvas>
         <div class="row-between" id="objBar" hidden>
           <div class="seg" role="group" aria-label="Qué marca un toque">
@@ -265,26 +265,34 @@
           <button type="button" id="seedClear" class="ghost">Borrar toques</button>
         </div>
         <div class="row-between"><p class="hint" id="imgInfo"></p><button type="button" id="imgUncrop" class="ghost" hidden>Quitar recorte</button></div>
-        <div class="params">
-          <label class="full">Detectar el dibujo<select id="imgMode">
-            <option value="auto">Automático</option>
-            <option value="object">Objeto en una foto (tócalo)</option>
-            <option value="photo">Foto de papel (ignora sombras)</option>
-            <option value="color">Por color del fondo</option>
-            <option value="manual">Umbral manual</option>
-          </select></label>
-          <label class="full" id="thrLbl" for="thr" hidden>Umbral: <b id="thrVal">128</b><input type="range" id="thr" min="20" max="235" value="128"></label>
+        <div class="params draw-only">
           <label class="full">Vectorizar como<select id="imgHow"><option value="area">Áreas (rellenar o contornear)</option><option value="center">Línea central (una pasada por trazo)</option></select></label>
         </div>
         <details class="more">
           <summary>Más opciones de imagen</summary>
           <div class="params">
+            <label class="full draw-only">Detectar el dibujo<select id="imgDetect">
+              <option value="auto">Automático</option>
+              <option value="photo">Foto de papel (ignora sombras)</option>
+              <option value="color">Por color del fondo</option>
+              <option value="manual">Umbral manual</option>
+            </select></label>
+            <label class="full" id="thrLbl" for="thr" hidden>Umbral: <b id="thrVal">128</b><input type="range" id="thr" min="20" max="235" value="128"></label>
             <label>Limpieza<select id="imgClean"><option value="0">Ninguna</option><option value="1" selected>Suave</option><option value="2">Media</option><option value="3">Fuerte</option></select></label>
             <label>Detalle<select id="imgDetail"><option value="600" selected>Normal</option><option value="1200">Alto</option><option value="2000">Máximo</option></select></label>
-            <label class="full check"><input type="checkbox" id="imgInvert"> Invertir (el dibujo es lo claro)</label>
+            <label class="full check draw-only"><input type="checkbox" id="imgInvert"> Invertir (el dibujo es lo claro)</label>
           </div>
           <p class="hint">Arrastra sobre la imagen para recortarla. Limpieza quita puntitos y tapa huecos chicos; más detalle conserva líneas finas.</p>
         </details>
+      </div>
+
+      <!-- lista de figuras -->
+      <div class="panel panel-list">
+        <div class="panel-head"><h3>En la pieza</h3></div>
+        <div class="els" id="els"></div>
+        <div id="allModes"></div>
+        <p class="hint" id="modeLegend">Relleno vacía el área · Contorno sigue la orilla · Invertir graba la orilla y vacía los huecos · Línea sigue el trazo.</p>
+        <p class="hint err" id="loadErr" role="alert"></p>
       </div>
 
       <div class="panel" id="svgOpts" hidden>
@@ -338,19 +346,24 @@
       <label id="dhLbl" hidden>Alto del dibujo (mm)<input type="number" id="dh" min="1" step="0.5"></label>
       <p class="hint full" id="sizeInfo"></p>
       <label id="marginLbl">Margen (mm)<input type="number" id="margin" value="3" min="0" step="0.5"></label>
-      <label>Ignorar manchas &lt; (mm²)<input type="number" id="speck" value="0.5" min="0" step="0.1"></label>
 
       <h3 id="secTool">Herramienta</h3>
       <label>Tipo<select id="ttype"><option value="ball">Ball mill</option><option value="flat">Fresa plana</option><option value="v">V-bit</option></select></label>
       <label>Diámetro (mm)<input type="number" id="tdia" value="3.175" min="0.1" step="0.025"></label>
       <label id="vAngLbl" hidden>Ángulo del V-bit (°)<input type="number" id="vang" value="60" min="10" max="150" step="5"></label>
       <label id="vTipLbl" hidden>Punta del V-bit (mm)<input type="number" id="vtip" value="0.1" min="0" step="0.05"></label>
-      <label>Número (T)<input type="number" id="tnum" value="3" min="1" step="1"></label>
       <label>Profundidad (mm)<input type="number" id="depth" value="0.1" min="0.01" step="0.05"></label>
       <div class="eff full" id="eff"></div>
-      <label>Prof. por pasada (mm)<input type="number" id="stepdown" value="0.2" min="0.01" step="0.05"></label>
-      <label>Paso de vaciado (%)<input type="number" id="stepover" value="45" min="10" max="90" step="5"></label>
     </div>
+    <details class="more">
+      <summary>Más opciones</summary>
+      <div class="params">
+        <label>Prof. por pasada (mm)<input type="number" id="stepdown" value="0.2" min="0.01" step="0.05"></label>
+        <label>Paso de vaciado (%)<input type="number" id="stepover" value="45" min="10" max="90" step="5"></label>
+        <label>Número (T)<input type="number" id="tnum" value="3" min="1" max="99" step="1"></label>
+        <label>Ignorar manchas &lt; (mm²)<input type="number" id="speck" value="0.5" min="0" step="0.1"></label>
+      </div>
+    </details>
     <div class="dlg-actions"><button type="submit" class="primary">Listo</button></div>
   </form>
 </dialog>
@@ -359,20 +372,24 @@
 <dialog id="setDlg" aria-labelledby="setTitle">
   <form method="dialog" novalidate>
     <div class="dlg-head"><h2 id="setTitle" tabindex="-1" autofocus>Ajustes de máquina</h2><button type="submit" class="icon ghost" aria-label="Cerrar"><svg class="i"><use href="#i-close"/></svg></button></div>
-    <p class="hint">Se guardan en este equipo. Los valores iniciales son los de la tarea de referencia (T3, S2200, F60/F130, Z3).</p>
+    <p class="hint">Se configuran una vez por máquina y se guardan en este equipo.</p>
     <div class="params">
       <h3>Máquina</h3>
       <label class="full">Controlador<select id="dialect"><option value="fanuc">Fanuc / Haas</option><option value="grbl">GRBL</option></select></label>
-      <label>Husillo (rpm)<input type="number" id="rpm" value="2200" min="0" step="100"></label>
+      <label>Husillo (rpm)<input type="number" id="rpm" value="2200" min="100" step="100"></label>
       <label>Retracción Z (mm)<input type="number" id="retract" value="3" min="0.5" step="0.5"></label>
       <label>Avance en Z (mm/min)<input type="number" id="fz" value="60" min="1" step="5"></label>
       <label>Avance en X-Y (mm/min)<input type="number" id="fxy" value="130" min="1" step="5"></label>
-      <h3>Formato del código</h3>
+    </div>
+    <details class="more">
+      <summary>Formato del código</summary>
+      <div class="params">
       <label>Decimales<select id="dec"><option>1</option><option selected>2</option><option>3</option></select></label>
-      <label>Número de programa<input type="number" id="prog" value="1" min="1" step="1"></label>
+      <label>Número de programa<input type="number" id="prog" value="1" min="1" max="9999" step="1"></label>
       <label>Tolerancia de curvas (mm)<input type="number" id="tol" value="0.05" min="0.005" step="0.01"></label>
       <label class="check"><input type="checkbox" id="arcs" checked> Arcos G02/G03</label>
-    </div>
+      </div>
+    </details>
     <div class="dlg-actions">
       <button type="button" id="reset" class="ghost"><svg class="i"><use href="#i-reset"/></svg>Valores iniciales</button>
       <button type="submit" class="primary">Listo</button>
@@ -384,6 +401,12 @@
 <dialog id="exportDlg" aria-labelledby="exportTitle">
   <form method="dialog" novalidate>
     <div class="dlg-head"><h2 id="exportTitle">Exportar</h2><button type="submit" class="icon ghost" aria-label="Cerrar"><svg class="i"><use href="#i-close"/></svg></button></div>
+    <!-- lo que hay que preparar en la máquina: el error más caro es cortar con otra herramienta o con el cero mal puesto -->
+    <section class="preflight" aria-labelledby="pfTitle">
+      <h3 id="pfTitle">Antes de cortar, revisa la máquina</h3>
+      <div class="pf-body"><div id="pfTool"></div><dl class="pf-list" id="pfList"></dl></div>
+      <ul class="pf-warn" id="pfWarn" hidden></ul>
+    </section>
     <p class="export-sum" id="exportSum"></p>
     <div class="export-opts">
       <button type="button" class="export-opt primary-opt" id="save" autofocus><svg class="i"><use href="#i-save"/></svg><span><b>Guardar código</b><small>Archivo .txt para la máquina (Ctrl+S)</small></span></button>

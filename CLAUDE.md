@@ -27,7 +27,7 @@ src/
   model.js           tipos del modelo (Element, TextItem), MODES, MODE_NAME
   design.js          dibujo cargado → elementos en mm sobre la pieza
   demo.js            dibujo y texto de ejemplo
-  templates.js       plantillas para empezar (llavero, placa, engrane) como croquis + textos — probado
+  templates.js       plantillas (llavero, placa, engrane de evolvente con cuñero, posavasos, regla) como croquis + textos — probado
   input/svg-path.js  lector de rutas SVG puro (sin DOM); curvas divididas por tolerancia — probado
   input/dxf.js       lector DXF puro (LINE, ARC, CIRCLE, LWPOLYLINE/POLYLINE con abombado, ELLIPSE, SPLINE, bloques),
                      $INSUNITS → mm, une tramos sueltos en contornos; entra al croquis a 1:1 — probado
@@ -50,6 +50,7 @@ src/
   cam/arcs.js        ajuste de arcos G02/G03 — probado
   cam/plan.js        cálculo con caché y orden de corte, cede el hilo cada ~30 ms
   cam/gcode.js       escritura del programa (función pura) — probado
+  cam/checks.js      revisión antes de cortar: ficha de preparación (Exportar) y avisos de valores sin sentido — probado
   cam/material.js    perfiles de material: avances sugeridos por carga de viruta con el husillo de la máquina y avisos — probado
   cam/simulate.js    línea de tiempo del programa (duración por avance, posición en cada instante) — probado
   cam/explain.js     explica cada línea del programa siguiendo su estado (posición, modo G, avance) — probado
@@ -57,6 +58,7 @@ src/
   text/text.js       textos rellenos (canvas → ImageTracer) y posición en la pieza
   preview/canvas.js  dibujo de la vista previa y selección con el puntero
   ui/list.js         lista de figuras con miniatura y botones de modo; al pasar el cursor se resalta en la pieza
+  ui/tool-figure.js  dibujo de la punta de la herramienta en la pieza y el ancho de línea que deja
   ui/help.js         botón "?" con explicación corta en los campos que confunden (textos en HELP)
   ui/code-view.js    visor del programa: tocar una línea la explica y resalta su movimiento
   ui/sheet.js        hoja de entrega imprimible (#sheet, solo visible con @media print)
@@ -64,7 +66,7 @@ tests/               Vitest en entorno node; helpers.js trae parseMoves() para l
 ```
 
 El croquis no pasa por `buildDesign`: ya está en mm de la pieza y `sketchElements` da los elementos directo.
-Se guarda en localStorage (`marcnc:croquis`); si hay uno guardado, la app abre con él en vez del ejemplo.
+Se guarda en localStorage (`marcnc:croquis`); si hay uno guardado, la app abre con él; si no, con la bienvenida (Dibujar, Abrir, ejemplo, plantillas).
 
 Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y hacia arriba) → elementos
 → `computePlan` (trayectorias del centro de la herramienta + orden) → `generateGcode`.
@@ -100,6 +102,8 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
   herramientas de su pestaña Croquis, Cota inteligente, PropertyManager con vista previa y ✓ / ✕ (Enter / Esc), "Para
   construcción" en Opciones, azul = insuficientemente definido, clic derecho termina la cadena o abre el menú, rueda =
   zoom en el cursor, botón central = desplazar, F = ajustar, Enter = repetir el último comando. Usar sus nombres en español.
+- **Simple primero:** cada panel o diálogo muestra lo que casi todos usan; lo técnico va en un `details.more` ("Más opciones").
+  La imagen abierta va arriba de la lista de figuras y pregunta una sola cosa: dibujo u objeto en una foto.
 - **Textos:** cada cosa se dice una vez y en el lugar donde se usa. Los atajos van en el `title` de los botones, no en
   párrafos de ayuda; los mensajes de estado dicen qué falta, no repiten la leyenda de colores.
 - **Lo que se dibuja sobre la placa** usa los tokens `--plate-*` y `--pm-*`, que no cambian con el tema: la placa es metal
