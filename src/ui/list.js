@@ -39,7 +39,7 @@ export function renderList(box, allBox, s) {
   if (!elements.length) {
     const p = document.createElement('p');
     p.className = 'hint';
-    p.textContent = 'Todavía no hay figuras. Dibuja, abre un archivo (DXF, SVG o imagen) o agrega un texto.';
+    p.textContent = 'Aquí aparecen las figuras de la pieza, cada una con su modo de corte.';
     box.append(p);
   }
   elements.forEach((e, i) => {

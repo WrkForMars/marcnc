@@ -64,7 +64,7 @@ tests/               Vitest en entorno node; helpers.js trae parseMoves() para l
 ```
 
 El croquis no pasa por `buildDesign`: ya está en mm de la pieza y `sketchElements` da los elementos directo.
-Se guarda en localStorage (`marcnc:croquis`); si hay uno guardado, la app abre con él en vez del ejemplo.
+Se guarda en localStorage (`marcnc:croquis`); si hay uno guardado, la app abre con él; si no, con la bienvenida (Dibujar, Abrir, ejemplo, plantillas).
 
 Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y hacia arriba) → elementos
 → `computePlan` (trayectorias del centro de la herramienta + orden) → `generateGcode`.
@@ -100,6 +100,8 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
   herramientas de su pestaña Croquis, Cota inteligente, PropertyManager con vista previa y ✓ / ✕ (Enter / Esc), "Para
   construcción" en Opciones, azul = insuficientemente definido, clic derecho termina la cadena o abre el menú, rueda =
   zoom en el cursor, botón central = desplazar, F = ajustar, Enter = repetir el último comando. Usar sus nombres en español.
+- **Simple primero:** cada panel o diálogo muestra lo que casi todos usan; lo técnico va en un `details.more` ("Más opciones").
+  La imagen abierta va arriba de la lista de figuras y pregunta una sola cosa: dibujo u objeto en una foto.
 - **Textos:** cada cosa se dice una vez y en el lugar donde se usa. Los atajos van en el `title` de los botones, no en
   párrafos de ayuda; los mensajes de estado dicen qué falta, no repiten la leyenda de colores.
 - **Lo que se dibuja sobre la placa** usa los tokens `--plate-*` y `--pm-*`, que no cambian con el tema: la placa es metal

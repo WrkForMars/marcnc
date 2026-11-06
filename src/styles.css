@@ -76,6 +76,7 @@ input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent);margin:0;
 .hint{color:var(--muted);font-size:12px;line-height:16px;margin:0}
 .err{color:var(--warn)}
 .row2{display:flex;gap:8px;flex-wrap:wrap}
+.sketchbar.blank .sk-status{visibility:hidden}
 .kind{display:flex;flex-direction:column;gap:4px;margin-bottom:8px}
 .kind-lbl{font-size:12px;font-weight:600;color:var(--muted)}
 .row-between{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
@@ -306,7 +307,12 @@ dialog h2{font-family:var(--f-display);font-size:24px;line-height:32px;margin:0}
   .params{grid-template-columns:1fr}
   .stage{--pad:8px}
   .jobbar-end{margin-left:0}
-  #demo{display:none} /* también está en la pieza vacía */
+  /* la bienvenida no cabe sobre una pieza tan chica: toma su lugar */
+  .stage.is-empty canvas{visibility:hidden;position:absolute;left:var(--pad);top:var(--pad);width:calc(100% - 2 * var(--pad))}
+  .stage.is-empty .hud{display:none}
+  .sketchbar.blank{display:none}
+  .stage.is-empty .empty{position:static;background:var(--plate);border-radius:8px;padding:24px 16px}
+  .empty h2{font-size:24px;line-height:32px}
   .sketchbar.idle .sk-ctl{display:none} /* en el teléfono no hay cursor que se mueva: la barra se encoge al seleccionar */
 }
 @media (max-width:400px){.brand-name{display:none}.actions{gap:0}}

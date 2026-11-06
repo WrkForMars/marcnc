@@ -99,6 +99,14 @@ function select(i) {
   }
 }
 
+/** Con la bienvenida a la vista sobra la instrucción del croquis; en el teléfono la bienvenida ocupa el lugar de la pieza. */
+function syncEmpty() {
+  // con una imagen abierta sin figuras todavía (objeto sin tocar) se trabaja en el panel de la imagen, no aquí
+  $('empty').hidden = !state.ready || state.elements.length > 0 || sketch.tool !== 'select' || !!state.lastImage;
+  const on = !$('empty').hidden;
+  $('sketchbar').classList.toggle('blank', on); $('stage').classList.toggle('is-empty', on);
+}
+
 /* ---------- ciclo principal ---------- */
 function busy(msg) { $('busy').hidden = !msg; if (msg) $('busyText').textContent = msg; }
 function drawOnly(dragging = false) {
@@ -114,7 +122,7 @@ function renderAll() {
   drawOnly();
   $('elCount').textContent = state.elements.length ? String(state.elements.length) : '';
   $('modeLegend').hidden = !state.elements.length;
-  $('empty').hidden = !state.ready || state.elements.length > 0 || sketch.tool !== 'select';
+  syncEmpty();
   renderList($('els'), $('allModes'), {
     elements: state.elements, selected: state.selected,
     onSelect: i => { select(i); renderAll(); },
@@ -177,7 +185,8 @@ async function refresh() {
     if (state.codeSel > state.explained.length) state.codeSel = 0;
     showCode();
     $('stats').textContent = '';
-    [['Tiempo aprox.', `${Math.max(1, Math.round(g.mins))} min`], ['Corte', `${g.cutLen.toFixed(0)} mm`], ['Líneas', g.lines], ['Pasadas', g.passes]]
+    // lo que importa al cortar; las líneas del programa están en Exportar y en Código G
+    [['Tiempo aprox.', `${Math.max(1, Math.round(g.mins))} min`], ['Corte', `${g.cutLen.toFixed(0)} mm`], ...(g.passes > 1 ? [['Pasadas', g.passes]] : [])]
       .forEach(([a, b]) => { const s = document.createElement('span'); s.append(a + ' '); const bb = document.createElement('b'); bb.textContent = b; s.append(bb); $('stats').append(s); });
     const ws = warnings(p, plan);
     $('warns').textContent = '';
@@ -331,10 +340,11 @@ async function addDemoText() {
   Object.entries(DEMO_TEXT).forEach(([k, v]) => { const id = { text: 'tText', font: 'tFont', h: 'tH', sp: 'tSp', x: 'tX', y: 'tY' }[k]; $(id).value = v; });
   await addText(textFromForm({ id: ++state.textSeq }));
 }
-$('demo').addEventListener('click', async () => {
+/** Abre el dibujo de ejemplo con su texto. */
+async function openDemo() {
   state.lastImage = null; state.lastSvg = DEMO_SVG; state.fileName = 'Ejemplo'; $('docName').value = 'Ejemplo'; $('fit').value = 'native'; state.demoFit = true;
   await loadSvg(); await addDemoText(); select(-1); refresh();
-});
+}
 $('clear').addEventListener('click', () => {
   Object.assign(state, { raw: null, design: [], texts: [], lastImage: null, imgSeeds: [], lastSvg: '', designNote: '', fileName: '', designSize: [0, 0] });
   $('docName').value = '';
@@ -751,7 +761,7 @@ function setTool(t) {
   $('sketchbar').classList.toggle('idle', t === 'select');
   $('sketchbar').classList.toggle('dimmode', t === 'dim');
   $('skPrompt').classList.remove('err');
-  if (t !== 'select') { state.selected = -1; renderAll(); } else $('empty').hidden = !state.ready || state.elements.length > 0;
+  if (t !== 'select') { state.selected = -1; renderAll(); } else syncEmpty();
 }
 document.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
 $('skGrid').addEventListener('change', () => sketch.setOptions({ grid: +$('skGrid').value }));
@@ -1410,7 +1420,7 @@ $('txtClose').addEventListener('click', () => { state.textOpen = false; select(-
 
 $('emptyDraw').addEventListener('click', () => setTool('rect'));
 $('emptyOpen').addEventListener('click', () => $('file').click());
-$('emptyDemo').addEventListener('click', () => $('demo').click());
+$('emptyDemo').addEventListener('click', openDemo);
 
 // un error al abrir o procesar también sale flotando: la pestaña Figuras puede no estar a la vista
 new MutationObserver(() => { const m = $('loadErr').textContent; if (m) $('toast').textContent = m; })
@@ -1427,14 +1437,7 @@ attachHelp();
   restoreParams();
   loadSketch();
   setTool('select');
-  if (sketch.entities.length) { assemble(); state.ready = true; await refresh(); return; } // hay un croquis guardado: se abre ese, sin el ejemplo
-  $('fit').value = 'native'; state.demoFit = true;
-  state.lastSvg = DEMO_SVG; state.fileName = 'Ejemplo'; $('docName').value = 'Ejemplo';
-  await loadShapes(() => parseSVG(DEMO_SVG, $('svghost'), SVG_QUALITY[+$('svgQ').value - 1][0]), false);
-  await addDemoText();
-  select(-1);
-  state.ready = true;
-  await refresh();
-  $('toast').textContent = '';
+  // con un croquis guardado se abre ese; si no, la bienvenida (empezar, abrir, ejemplo o plantilla)
+  assemble(); state.ready = true; await refresh();
 })();
 document.fonts?.ready.then(() => drawOnly());
