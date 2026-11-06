@@ -73,11 +73,9 @@ npm run escritorio   # ventana de desarrollo con recarga en vivo
 npm run exe          # paquetes del sistema en el que compilas (src-tauri/target/release/bundle/)
 ```
 
-## Publicar en GitHub Pages
+## Publicar una versión
 
-1. Sube el repositorio a GitHub.
-2. En **Settings → Pages**, elige **GitHub Actions** como origen.
-3. Cada push a `main` corre las pruebas, construye y publica (ver `.github/workflows/deploy.yml`).
+MarCNC se reparte solo como app de escritorio. Sube la versión en `package.json`, `src-tauri/tauri.conf.json` y `src-tauri/Cargo.toml`, y empuja una etiqueta `v*` (por ejemplo `git tag v1.0.1 && git push origin v1.0.1`): `.github/workflows/escritorio.yml` compila Windows y Linux y publica el release con los archivos. Cada push a `main` corre las pruebas (`.github/workflows/pruebas.yml`).
 
 ## Antes de cortar
 

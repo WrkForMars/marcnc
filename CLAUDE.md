@@ -3,7 +3,7 @@
 App web que convierte un SVG o una imagen con fondo blanco en código G y M para grabado CNC.
 Cada figura detectada tiene su propio modo de corte (Relleno, Contorno, Invertir, Línea, Omitir),
 se pueden agregar textos y la vista previa simula el grabado con el ancho real de la herramienta.
-Se publica como web (GitHub Pages) y como app de escritorio con Tauri (`src-tauri/`): .exe de Windows y .deb / AppImage de Linux.
+Se reparte solo como app de escritorio con Tauri (`src-tauri/`): .exe de Windows y .deb / AppImage de Linux, publicados en un release al empujar una etiqueta `v*`. No hay versión web publicada (el repositorio es privado).
 Público: estudiantes de ingeniería (ITL/TecNM) y talleres escolares. Toda la interfaz va en español.
 
 ## Comandos
@@ -117,5 +117,4 @@ es un cambio de comportamiento que hay que justificar.
 
 1. Perfiles de máquina (husillo máximo, recorrido) además de los de material.
 2. Mover vectorizado y vaciado a un Web Worker.
-3. PWA instalable (manifest + service worker).
-4. Firmar el .exe (certificado de código) para que Windows no muestre la advertencia de SmartScreen.
+3. Firmar el .exe (certificado de código) para que Windows no muestre la advertencia de SmartScreen.
