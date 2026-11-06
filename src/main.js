@@ -12,6 +12,7 @@ import { parseSVG, SVG_QUALITY } from './input/svg.js';
 import { traceImage } from './input/image.js';
 import { duration, jobRisks, setupSheet } from './cam/checks.js';
 import { toolFigure } from './ui/tool-figure.js';
+import { createBack } from './ui/back.js';
 import { dxfEntities, parseDxf } from './input/dxf.js';
 import { bbox, createPreview } from './preview/canvas.js';
 import { buildText, textElement, TEXT_FONTS } from './text/text.js';
@@ -1451,6 +1452,17 @@ new MutationObserver(() => { clearTimeout(toastT); if ($('toast').textContent) t
 
 /* ---------- inicio ---------- */
 attachHelp();
+// Atrás cierra lo último que se abrió (diálogo, menú, ayuda, herramienta, pestaña Código G) en vez de salir de la app
+const back = createBack([
+  { name: 'herramienta', isOpen: () => sketch.tool !== 'select', close: () => setTool('select') },
+  { name: 'pm', isOpen: () => !!pm.op, close: () => $('pmCancel').click() },
+  { name: 'texto', isOpen: () => !$('txtPanel').hidden, close: () => $('txtClose').click() },
+  { name: 'codigo', isOpen: () => !$('tabCode').hidden, close: () => showTab(false) },
+  { name: 'menu', isOpen: () => !menu.hidden, close: ctxClose },
+  { name: 'ayuda', isOpen: () => !!$('helpPop') && !$('helpPop').hidden, close: () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })) },
+  ...[...document.querySelectorAll('dialog')].map(d => ({ name: d.id, isOpen: () => d.open, close: () => d.close() })),
+], { guardExit: !isDesktop(), onExitHint: () => { $('toast').textContent = 'Presiona Atrás otra vez para salir.'; } });
+new MutationObserver(back.schedule).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['hidden', 'open', 'aria-pressed', 'aria-selected'] });
 (async () => {
   restoreParams();
   loadSketch();
