@@ -1,6 +1,6 @@
 [package]
 name = "marcnc"
-version = "1.1.0"
+version = "1.2.0"
 description = "Convierte SVG e imágenes en código G y M para grabado CNC"
 edition = "2021"
 
