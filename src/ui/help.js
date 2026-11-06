@@ -3,6 +3,7 @@
 
 /** id del campo → [título, explicación]. Frases cortas, para alguien que nunca ha usado una CNC. */
 export const HELP = {
+  imgMode: ['Detectar el dibujo', 'Automático sirve para un dibujo oscuro sobre papel claro. Objeto en una foto: toca el objeto y la app lo separa del fondo aunque esté revuelto; si algo sobra (una mano, la mesa), elige Fondo y tócalo.'],
   fit: ['Tamaño del dibujo', 'Ajustar: el dibujo crece o se encoge hasta llenar la pieza, dejando el margen. Elegir: tú das el ancho y el alto. Escala 1:1: cada unidad del SVG es 1 mm.'],
   margin: ['Margen', 'Espacio libre entre el dibujo y la orilla de la pieza cuando el dibujo se ajusta a ella.'],
   speck: ['Ignorar manchas', 'Las figuras con menos área que esta se descartan: suelen ser puntitos o polvo del escaneo, no parte del dibujo.'],

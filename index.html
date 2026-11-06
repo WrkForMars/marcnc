@@ -256,11 +256,19 @@
             <button type="button" id="ivOrig" aria-pressed="false">Original</button>
           </div>
         </div>
-        <canvas id="imgView" class="imgview" aria-label="Imagen cargada; arrastra para recortar"></canvas>
+        <canvas id="imgView" class="imgview" aria-label="Imagen cargada; toca el objeto para separarlo o arrastra para recortar"></canvas>
+        <div class="row-between" id="objBar" hidden>
+          <div class="seg" role="group" aria-label="Qué marca un toque">
+            <button type="button" id="seedFg" aria-pressed="true" title="Toca lo que sí es parte del objeto">Objeto</button>
+            <button type="button" id="seedBg" aria-pressed="false" title="Toca lo que sobra: mano, mesa, sombra (clic derecho también)">Fondo</button>
+          </div>
+          <button type="button" id="seedClear" class="ghost">Borrar toques</button>
+        </div>
         <div class="row-between"><p class="hint" id="imgInfo"></p><button type="button" id="imgUncrop" class="ghost" hidden>Quitar recorte</button></div>
         <div class="params">
           <label class="full">Detectar el dibujo<select id="imgMode">
             <option value="auto">Automático</option>
+            <option value="object">Objeto en una foto (tócalo)</option>
             <option value="photo">Foto de papel (ignora sombras)</option>
             <option value="color">Por color del fondo</option>
             <option value="manual">Umbral manual</option>
