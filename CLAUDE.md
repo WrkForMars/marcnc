@@ -59,6 +59,7 @@ src/
   preview/canvas.js  dibujo de la vista previa y selección con el puntero
   ui/list.js         lista de figuras con miniatura y botones de modo; al pasar el cursor se resalta en la pieza
   ui/tool-figure.js  dibujo de la punta de la herramienta en la pieza y el ancho de línea que deja
+  ui/back.js         Atrás (navegador, botón del ratón, gesto) cierra la última capa abierta en vez de salir — probado
   ui/help.js         botón "?" con explicación corta en los campos que confunden (textos en HELP)
   ui/code-view.js    visor del programa: tocar una línea la explica y resalta su movimiento
   ui/sheet.js        hoja de entrega imprimible (#sheet, solo visible con @media print)
@@ -104,6 +105,10 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
   zoom en el cursor, botón central = desplazar, F = ajustar, Enter = repetir el último comando. Usar sus nombres en español.
 - **Simple primero:** cada panel o diálogo muestra lo que casi todos usan; lo técnico va en un `details.more` ("Más opciones").
   La imagen abierta va arriba de la lista de figuras y pregunta una sola cosa: dibujo u objeto en una foto.
+- **Atrás regresa, no saca:** cada capa (diálogo, menú, ayuda, herramienta de dibujo, PropertyManager, panel de texto,
+  pestaña Código G) tiene su entrada en el historial vía `createBack` en `main.js`. Una capa nueva se agrega a esa lista
+  con `isOpen` y `close`; el observador de atributos (`hidden`, `open`, `aria-pressed`, `aria-selected`) la sincroniza sola.
+  En el navegador, el primer Atrás en el inicio avisa y el segundo sale; en la app de escritorio no hay a dónde salir.
 - **Textos:** cada cosa se dice una vez y en el lugar donde se usa. Los atajos van en el `title` de los botones, no en
   párrafos de ayuda; los mensajes de estado dicen qué falta, no repiten la leyenda de colores.
 - **Lo que se dibuja sobre la placa** usa los tokens `--plate-*` y `--pm-*`, que no cambian con el tema: la placa es metal
