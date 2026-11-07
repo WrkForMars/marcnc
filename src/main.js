@@ -13,6 +13,7 @@ import { traceImage } from './input/image.js';
 import { Cancelled } from './work.js';
 import { duration, jobRisks, setupSheet } from './cam/checks.js';
 import { elementOp } from './cam/cut.js';
+import { toolFor, toolLabel } from './cam/tools.js';
 import { toolFigure } from './ui/tool-figure.js';
 import { createBack } from './ui/back.js';
 import { dxfEntities, parseDxf } from './input/dxf.js';
@@ -135,9 +136,57 @@ function renderAll() {
     onMode: (i, m) => { const e = state.elements[i]; e.mode = m; if (e.src === 'text') e.text.mode = m; if (e.src === 'sketch') { sketch.setMode(e.sketchId, m); storeSketch(); } select(i); refresh(); },
     onModeAll: m => { state.elements.forEach(e => { if (e.type === 'region') { e.mode = m; if (e.src === 'text') e.text.mode = m; if (e.src === 'sketch') sketch.setMode(e.sketchId, m); } }); storeSketch(); refresh(); },
     onOpts: (i, patch) => { setOpts(state.elements[i], patch); refresh(); },
-    job: { depth: num('depth', 0.1), thick: num('thick', 3) },
+    job: { depth: num('depth', 0.1), thick: num('thick', 3), tools: allTools().map(toolLabel) },
   });
 }
+
+/* ---------- herramientas ---------- */
+const TOOLS_STORE = 'marcnc:herramientas';
+try { state.tools = JSON.parse(localStorage.getItem(TOOLS_STORE) || '[]').filter(t => t && t.t > 0 && t.dia > 0); } catch { state.tools = []; }
+/** La principal (la de Parámetros) y las otras, en ese orden: el índice es el que guardan las figuras. */
+function allTools(p = params()) { return [{ t: p.toolNum, type: p.toolType, dia: p.dia }, ...state.tools]; }
+function storeTools() { try { localStorage.setItem(TOOLS_STORE, JSON.stringify(state.tools)); } catch { /* solo esta sesión */ } }
+/** Renglones de "Otras herramientas": número, tipo y diámetro, y quitar. */
+function renderTools() {
+  const box = $('toolsList');
+  box.textContent = '';
+  state.tools.forEach((t, k) => {
+    const row = document.createElement('div');
+    row.className = 'tool-row';
+    const num = document.createElement('input');
+    num.type = 'number'; num.min = '1'; num.max = '99'; num.step = '1'; num.value = String(t.t); num.setAttribute('aria-label', 'Número de herramienta (T)');
+    const type = document.createElement('select');
+    type.setAttribute('aria-label', 'Tipo');
+    [['ball', 'Ball mill'], ['flat', 'Fresa plana'], ['v', 'V-bit']].forEach(([v, l]) => { const o = document.createElement('option'); o.value = v; o.textContent = l; type.append(o); });
+    type.value = t.type;
+    const dia = document.createElement('input');
+    dia.type = 'number'; dia.min = '0.1'; dia.max = '50'; dia.step = '0.025'; dia.value = String(t.dia); dia.setAttribute('aria-label', 'Diámetro (mm)');
+    const del = document.createElement('button');
+    del.type = 'button'; del.className = 'icon ghost'; del.setAttribute('aria-label', `Quitar T${t.t}`); del.title = 'Quitar';
+    del.innerHTML = '<svg class="i"><use href="#i-close"/></svg>';
+    const save = () => {
+      state.tools[k] = { t: Math.round(+num.value) || t.t, type: type.value, dia: +dia.value > 0 ? +dia.value : t.dia };
+      storeTools(); jobSummary(); refresh();
+    };
+    [num, type, dia].forEach(el => el.addEventListener('change', save));
+    del.addEventListener('click', () => {
+      state.tools.splice(k, 1);
+      // las figuras que la usaban vuelven a la automática; las de después bajan un lugar
+      state.elements.forEach(e => { const i = e.opts?.tool; if (i == null) return; if (i === k + 1) setOpts(e, { tool: null }); else if (i > k + 1) setOpts(e, { tool: i - 1 }); });
+      storeTools(); renderTools(); jobSummary(); refresh();
+    });
+    const tlab = document.createElement('span'); tlab.textContent = 'T'; tlab.className = 'tool-t';
+    row.append(tlab, num, type, dia, del);
+    box.append(row);
+  });
+}
+$('toolAdd').addEventListener('click', () => {
+  const used = new Set(allTools().map(t => t.t));
+  let t = 1; while (used.has(t)) t++;
+  state.tools.push({ t, type: 'flat', dia: 6.35 }); // lo más común como segunda: una fresa plana de 1/4" para recortar
+  storeTools(); renderTools(); jobSummary(); refresh();
+});
+renderTools();
 
 /** Cambia los ajustes propios de una figura y los guarda donde vive (croquis, texto o dibujo cargado). */
 function setOpts(e, patch) {
@@ -161,6 +210,8 @@ function warnings(p, plan, g) {
   const thin = state.elements.map((e, i) => (e.warn ? { e, i } : null)).filter(Boolean);
   const ws = [];
   if (state.designNote) ws.push(state.designNote);
+  const nums = allTools(p).map(t => t.t), dup = nums.filter((t, k) => nums.indexOf(t) !== k);
+  if (dup.length) ws.push(`Dos herramientas tienen el número T${dup[0]}: la máquina no sabría cuál tomar. Cambia el número en Parámetros del trabajo.`);
   // el filo y la punta se revisan con la figura más honda (un recorte atraviesa todo el grosor)
   const live = state.elements.filter(e => e.mode !== 'skip' && e.tl);
   const deep = live.reduce((t, e) => (e.tl.depth > t.depth ? e.tl : t), plan.tl);
@@ -185,7 +236,12 @@ async function refresh() {
   const p = params();
   const tl = toolGeometry(p);
   // cómo se corta cada figura: su profundidad (la del trabajo, la suya o atravesar el grosor) y sus puentes
-  state.elements.forEach(e => { e.op = elementOp(e, { depth: tl.depth, thick: p.thick, dia: tl.D }); });
+  // con qué herramienta va cada figura (la principal, o la que eligió el usuario, o la fresa plana para recortar)
+  const tools = allTools(p), bases = tools.map((t, k) => (k ? toolGeometry({ ...p, toolType: t.type, dia: t.dia }) : tl));
+  state.elements.forEach(e => {
+    const k = toolFor(e, tools);
+    e.op = { ...elementOp(e, { depth: tl.depth, thick: p.thick, dia: bases[k].D }), tool: k, base: bases[k] };
+  });
   const plan = await computePlan(state.elements, tl, {
     tol: p.tol, cache: state.cache, keyOf, onProgress: busy, isCancelled: () => my !== state.gen,
   });
@@ -201,7 +257,7 @@ async function refresh() {
     busy('Escribiendo el código…');
     await tick();
     if (my !== state.gen) return;
-    const g = generateGcode(plan, state.elements, p);
+    const g = generateGcode(plan, state.elements, { ...p, tools: allTools(p) });
     state.gcode = g.text; state.lastG = g;
     state.explained = explainProgram(g.text);
     $('simTime').textContent = `0:00 / ${clock(simTimeline().total)}`;
@@ -1419,7 +1475,7 @@ function jobSummary() {
   sketch.setPiece(p.W, p.H);
   const TOOL = { ball: 'Ball mill', flat: 'Fresa plana', v: 'V-bit' }[p.toolType];
   $('jobPieceTxt').textContent = `${n(p.W)} × ${n(p.H)} × ${n(p.thick)} mm`;
-  $('jobToolTxt').textContent = `T${p.toolNum} ${TOOL} Ø${n(p.dia)} · ${n(p.depth)} mm`;
+  $('jobToolTxt').textContent = `T${p.toolNum} ${TOOL} Ø${n(p.dia)} · ${n(p.depth)} mm${state.tools.length ? ` · +${state.tools.length}` : ''}`;
   $('jobLineTxt').textContent = `${tl.w.toFixed(2)} mm`;
   $('jobFeedsTxt').textContent = `${p.dialect === 'fanuc' ? 'Fanuc' : 'GRBL'} · S${p.rpm} · F${p.fxy}`;
 }
@@ -1439,7 +1495,11 @@ function openExport() {
   const mat = $('material').selectedOptions[0];
   $('pfList').textContent = '';
   const cutEl = state.elements.find(e => e.mode === 'cut' && e.tl);
-  setupSheet({ ...p, materialName: $('material').value ? mat.textContent : '' }, tl, g, cutEl ? { depth: cutEl.tl.depth } : null).forEach(({ k, v }) => {
+  const rows = setupSheet({ ...p, materialName: $('material').value ? mat.textContent : '' }, tl, g, cutEl ? { depth: cutEl.tl.depth } : null);
+  // con varias herramientas: cuáles más y cómo se cambian
+  const tools = allTools(p), used = [...new Set(state.plan.order.map(x => x.tool || 0))];
+  if (used.length > 1) rows.splice(1, 0, { k: 'En orden', v: used.map(k => toolLabel(tools[k])).join(' → ') + (p.dialect === 'grbl' ? ' · el programa se pausa (M00) en cada cambio: cambia la herramienta y toma Z0 de nuevo' : '') });
+  rows.forEach(({ k, v }) => {
     const dt = document.createElement('dt'), dd = document.createElement('dd');
     dt.textContent = k; dd.textContent = v; $('pfList').append(dt, dd);
   });

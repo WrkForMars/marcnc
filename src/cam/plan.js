@@ -8,15 +8,21 @@ const tick = () => new Promise(r => setTimeout(r, 0));
 /**
  * Ordena por vecino más cercano: primero entre elementos, luego entre los caminos de cada uno.
  * Los recortes van al final (una pieza suelta ya no se puede grabar) y, dentro de cada uno, los huecos antes que el
- * contorno de afuera.
- * @returns {{i:number, seq: import('../model.js').LinePart[]}[]}
+ * contorno de afuera. Con varias herramientas, cada etapa (grabar, recortar) va agrupada por herramienta, la principal
+ * primero, para cambiarla lo menos posible.
+ * @returns {{i:number, seq: import('../model.js').LinePart[], tool:number}[]}
  */
 export function orderPaths(elements, start = [0, 0]) {
   const order = [];
   const has = i => elements[i].paths && elements[i].paths.length;
   const all = elements.map((_, i) => i).filter(has);
+  const toolOf = i => elements[i].op?.tool ?? 0;
+  const groups = [];
+  [all.filter(i => elements[i].mode !== 'cut'), all.filter(i => elements[i].mode === 'cut')].forEach(phase => {
+    [...new Set(phase.map(toolOf))].sort((a, b) => a - b).forEach(k => groups.push(phase.filter(i => toolOf(i) === k)));
+  });
   let pos = start;
-  for (const left of [all.filter(i => elements[i].mode !== 'cut'), all.filter(i => elements[i].mode === 'cut')]) {
+  for (const left of groups) {
     while (left.length) {
       let bi = 0, bd = Infinity;
       left.forEach((i, j) => {
@@ -36,7 +42,7 @@ export function orderPaths(elements, start = [0, 0]) {
           pos = p.pts[p.pts.length - 1];
         }
       });
-      order.push({ i, seq });
+      order.push({ i, seq, tool: toolOf(i) });
     }
   }
   return order;
@@ -55,8 +61,8 @@ export async function computePlan(elements, tl, opts) {
   for (let n = 0; n < elements.length; n++) {
     const e = elements[n];
     // cada figura con la herramienta a su profundidad (la del trabajo, la suya propia o la del recorte)
-    const te = e.tl = e.op ? toolAt(tl, e.op.depth) : tl;
-    const k = keyOf ? `${keyOf(e)}|${e.mode}|${te.r.toFixed(4)}|${te.step.toFixed(4)}|${te.D}|${tol}` : null;
+    const te = e.tl = e.op ? toolAt(e.op.base || tl, e.op.depth) : tl;
+    const k = keyOf ? `${keyOf(e)}|${e.mode}|${te.r.toFixed(4)}|${te.step.toFixed(4)}|${te.D}|${te.type}|${tol}` : null;
     if (k && cache && cache.has(k)) {
       const c = cache.get(k);
       e.paths = c.paths; e.warn = c.warn;

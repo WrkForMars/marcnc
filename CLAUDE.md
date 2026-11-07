@@ -58,6 +58,7 @@ src/
                      rampa de entrada (passWalk: recorrido 3D de cada pasada) — probado
   cam/drill.js       barrenos: círculos del tamaño de la herramienta con G81/G83 (GRBL: movimientos sueltos), más
                      grandes en espiral con G02; al recortar, los huecos redondos chicos se barrenan — probado
+  cam/tools.js       varias herramientas: cuál usa cada figura (toolFor: la elegida; recortar/barrenar → fresa plana)
   cam/checks.js      revisión antes de cortar: ficha de preparación (Exportar) y avisos de valores sin sentido — probado
   cam/material.js    perfiles de material: avances sugeridos por carga de viruta con el husillo de la máquina y avisos — probado
   cam/simulate.js    línea de tiempo del programa (duración por avance, posición en cada instante) — probado
@@ -101,6 +102,10 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
     Si ninguno cumple, o el arco se aparta más de la tolerancia, se escribe con rectas. Los arcos se ajustan sobre
     la trayectoria densa (`path.dense`), no la simplificada. `tests/fuzz.test.js` vigila todo esto con piezas aleatorias.
   - Fanuc: `%`, `O####`, `T# M06`, `G28 G91 Z0`. GRBL: nada de eso (lo rechaza).
+  - **Varias herramientas** (Parámetros → Otras herramientas, guardadas en `marcnc:herramientas`; la principal es la 0):
+    el programa empieza con la de lo primero que se corta, agrupa por herramienta (grabar y luego recortar) y entre una
+    y otra cambia: Fanuc `M05` `G28 G91 Z0` `G90` `T# M06` `S M03`; GRBL `M05`, comentario y `M00` (pausa para cambiarla
+    y tomar Z0). Con una sola herramienta el programa no cambia.
   - **Cada figura tiene su profundidad** (`e.op.depth`: la del trabajo, la suya o el grosor + 0.2 si se recorta) y su
     herramienta a esa profundidad (`e.tl`). Lo recortado va al final y, en cada pieza, los huecos antes que el contorno.
   - Contornos cerrados con pasadas de más de 0.25 mm, o recortes: bajan a Z0 y entran en **rampa de 5°** a lo largo del

@@ -131,6 +131,18 @@ function optsRow(e, i, onOpts, job) {
   box.className = 'el-opts';
   box.addEventListener('click', ev => ev.stopPropagation());
   box.addEventListener('keydown', ev => ev.stopPropagation());
+  if (job.tools && job.tools.length > 1) {
+    // con más de una herramienta: con cuál se corta esta figura (vacío = la automática)
+    const tl = document.createElement('label');
+    tl.append('Herramienta');
+    const sel = document.createElement('select');
+    const auto = document.createElement('option'); auto.value = ''; auto.textContent = `Automática (${job.tools[e.op?.tool ?? 0].split(' · ')[0]})`; sel.append(auto);
+    job.tools.forEach((t, k) => { const o = document.createElement('option'); o.value = String(k); o.textContent = t; sel.append(o); });
+    sel.value = e.opts?.tool != null ? String(e.opts.tool) : '';
+    sel.addEventListener('change', () => onOpts(i, { tool: sel.value === '' ? null : +sel.value }));
+    tl.append(sel);
+    box.append(tl);
+  }
   const lab = document.createElement('label');
   if (e.mode === 'cut') {
     lab.append('Puentes');
