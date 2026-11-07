@@ -57,3 +57,21 @@ describe('trabajos en segundo plano', () => {
     expect((await run('trace', img())).info.ink).toBeGreaterThan(0); // y los siguientes ya no lo intentan
   });
 });
+
+describe('programa en segundo plano', () => {
+  it('escribe el programa, lo explica y da la duración; uno enorme regresa solo sus primeras líneas explicadas', async () => {
+    const { computePlan } = await import('../src/cam/plan.js');
+    const { toolGeometry } = await import('../src/cam/tool.js');
+    const { TAREA, regionEl, square } = await import('./helpers.js');
+    const els = [regionEl(square(10, 10, 20), [], 'contour')];
+    const small = await computePlan(els, toolGeometry({ toolType: 'ball', dia: 3.175, depth: 0.1 }), { tol: 0.05 });
+    const r = JOBS.program({ plan: small, elements: els, o: TAREA }).result;
+    expect(r.partial).toBe(false); expect(r.ex.length).toBe(r.g.lines); expect(r.total).toBeGreaterThan(0);
+    // 5000 pasadas de un contorno: más de 20 000 líneas
+    const deep = await computePlan(els, toolGeometry({ toolType: 'flat', dia: 3.175, depth: 50, stepdown: 0.01 }), { tol: 0.05 });
+    const big = JOBS.program({ plan: deep, elements: els, o: TAREA }).result;
+    expect(big.g.lines).toBeGreaterThan(20000);
+    expect(big.partial).toBe(true); expect(big.ex).toHaveLength(4000);
+    expect(JOBS.explain({ text: big.g.text }).result).toHaveLength(big.g.lines);
+  }, 60000);
+});

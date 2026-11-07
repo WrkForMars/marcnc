@@ -36,6 +36,15 @@ describe('recortar', () => {
     expect(t.paths.filter(p => !p.drill && p.hole)).toHaveLength(1); // el grande se recorta por su orilla
     expect(t.warn).toBe(null);
   });
+  it('avisa cuando la herramienta no entra en las partes angostas del contorno (entre dientes)', async () => {
+    const { toolpaths } = await import('../src/cam/toolpaths.js');
+    const { toolGeometry } = await import('../src/cam/tool.js');
+    // una "U" con una ranura de 2 mm: una fresa de 6.35 no entra, una de 1 sí
+    const u = [[0, 0], [20, 0], [20, 20], [11, 20], [11, 5], [9, 5], [9, 20], [0, 20]];
+    const e = { type: 'region', mode: 'cut', parts: [{ outer: toC(u), holes: [] }] };
+    expect(toolpaths(e, toolGeometry({ toolType: 'flat', dia: 6.35, depth: 3 })).warn).toMatch(/no entra en las partes angostas/);
+    expect(toolpaths(e, toolGeometry({ toolType: 'flat', dia: 1, depth: 3 })).warn).toBe(null);
+  });
   it('un hueco más chico que la herramienta se cuenta como perdido', () => {
     const r = profilePaths([toC(square(0, 0, 40)), toC(hole(10, 10, 2))], 1.5);
     expect(r.paths).toHaveLength(1); expect(r.lost).toBe(1);

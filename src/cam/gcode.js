@@ -16,7 +16,7 @@ import { helixDrill, pointDrill } from './drill.js';
  *   toolNum:number, rpm:number, prog:number,
  *   arcs:boolean,                  // convertir curvas a G02/G03 (solo con 2 o 3 decimales)
  *   changer?:boolean,              // false: la máquina no cambia herramientas sola (Fanuc también pausa con M00)
- *   tools?:{t:number, type:string, dia:number}[],  // con varias herramientas: la 0 es la principal (toolNum); el plan
+ *   tools?:{t:number, type:string, dia:number, fxy?:number, fz?:number}[],  // fxy/fz: avances propios (si no, los del trabajo)  // con varias herramientas: la 0 es la principal (toolNum); el plan
  *                                  // dice cuál usa cada figura (order[].tool) y entre una y otra se cambia
  * }} GcodeOptions
  */
@@ -94,7 +94,9 @@ export function generateGcode(plan, elements, o) {
   const eps = 0.5 * Math.pow(10, -dec);
   const f = v => (Math.abs(v) < eps ? 0 : v).toFixed(dec);
   // salvaguardas: un rápido nunca a ras ni dentro de la pieza, y nunca un avance en cero
-  const R = Math.max(0.5, +o.retract || 0), fz = Math.max(1, +o.fz || 0), fxy = Math.max(1, +o.fxy || 0);
+  const R = Math.max(0.5, +o.retract || 0);
+  // avances de la herramienta puesta (cada una puede tener los suyos); nunca en cero
+  let fz = Math.max(1, +o.fz || 0), fxy = Math.max(1, +o.fxy || 0);
   // con 1 decimal el redondeo de los extremos deforma el arco más de lo que toleran los controladores
   const useArcs = o.arcs && dec >= 2;
   const arcTol = Math.max(tol, eps * 1.5); // la tolerancia de curvas, repartida entre el ajuste (55 %) y el redondeo (45 %)
@@ -109,6 +111,11 @@ export function generateGcode(plan, elements, o) {
   const tools = o.tools && o.tools.length ? o.tools : [{ t: o.toolNum, type: tl.type, dia: tl.D }];
   const tname = k => `T${tools[k].t} ${TOOL_NAME[tools[k].type]} D${f(tools[k].dia)}`;
   let cur = order.length ? order[0].tool || 0 : 0; // empieza con la que usa lo primero que se corta
+  const feedsOf = k => [Math.max(1, +(tools[k].fz || o.fz) || 0), Math.max(1, +(tools[k].fxy || o.fxy) || 0)];
+  [fz, fxy] = feedsOf(cur);
+  // tiempo de corte por herramienta: cada tramo a su avance
+  let cutMins = 0, lastCut = 0;
+  const flushTime = () => { cutMins += (cutLen - lastCut) / fxy; lastCut = cutLen; };
   const L = [];
   if (o.dialect === 'fanuc') L.push('%', `O${String(o.prog || 1).padStart(4, '0')} (MARCNC - PIEZA ${o.W}X${o.H})`);
   L.push(`(PIEZA ${o.W} X ${o.H} MM - CERO EN ESQUINA INFERIOR IZQUIERDA - Z0 EN CARA SUPERIOR)`);
@@ -123,11 +130,13 @@ export function generateGcode(plan, elements, o) {
   L.push(`S${o.rpm} M03`, 'G54', `G00 Z${f(R)}`);
   /** Cambio de herramienta a media obra: Fanuc la cambia sola; GRBL se pausa para que el operador la cambie. */
   const changeTool = k => {
+    flushTime();
     L.push('M05');
     if (auto) L.push('G28 G91 Z0', 'G90', `(${tname(k)})`, `T${tools[k].t} M06`);
     else L.push(...(o.dialect === 'fanuc' ? ['G28 G91 Z0', 'G90'] : []), `(CAMBIA A ${tname(k)} Y TOMA DE NUEVO Z0)`, 'M00');
     L.push(`S${o.rpm} M03`, `G00 Z${f(R)}`);
     cur = k;
+    [fz, fxy] = feedsOf(k);
   };
 
   let cutLen = 0, rapLen = 0, plunges = 0, arcsN = 0, pos = [0, 0], zLen = 0, tabsN = 0;
@@ -136,7 +145,7 @@ export function generateGcode(plan, elements, o) {
     if ((tool || 0) !== cur) changeTool(tool || 0);
     const te = e.tl || tl, zsE = te === tl ? zs : levels(te);
     const holes = e.type === 'region' && e.parts.length === 1 ? e.parts[0].holes.length : 0;
-    const label = e.src === 'text' ? `TEXTO "${commentSafe(e.text.text)}"` : `FIGURA ${i + 1}`;
+    const label = (e.src === 'text' ? `TEXTO "${commentSafe(e.text.text)}"` : `FIGURA ${(e.copyOf ?? i) + 1}`) + (e.copyOf != null ? ` COPIA ${e.copyN}` : '');
     // la profundidad solo se repite si esta figura tiene la suya
     const own = te.depth === tl.depth ? '' : e.mode === 'drill' ? ` - PROF. ${f(te.depth)} MM`
       : ` - PROF. ${f(te.depth)} MM EN ${zsE.length} PASADA${zsE.length > 1 ? 'S' : ''}`;
@@ -291,6 +300,7 @@ export function generateGcode(plan, elements, o) {
   if (o.dialect === 'fanuc') L.push('G28 G91 Z0', 'G90', 'M30', '%');
   else L.push('M30');
 
-  const mins = cutLen / fxy + plunges * (tl.depth / passes + R) / fz + zLen / fz + rapLen / RAPID_MM_MIN;
+  flushTime();
+  const mins = cutMins + plunges * (tl.depth / passes + R) / fz + zLen / fz + rapLen / RAPID_MM_MIN;
   return { text: L.join('\n') + '\n', lines: L.length, cutLen, mins, plunges, arcsN, passes, tabs: tabsN };
 }

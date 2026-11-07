@@ -71,5 +71,5 @@ describe('piezas aleatorias', () => {
       });
     }
     expect(problems).toEqual([]);
-  });
+  }, 60000); // con recortes, barrenos y tallados tarda más; con la máquina ocupada, más
 });

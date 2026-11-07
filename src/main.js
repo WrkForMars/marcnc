@@ -2,8 +2,6 @@
 import './styles.css';
 import { buildDesign } from './design.js';
 import { DEMO_SVG, DEMO_TEXT } from './demo.js';
-import { explainProgram } from './cam/explain.js';
-import { generateGcode } from './cam/gcode.js';
 import { buildTimeline, clock, positionAt, segAt, segPoint, timeOfLine } from './cam/simulate.js';
 import { computePlan } from './cam/plan.js';
 import { isDesktop, saveTextDesktop } from './desktop.js';
@@ -11,10 +9,12 @@ import { toolGeometry } from './cam/tool.js';
 import { parseSVG, SVG_QUALITY } from './input/svg.js';
 import { grayImage, traceImage } from './input/image.js';
 import { reliefLayout } from './cam/relief.js';
-import { Cancelled } from './work.js';
+import { Cancelled, run } from './work.js';
+import { shadeStock } from './cam/stock.js';
 import { duration, jobRisks, machineRisks, setupSheet } from './cam/checks.js';
 import { elementOp } from './cam/cut.js';
 import { toolFor, toolLabel } from './cam/tools.js';
+import { copyOffsets, shiftElement } from './cam/copies.js';
 import { toolFigure } from './ui/tool-figure.js';
 import { createBack } from './ui/back.js';
 import { dxfEntities, parseDxf } from './input/dxf.js';
@@ -64,7 +64,7 @@ document.addEventListener('change', ev => {
 
 function params() {
   return {
-    W: num('pw', 90), H: num('ph', 50), thick: num('thick', 3), margin: num('margin', 3), fit: $('fit').value, drawW: num('dw', 0), speck: num('speck', 0.5),
+    W: num('pw', 90), H: num('ph', 50), thick: num('thick', 3), copies: Math.max(1, Math.round(num('copies', 1))), gap: num('gap', 3), margin: num('margin', 3), fit: $('fit').value, drawW: num('dw', 0), speck: num('speck', 0.5),
     toolType: $('ttype').value, dia: num('tdia', 3.175), depth: num('depth', 0.1), vAngle: num('vang', 60), vTip: num('vtip', 0.1),
     stepoverPct: num('stepover', 45), stepdown: num('stepdown', 0.2),
     toolNum: num('tnum', 1), rpm: num('rpm', 1000), fz: num('fz', 60), fxy: num('fxy', 130), retract: num('retract', 3),
@@ -92,12 +92,32 @@ function rebuildSketch() {
   state.sketchEls = sketchElements(sketch.entities, sketch.modes, sketch.opts);
 }
 function assemble() {
-  state.elements = state.design.concat(state.sketchEls, state.texts.map(textElement).filter(Boolean));
+  const base = state.design.concat(state.sketchEls, state.texts.map(textElement).filter(Boolean));
+  state.elements = base.concat(copiesOf(base));
   state.hovered = -1; // los índices cambiaron
   if (state.selected >= state.elements.length) state.selected = -1;
 }
-const keyOf = e => (e.src === 'text' ? `t${e.text.id}:${e.text.x}:${e.text.y}:${e.text.rev}`
+const keyOf = e => (e.copyOf != null ? `${keyOf(state.elements[e.copyOf])}@${e.shift}` // una copia: la misma figura, en otro lugar
+  : e.src === 'text' ? `t${e.text.id}:${e.text.x}:${e.text.y}:${e.text.rev}`
   : e.src === 'sketch' ? `s${e.sketchId}:${e.sig}` : `d${state.rawId}:${state.design.indexOf(e)}`);
+
+/**
+ * Copias del dibujo para llenar la placa (Parámetros → Copias): cada figura viva, corrida a su lugar en la cuadrícula.
+ * Lo que ocupa el dibujo incluye medio diámetro de la herramienta más gruesa (al recortar, la fresa pasa por fuera).
+ */
+function copiesOf(base) {
+  const p = params();
+  state.copiesFit = 1;
+  if (!(p.copies > 1)) return [];
+  const live = base.map((e, i) => ({ e, i })).filter(({ e }) => e.mode !== 'skip');
+  const boxes = live.map(({ e }) => bbox(e)).filter(Boolean);
+  if (!boxes.length) return [];
+  const r = Math.max(...allTools(p).map(t => t.dia)) / 2;
+  const box = [Math.min(...boxes.map(b => b[0])) - r, Math.min(...boxes.map(b => b[1])) - r, Math.max(...boxes.map(b => b[2])) + r, Math.max(...boxes.map(b => b[3])) + r];
+  const { offsets, fit } = copyOffsets(box, p.copies, { W: p.W, H: p.H, gap: p.gap });
+  state.copiesFit = fit;
+  return offsets.flatMap(([dx, dy], k) => live.map(({ e, i }) => Object.assign(shiftElement(e, dx, dy), { copyOf: i, copyN: k + 2, shift: `${dx.toFixed(3)},${dy.toFixed(3)}` })));
+}
 
 function select(i) {
   state.selected = i;
@@ -131,13 +151,15 @@ function drawOnly(dragging = false) {
   preview.draw({
     elements: state.elements, selected: state.selected, hovered: state.hovered ?? -1, W: p.W, H: p.H,
     toolWidth: state.plan ? state.plan.tl.w : toolGeometry(p).w, plan: state.plan, showPath: $('showPath').checked, dragging, simulating: sim.on,
+    stock: $('showStock').checked && state.stock && state.stock.text === state.gcode ? state.stock.img : null,
   });
   if (sim.on) { simResize(); simPaint(sim.t); }
   drawOverlay();
 }
 function renderAll() {
   drawOnly();
-  $('elCount').textContent = state.elements.length ? String(state.elements.length) : '';
+  const nBase = state.elements.filter(e => e.copyOf == null).length;
+  $('elCount').textContent = nBase ? String(nBase) : '';
   $('modeLegend').hidden = !state.elements.length;
   syncEmpty();
   renderList($('els'), $('allModes'), {
@@ -148,6 +170,7 @@ function renderAll() {
     onModeAll: m => { state.elements.forEach(e => { if (e.type === 'region') { e.mode = m; if (e.src === 'text') e.text.mode = m; if (e.src === 'sketch') sketch.setMode(e.sketchId, m); } }); storeSketch(); refresh(); },
     onOpts: (i, patch) => { setOpts(state.elements[i], patch); refresh(); },
     job: { depth: num('depth', 0.1), thick: num('thick', 3), tools: allTools().map(toolLabel) },
+    copies: params().copies > 1 ? Math.min(params().copies, state.copiesFit || 1) : 1,
   });
 }
 
@@ -190,7 +213,14 @@ $('machineDel').addEventListener('click', () => {
 const TOOLS_STORE = 'marcnc:herramientas';
 try { state.tools = JSON.parse(localStorage.getItem(TOOLS_STORE) || '[]').filter(t => t && t.t > 0 && t.dia > 0); } catch { state.tools = []; }
 /** La principal (la de Parámetros) y las otras, en ese orden: el índice es el que guardan las figuras. */
-function allTools(p = params()) { return [{ t: p.toolNum, type: p.toolType, dia: p.dia }, ...state.tools]; }
+function allTools(p = params()) {
+  return [{ t: p.toolNum, type: p.toolType, dia: p.dia, fxy: p.fxy, fz: p.fz }, ...state.tools.map(t => ({ ...t, ...toolFeeds(t, p) }))];
+}
+/** Avances de una herramienta extra: los que se escribieron; si no, los sugeridos para el material; si no, los del trabajo. */
+function toolFeeds(t, p) {
+  const s = $('material').value ? suggestFeeds($('material').value, { rpm: p.rpm, dia: t.dia }) : null;
+  return { fxy: t.fxy || (s ? s.fxy : p.fxy), fz: t.fz || (s ? s.fz : p.fz), auto: !t.fxy && !t.fz };
+}
 function storeTools() { try { localStorage.setItem(TOOLS_STORE, JSON.stringify(state.tools)); } catch { /* solo esta sesión */ } }
 /** Renglones de "Otras herramientas": número, tipo y diámetro, y quitar. */
 function renderTools() {
@@ -211,8 +241,8 @@ function renderTools() {
     del.type = 'button'; del.className = 'icon ghost'; del.setAttribute('aria-label', `Quitar T${t.t}`); del.title = 'Quitar';
     del.innerHTML = '<svg class="i"><use href="#i-close"/></svg>';
     const save = () => {
-      state.tools[k] = { t: Math.round(+num.value) || t.t, type: type.value, dia: +dia.value > 0 ? +dia.value : t.dia };
-      storeTools(); jobSummary(); refresh();
+      state.tools[k] = { ...state.tools[k], t: Math.round(+num.value) || t.t, type: type.value, dia: +dia.value > 0 ? +dia.value : t.dia };
+      storeTools(); renderTools(); jobSummary(); refresh();
     };
     [num, type, dia].forEach(el => el.addEventListener('change', save));
     del.addEventListener('click', () => {
@@ -223,7 +253,21 @@ function renderTools() {
     });
     const tlab = document.createElement('span'); tlab.textContent = 'T'; tlab.className = 'tool-t';
     row.append(tlab, num, type, dia, del);
-    box.append(row);
+    // sus avances: vacío = sugerido para el material (o los del trabajo)
+    const sug = toolFeeds({ ...t, fxy: 0, fz: 0 }, params());
+    const feeds = document.createElement('div');
+    feeds.className = 'tool-feeds';
+    const fIn = (v, ph, label) => { const i = document.createElement('input'); i.type = 'number'; i.min = '1'; i.max = '20000'; i.step = '5'; i.value = v ? String(v) : ''; i.placeholder = `F${ph}`; i.setAttribute('aria-label', label); return i; };
+    const fx = fIn(t.fxy, sug.fxy, 'Avance en X-Y (mm/min)'), fzI = fIn(t.fz, sug.fz, 'Avance en Z (mm/min)');
+    const lab1 = document.createElement('span'); lab1.textContent = 'Avance X-Y';
+    const lab2 = document.createElement('span'); lab2.textContent = 'Z';
+    feeds.append(lab1, fx, lab2, fzI);
+    const saveFeeds = () => {
+      state.tools[k] = { ...state.tools[k], fxy: +fx.value > 0 ? +fx.value : undefined, fz: +fzI.value > 0 ? +fzI.value : undefined };
+      storeTools(); refresh();
+    };
+    [fx, fzI].forEach(el => el.addEventListener('change', saveFeeds));
+    box.append(row, feeds);
   });
 }
 $('toolAdd').addEventListener('click', () => {
@@ -233,6 +277,15 @@ $('toolAdd').addEventListener('click', () => {
   storeTools(); renderTools(); jobSummary(); refresh();
 });
 renderTools();
+
+/** Lo que el programa necesita de cada figura, sin lo que no se puede mandar al worker (imágenes de la vista previa). */
+function forProgram(e) {
+  return {
+    src: e.src, type: e.type, mode: e.mode, tl: e.tl, op: e.op, copyOf: e.copyOf, copyN: e.copyN,
+    text: e.text ? { text: e.text.text } : undefined,
+    parts: e.type === 'region' && e.parts ? e.parts.map(p => ({ holes: p.holes.map(() => 0) })) : undefined, // solo cuántos huecos
+  };
+}
 
 /** Cambia los ajustes propios de una figura y los guarda donde vive (croquis, texto o dibujo cargado). */
 function setOpts(e, patch) {
@@ -256,6 +309,7 @@ function warnings(p, plan, g) {
   const thin = state.elements.map((e, i) => (e.warn ? { e, i } : null)).filter(Boolean);
   const ws = [];
   if (state.designNote) ws.push(state.designNote);
+  if (p.copies > state.copiesFit) ws.push(`Pediste ${p.copies} copias y caben ${state.copiesFit} en la placa de ${p.W} × ${p.H} mm (empiezan donde está el dibujo). Acerca el dibujo a la esquina, junta las copias o agranda la placa.`);
   const nums = allTools(p).map(t => t.t), dup = nums.filter((t, k) => nums.indexOf(t) !== k);
   if (dup.length) ws.push(`Dos herramientas tienen el número T${dup[0]}: la máquina no sabría cuál tomar. Cambia el número en Parámetros del trabajo.`);
   // el filo y la punta se revisan con la figura más honda (un recorte atraviesa todo el grosor)
@@ -288,6 +342,7 @@ async function refresh() {
   // con qué herramienta va cada figura (la principal, o la que eligió el usuario, o la fresa plana para recortar)
   const tools = allTools(p), bases = tools.map((t, k) => (k ? toolGeometry({ ...p, toolType: t.type, dia: t.dia }) : tl));
   state.elements.forEach(e => {
+    if (e.copyOf != null) { const b = state.elements[e.copyOf]; e.mode = b.mode; e.opts = b.opts; } // las copias siguen al original
     const k = toolFor(e, tools);
     e.op = { ...elementOp(e, { depth: tl.depth, thick: p.thick, dia: bases[k].D }), tool: k, base: bases[k] };
   });
@@ -306,10 +361,19 @@ async function refresh() {
     busy('Escribiendo el código…');
     await tick();
     if (my !== state.gen) return;
-    const g = generateGcode(plan, state.elements, { ...p, tools: allTools(p) });
+    // escribir y explicar el programa va en el worker: uno enorme (un relieve, cientos de pasadas) no traba la página
+    let res;
+    try {
+      res = await run('program', { plan: { tl: plan.tl, order: plan.order, tol: plan.tol }, elements: state.elements.map(forProgram), o: { ...p, tools: allTools(p) } }, { lane: 'program' });
+    } catch (err) {
+      if (err.cancelled) return;
+      throw err;
+    }
+    if (my !== state.gen) return;
+    const g = res.g;
     state.gcode = g.text; state.lastG = g;
-    state.explained = explainProgram(g.text);
-    $('simTime').textContent = `0:00 / ${clock(simTimeline().total)}`;
+    state.explained = res.ex; state.exPartial = res.partial; state.simTotal = res.total;
+    $('simTime').textContent = `0:00 / ${clock(res.total)}`;
     if (state.codeSel > state.explained.length) state.codeSel = 0;
     showCode();
     $('stats').textContent = '';
@@ -330,6 +394,7 @@ async function refresh() {
   simButtons();
   jobSummary();
   renderAll();
+  if ($('showStock').checked) updateStock(); // el resultado se vuelve a tallar con el programa nuevo
   // cómo corta la herramienta elegida: el dibujo de la punta y una frase
   $('eff').innerHTML = toolFigure(tl, p) + '<p></p>';
   $('eff').querySelector('p').textContent = `A ${tl.depth} mm de profundidad deja una línea de ${tl.w.toFixed(2)} mm${tl.type === 'ball' ? ': la bola solo corta con la punta' : tl.type === 'v' ? ': más hondo, más ancha' : ', igual a su diámetro'}.`;
@@ -651,11 +716,29 @@ $('dh').addEventListener('change', () => {
   if (w && h && v > 0) $('dw').value = r1(v * w / h);
   storeParams(); rebuildDesign(); assemble(); refresh();
 });
-['pw', 'ph', 'margin', 'speck', 'fit', 'dw'].forEach(id => $(id).addEventListener('change', () => { rebuildDesign(); assemble(); refresh(); }));
+['pw', 'ph', 'margin', 'speck', 'fit', 'dw', 'copies', 'gap'].forEach(id => $(id).addEventListener('change', () => { rebuildDesign(); assemble(); refresh(); }));
 ['depth', 'thick', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'rpm', 'fz', 'fxy', 'retract', 'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs',
   'maxX', 'maxY', 'maxZ', 'maxRpm', 'changer']
   .forEach(id => $(id).addEventListener('change', () => { $('vAngLbl').hidden = $('vTipLbl').hidden = $('ttype').value !== 'v'; refresh(); }));
 $('showPath').addEventListener('change', () => drawOnly());
+/* ---------- resultado: la placa tallada por el programa (en el worker) ---------- */
+async function updateStock() {
+  if (!$('showStock').checked || !state.gcode) { drawOnly(); return; }
+  if (state.stock && state.stock.text === state.gcode) { drawOnly(); return; }
+  const p = params(), text = state.gcode;
+  const tools = allTools(p).map(t => ({ ...t, vAngle: p.vAngle }));
+  busy('Tallando la placa…');
+  try {
+    const s = await run('stock', { text, o: { W: p.W, H: p.H, toolNum: tools[0].t, tools } }, { lane: 'stock' });
+    if (text !== state.gcode) return; // ya cambió el programa: lo calcula la siguiente vuelta
+    const rgb = v => [1, 3, 5].map(i => parseInt(css(v).slice(i, i + 2), 16));
+    const c = document.createElement('canvas'); c.width = s.gw; c.height = s.gh;
+    c.getContext('2d').putImageData(new ImageData(shadeStock(s, rgb('--plate'), rgb('--cut')), s.gw, s.gh), 0, 0);
+    state.stock = { text, img: c };
+  } catch (err) { if (!err.cancelled) $('toast').textContent = err.message; } finally { busy(null); }
+  drawOnly();
+}
+$('showStock').addEventListener('change', updateStock);
 
 // los parámetros se recuerdan entre sesiones (cada taller tiene su máquina y su herramienta)
 const SAVED = ['material', 'pw', 'ph', 'thick', 'maxX', 'maxY', 'maxZ', 'maxRpm', 'changer', 'machine', 'margin', 'speck', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'depth', 'rpm', 'retract', 'fz', 'fxy',
@@ -699,6 +782,8 @@ $('material').addEventListener('change', () => {
   storeParams(); refresh();
   $('toast').textContent = `${MATERIALS[key].name} con S${p.rpm}: avance F${s.fxy}, en Z F${s.fz}, ${s.stepdown} mm por pasada.`;
 });
+// los avances sugeridos de las otras herramientas dependen del material y del husillo
+['material', 'rpm'].forEach(id => $(id).addEventListener('change', () => renderTools()));
 
 /* ---------- plantillas ---------- */
 async function applyTemplate(key) {
@@ -717,7 +802,8 @@ async function applyTemplate(key) {
   }
   state.fileName = t.name; $('docName').value = t.name;
   rebuildDesign(); assemble(); select(-1); await refresh();
-  $('toast').textContent = `${t.name}: pieza de ${t.W} × ${t.H} mm.${t.texts.length ? ' Toca un texto para cambiarlo.' : ''}`;
+  $('toast').textContent = `${t.name}: pieza de ${t.W} × ${t.H} mm.${t.tip ? ` ${t.tip}` : t.texts.length ? ' Toca un texto para cambiarlo.' : ''}`;
+  if (t.tip) $('shTest').checked = true; // la pieza de prueba sale con su registro
 }
 document.querySelectorAll('[data-template]').forEach(b => b.addEventListener('click', () => applyTemplate(b.dataset.template)));
 
@@ -1179,7 +1265,8 @@ cv.addEventListener('pointerdown', ev => {
     if (sketch.tool === 'select') { syncSketchSelection(); select(state.selected); renderAll(); }
     return;
   }
-  const i = preview.hit(mx, my, state.elements, state.plan ? state.plan.tl.w : 1);
+  let i = preview.hit(mx, my, state.elements, state.plan ? state.plan.tl.w : 1);
+  if (i >= 0 && state.elements[i].copyOf != null) i = state.elements[i].copyOf; // tocar una copia elige el original
   select(i);
   if (i >= 0 && state.elements[i].src === 'text') {
     const [x, y] = mm;
@@ -1419,7 +1506,20 @@ function simBegin() {
   sim.on = true; sim.drawnT = 0;
   drawOnly();
 }
-function simPlay() {
+/** Un programa enorme llega con solo sus primeras líneas explicadas: para simularlo se piden todas (una vez). */
+async function fullExplain() {
+  if (!state.exPartial) return true;
+  const text = state.gcode;
+  busy('Preparando la simulación…');
+  try {
+    const ex = await run('explain', { text }, { lane: 'explain' });
+    if (text !== state.gcode) return false;
+    state.explained = ex; state.exPartial = false; sim.tl = null;
+    return true;
+  } catch { return false; } finally { busy(null); }
+}
+async function simPlay() {
+  if (!(await fullExplain())) return;
   simBegin();
   if (!sim.on) return;
   if (sim.t >= simTimeline().total) { sim.t = 0; sim.drawnT = 0; }
@@ -1432,12 +1532,13 @@ function simEnd() {
   simPause();
   sim.on = false; sim.t = 0; sim.drawnT = 0; state.simPos = null;
   sctx.clearRect(0, 0, simCv.width, simCv.height);
-  $('simSeek').value = '0'; $('simTime').textContent = `0:00 / ${clock(state.explained.length ? simTimeline().total : 0)}`;
+  $('simSeek').value = '0'; $('simTime').textContent = `0:00 / ${clock(state.explained.length ? (state.exPartial ? state.simTotal : simTimeline().total) : 0)}`;
   simButtons(); drawOnly(); showLine();
 }
 $('simPlay').addEventListener('click', () => (sim.playing ? simPause() : simPlay()));
 $('simStop').addEventListener('click', simEnd);
-$('simSeek').addEventListener('input', () => {
+$('simSeek').addEventListener('input', async () => {
+  if (state.exPartial) { const v = $('simSeek').value; if (!(await fullExplain())) return; $('simSeek').value = v; }
   simBegin();
   if (!sim.on) return;
   simPause();
@@ -1468,7 +1569,7 @@ $('sheetForm').addEventListener('submit', async ev => {
   const image = sheetImage({ elements: state.elements, W: p.W, H: p.H, toolWidth: state.plan.tl.w, css });
   $('sheet').innerHTML = sheetHTML({
     info, p, tl: state.plan.tl, g: state.lastG, ex: state.explained, elements: state.elements, image,
-    fileName: `${safeName(state.fileName)}_GM.txt`, withProgram: $('shProgram').checked,
+    fileName: `${safeName(state.fileName)}_GM.txt`, withProgram: $('shProgram').checked, test: $('shTest').checked,
   });
   // la imagen ya está en memoria; el tope evita quedarse esperando si el navegador no la decodifica (ventana oculta)
   await new Promise(r => { const im = $('sheet').querySelector('img'); if (!im || im.complete) r(); else { im.onload = r; im.onerror = r; setTimeout(r, 1500); } });
@@ -1562,7 +1663,7 @@ function openExport() {
   // con varias herramientas: cuáles más y cómo se cambian
   const tools = allTools(p), used = [...new Set(state.plan.order.map(x => x.tool || 0))];
   if ($('machine').value) rows.unshift({ k: 'Máquina', v: $('machine').value });
-  if (used.length > 1) rows.splice(rows[0].k === 'Máquina' ? 2 : 1, 0, { k: 'En orden', v: used.map(k => toolLabel(tools[k])).join(' → ') + (p.dialect === 'grbl' ? ' · el programa se pausa (M00) en cada cambio: cambia la herramienta y toma Z0 de nuevo' : '') });
+  if (used.length > 1) rows.splice(rows[0].k === 'Máquina' ? 2 : 1, 0, { k: 'En orden', v: used.map(k => `${toolLabel(tools[k])} (F${tools[k].fxy})`).join(' → ') + (p.dialect === 'grbl' ? ' · el programa se pausa (M00) en cada cambio: cambia la herramienta y toma Z0 de nuevo' : '') });
   rows.forEach(({ k, v }) => {
     const dt = document.createElement('dt'), dd = document.createElement('dd');
     dt.textContent = k; dd.textContent = v; $('pfList').append(dt, dd);

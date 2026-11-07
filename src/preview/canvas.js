@@ -38,7 +38,7 @@ export function createPreview(cv) {
    *   simulating: no dibuja el grabado terminado (lo va dibujando la simulación), solo el recorrido pendiente
    */
   function draw(s) {
-    const { elements, selected, hovered = -1, W, H, toolWidth, plan, showPath, dragging, simulating } = s;
+    const { elements, selected, hovered = -1, W, H, toolWidth, plan, showPath, dragging, simulating, stock } = s;
     const dpr = window.devicePixelRatio || 1;
     // márgenes para las reglas (abajo y a la izquierda, donde está el cero) y altura máxima para piezas altas
     const cssW = cv.clientWidth || 900, pL = 40, pR = 12, pT = 12, pB = 32;
@@ -109,8 +109,12 @@ export function createPreview(cv) {
     elements.forEach(e => { if (e.mode !== 'skip' && !isDragged(e) && e.paths && !e.paths.length) outline(e); });
     ctx.setLineDash([]); ctx.lineWidth = 1;
 
+    // resultado: la placa ya tallada por el programa (simulación del material), en vez del trazo de cada figura
+    const showStock = stock && !simulating && !dragging;
+    if (showStock) ctx.drawImage(stock, X(0), Y(H), W * k, H * k);
+
     // relieve: la imagen en grises sobre la placa (más oscuro = más hondo); su zigzag sería una mancha a esta escala
-    elements.forEach(e => {
+    if (!showStock) elements.forEach(e => {
       if (e.type !== 'relief' || e.mode === 'skip') return;
       const r = e.relief;
       if (!r.img) {
@@ -130,7 +134,7 @@ export function createPreview(cv) {
     if (simulating) {
       ctx.lineWidth = 1; ctx.strokeStyle = css('--plate-edge');
       elements.forEach(e => (e.paths || []).forEach(p => { path(p.pts, false); ctx.stroke(); }));
-    } else elements.forEach(e => {
+    } else if (!showStock) elements.forEach(e => {
       if (isDragged(e) || e.type === 'relief') return;
       ctx.lineWidth = Math.max(1, (e.tl ? e.tl.w : toolWidth) * k); // cada figura con el ancho a su profundidad (un recorte, el diámetro)
       (e.paths || []).forEach(p => {
@@ -172,6 +176,7 @@ export function createPreview(cv) {
       const bb = bbox(e);
       if (!bb) return;
       const tx = X(bb[2]) - 2, ty = Y(bb[3]) - 3;
+      if (e.copyOf != null) return; // las copias no llevan número: se eligen y cambian con el original
       const lbl = e.src === 'text' ? 'T' : String(i + 1);
       const w = ctx.measureText(lbl).width + 8;
       ctx.fillStyle = css(MODE_COLOR[e.mode].replace('--m-', '--pm-')); // la placa es clara en ambos temas

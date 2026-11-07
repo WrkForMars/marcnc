@@ -77,6 +77,7 @@ input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent);margin:0;
 .err{color:var(--warn)}
 .row2{display:flex;gap:8px;flex-wrap:wrap}
 .sketchbar.blank .sk-status{visibility:hidden}
+.spec-checks{display:flex;flex-direction:column;gap:4px}
 .kind{display:flex;flex-direction:column;gap:4px;margin-bottom:8px}
 .kind-lbl{font-size:12px;font-weight:600;color:var(--muted)}
 .row-between{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
@@ -276,6 +277,8 @@ details.more .params{margin-bottom:8px}
 .machine-save{display:flex;gap:8px;align-items:center}
 .machine-save input{flex:1;min-width:0}
 .tool-row{display:grid;grid-template-columns:auto 64px 1fr 96px auto;gap:8px;align-items:center;margin-bottom:8px}
+.tool-feeds{display:flex;align-items:center;gap:8px;margin:-4px 0 12px 20px;font-size:12px;color:var(--muted)}
+.tool-feeds input{width:88px;min-height:36px}
 .tool-row .tool-t{font-weight:600;color:var(--muted)}
 .tools-more .pm-sec{margin-top:8px}
 .el-opts small{color:var(--muted);font-size:12px;padding-bottom:8px}
@@ -398,6 +401,10 @@ dialog .params{margin:16px 0}
 #sheet .sign{display:flex;gap:16mm;margin-top:12mm}
 #sheet .sign div{flex:1;border-top:1px solid var(--sheet-ink);padding-top:1mm;text-align:center;font-size:9pt}
 #sheet .avoid{break-inside:avoid}
+#sheet .test td.blank{width:28mm}
+#sheet .test td.box{width:12mm;text-align:center;font-size:12pt}
+#sheet .test td{height:8mm}
+#sheet .lines{height:24mm;background:repeating-linear-gradient(to bottom,transparent 0 7.5mm,var(--sheet-line) 7.5mm 8mm)}
 .tabpanel .code{max-height:max(240px,calc(100vh - 420px))}
 
 /* estado de definición de la figura elegida */

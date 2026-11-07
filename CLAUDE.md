@@ -62,6 +62,11 @@ src/
   cam/tools.js       varias herramientas: cuál usa cada figura (toolFor: la elegida; recortar/barrenar → fresa plana)
   cam/relief.js      relieve 3D desde una imagen en grises: acomodo en la pieza, drop cutter (la punta toca la superficie
                      sin comerse lo de al lado) y zigzag simplificado en 3D; se desbasta por niveles — probado
+  cam/stock.js       resultado: placa virtual tallada por el programa (sello de cada herramienta a lo largo de la línea
+                     de tiempo) y su imagen sombreada; corre en el worker (casilla Ver resultado) — probado
+  cam/copies.js      varias copias en una placa: cuadrícula desde el dibujo (copyOffsets) y figura corrida (shiftElement).
+                     Las copias van al final de state.elements con copyOf (índice del original): siguen su modo y
+                     ajustes, no salen en la lista, y tocarlas elige el original — probado
   cam/checks.js      revisión antes de cortar: ficha de preparación (Exportar) y avisos de valores sin sentido — probado
   cam/material.js    perfiles de material: avances sugeridos por carga de viruta con el husillo de la máquina y avisos — probado
   cam/simulate.js    línea de tiempo del programa (duración por avance, posición en cada instante) — probado
@@ -108,7 +113,8 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
   - **Varias herramientas** (Parámetros → Otras herramientas, guardadas en `marcnc:herramientas`; la principal es la 0):
     el programa empieza con la de lo primero que se corta, agrupa por herramienta (grabar y luego recortar) y entre una
     y otra cambia: Fanuc `M05` `G28 G91 Z0` `G90` `T# M06` `S M03`; GRBL `M05`, comentario y `M00` (pausa para cambiarla
-    y tomar Z0). Con una sola herramienta el programa no cambia.
+    y tomar Z0). Con una sola herramienta el programa no cambia. Cada herramienta extra tiene sus avances (los escritos;
+    si no, los sugeridos para el material con su diámetro; si no, los del trabajo) y el tiempo se estima con los de cada una.
   - **Cada figura tiene su profundidad** (`e.op.depth`: la del trabajo, la suya o el grosor + 0.2 si se recorta) y su
     herramienta a esa profundidad (`e.tl`). Lo recortado va al final y, en cada pieza, los huecos antes que el contorno.
   - Contornos cerrados con pasadas de más de 0.25 mm, o recortes: bajan a Z0 y entran en **rampa de 5°** a lo largo del
@@ -121,6 +127,8 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
   Procesos largos van en `computePlan` con cesiones del hilo, o en el worker: se agregan a `JOBS` en `jobs.js` y se
   llaman con `run()` de `work.js` (con `lane` si un cambio nuevo debe cancelar el anterior). Lo que usa canvas o DOM se
   queda en la página y le pasa al worker solo los datos.
+  El programa se escribe en el worker (job `program`, con `forProgram` para mandar solo lo necesario de cada figura); con
+  más de 20 000 líneas solo regresan las primeras 4 000 explicadas (`state.exPartial`) y la simulación pide las completas.
 - **Distribución de la interfaz:** la pieza es el centro (banco oscuro `--stage` con reglas en mm). Herramientas en el riel
   izquierdo; inspector a la derecha con pestañas Figuras / Código G que muestra solo lo seleccionado. **Parámetros del
   trabajo** (pieza, herramienta, profundidad) en `#jobDlg`, resumidos en la barra de arriba de la pieza; **ajustes de
@@ -155,7 +163,7 @@ es un cambio de comportamiento que hay que justificar.
 
 ## Pendiente (en orden de valor)
 
-1. Pasar al worker también la escritura y explicación del código G de programas enormes y los textos rellenos
-   (el vectorizado de imágenes y la separación de objetos ya corren ahí).
+1. Pasar al worker los textos rellenos (canvas → ImageTracer). Ya corren ahí: vectorizado, separación de objetos,
+   escritura y explicación del programa, y la simulación del material.
 
 No se firmará el .exe: Windows mostrará la advertencia de SmartScreen la primera vez (Más información → Ejecutar de todas formas).

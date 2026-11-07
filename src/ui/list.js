@@ -36,7 +36,7 @@ function thumb(e) {
  *   onHover: el cursor entra a un renglón (i) o sale (−1), para resaltarlo en la pieza; onOpts: profundidad propia o puentes
  */
 export function renderList(box, allBox, s) {
-  const { elements, selected, onSelect, onMode, onModeAll, onHover, onOpts, job } = s;
+  const { elements, selected, onSelect, onMode, onModeAll, onHover, onOpts, job, copies = 1 } = s;
   box.textContent = '';
   if (!elements.length) {
     const p = document.createElement('p');
@@ -45,6 +45,7 @@ export function renderList(box, allBox, s) {
     box.append(p);
   }
   elements.forEach((e, i) => {
+    if (e.copyOf != null) return; // las copias se manejan desde el original
     const row = document.createElement('div');
     row.className = 'el' + (i === selected ? ' sel' : '');
     row.style.setProperty('--mc', `var(${MODE_COLOR[e.mode]})`); // franja del color de su modo
@@ -72,6 +73,7 @@ export function renderList(box, allBox, s) {
         ? (e.parts.length > 1 ? `${e.parts.length} tramos` : p.closed ? 'cerrado' : 'abierto')
         : (p.holes.length ? `${p.holes.length} hueco${p.holes.length > 1 ? 's' : ''}` : 'sin huecos');
     }
+    if (copies > 1 && e.mode !== 'skip') sm.textContent += ` · ×${copies}`;
     name.append(thumb(e), num, t, sm);
     top.append(name);
     if (e.warn) {
