@@ -37,7 +37,7 @@ describe('piezas aleatorias', () => {
         const pts = shape();
         return rnd() < 0.3
           ? { src: 'design', type: 'line', mode: 'line', parts: [{ pts, closed: rnd() < 0.5 }] }
-          : { src: 'design', type: 'region', mode: ['fill', 'contour', 'invert', 'cut'][Math.floor(rnd() * 4)], parts: [{ outer: toC(pts), holes: [] }] };
+          : { src: 'design', type: 'region', mode: ['fill', 'contour', 'invert', 'cut', 'drill'][Math.floor(rnd() * 5)], parts: [{ outer: toC(pts), holes: [] }] };
       });
       const tl = toolGeometry({ stepoverPct: 30 + rnd() * 50, stepdown: 0.2, ...TOOLS[Math.floor(rnd() * TOOLS.length)] });
       // recortes de 1 a 4 mm de grosor, con puentes automáticos (o ninguno) y rampas

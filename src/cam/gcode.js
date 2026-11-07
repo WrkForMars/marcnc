@@ -4,6 +4,7 @@ import { rdp } from '../geometry/simplify.js';
 import { fitArcs } from './arcs.js';
 import { RAPID_MM_MIN } from './simulate.js';
 import { passWalk, perimeter, tabIntervals } from './cut.js';
+import { helixDrill, pointDrill } from './drill.js';
 
 /**
  * @typedef {{
@@ -118,7 +119,8 @@ export function generateGcode(plan, elements, o) {
     const holes = e.type === 'region' && e.parts.length === 1 ? e.parts[0].holes.length : 0;
     const label = e.src === 'text' ? `TEXTO "${commentSafe(e.text.text)}"` : `FIGURA ${i + 1}`;
     // la profundidad solo se repite si esta figura tiene la suya
-    const own = te.depth !== tl.depth ? ` - PROF. ${f(te.depth)} MM EN ${zsE.length} PASADA${zsE.length > 1 ? 'S' : ''}` : '';
+    const own = te.depth === tl.depth ? '' : e.mode === 'drill' ? ` - PROF. ${f(te.depth)} MM`
+      : ` - PROF. ${f(te.depth)} MM EN ${zsE.length} PASADA${zsE.length > 1 ? 'S' : ''}`;
     const dzPass = te.depth / zsE.length, rampFor = len => Math.min(len, dzPass / Math.tan(5 * Math.PI / 180));
     const ring = p => (p.pts[0][0] === p.pts[p.pts.length - 1][0] && p.pts[0][1] === p.pts[p.pts.length - 1][1] ? p.pts.slice(0, -1) : p.pts);
     // puentes: los del usuario (o automáticos) en el contorno de afuera; dos en los huecos grandes para que no salten
@@ -128,9 +130,25 @@ export function generateGcode(plan, elements, o) {
       return tabIntervals(len, p.hole ? (e.op.tabs ?? (len > 40 ? 2 : 0)) : e.op.tabs, e.op.tabW, rampFor(len));
     };
     const nTabs = seq.reduce((a, p) => a + (p.closed ? tabsOf(p).length : 0), 0);
-    L.push(`(${label} - ${MODE_NAME[e.mode]}${holes ? ` - ${holes} HUECO${holes > 1 ? 'S' : ''}` : ''}${own}${nTabs ? ` - ${nTabs} PUENTE${nTabs > 1 ? 'S' : ''}` : ''})`);
+    const dr = seq[0] && seq[0].drill;
+    L.push(`(${label} - ${MODE_NAME[e.mode]}${dr ? ` DE ${f(2 * dr.r)} MM${dr.kind === 'helix' ? ' EN ESPIRAL' : ''}` : ''}${holes ? ` - ${holes} HUECO${holes > 1 ? 'S' : ''}` : ''}${own}${nTabs ? ` - ${nTabs} PUENTE${nTabs > 1 ? 'S' : ''}` : ''})`);
 
     seq.forEach(p => {
+      if (p.drill) {
+        const d = p.drill;
+        const start = d.kind === 'point' ? [d.cx, d.cy] : [d.cx + d.rc, d.cy];
+        rapLen += Math.hypot(start[0] - pos[0], start[1] - pos[1]);
+        if (d.kind === 'point') {
+          const r = pointDrill(d, te, { dialect: o.dialect, R, fz, f });
+          L.push(...r.lines); zLen += r.zLen;
+          pos = [d.cx, d.cy];
+        } else {
+          const r = helixDrill(d, te, { R, fz, fxy, f });
+          L.push(...r.lines); cutLen += r.cutLen; zLen += R;
+          pos = [d.cx, d.cy];
+        }
+        return;
+      }
       // contorno cerrado que entra hondo (o un recorte): rampa de entrada y puentes, en vez de bajar de punta
       if (p.closed && p.pts.length > 2 && (e.mode === 'cut' || dzPass > 0.25)) {
         const pts = ring(p), tabs = tabsOf(p);

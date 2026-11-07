@@ -50,3 +50,51 @@ describe('barrenos', () => {
     expect(lines.slice(-2)).toEqual(['G01 X20.00 Y10.00', 'G00 Z3.00']);
   });
 });
+
+import { explainProgram } from '../src/cam/explain.js';
+import { buildTimeline } from '../src/cam/simulate.js';
+import { computePlan } from '../src/cam/plan.js';
+import { generateGcode } from '../src/cam/gcode.js';
+import { toolGeometry } from '../src/cam/tool.js';
+import { elementOp } from '../src/cam/cut.js';
+import { TAREA } from './helpers.js';
+
+describe('barrenos en el programa', () => {
+  it('el visor explica G81 y G83, y la simulación recorre sus movimientos', () => {
+    const ex = explainProgram('G21 G90\nG00 Z3.00\nG98 G81 X10.00 Y5.00 Z-3.20 R1.00 F60\nG80\nG98 G83 X20.00 Y5.00 Z-3.00 R1.00 Q1.00 F60\nG80\n');
+    const g81 = ex.find(e => /G81/.test(e.code)), g83 = ex.find(e => /G83/.test(e.code));
+    expect(g81.kind).toBe('drill'); expect(g81.text).toMatch(/Barrena en X10\.00 Y5\.00/);
+    expect(g81.text).toMatch(/regresa a la altura/);
+    expect(g83.text).toMatch(/picoteo/);
+    expect(g81.to).toEqual([10, 5, 3]); // G98: vuelve a la altura inicial
+    const tl = buildTimeline(ex);
+    const deep = tl.segs.filter(s => s.n === g83.n).map(s => s.to[2]);
+    expect(Math.min(...deep)).toBe(-3);
+    expect(deep.filter(z => z === 1).length).toBeGreaterThanOrEqual(3); // sube a R entre picotazos
+  });
+  it('un círculo en modo Barrenar sale como ciclo (Fanuc) o como movimientos (GRBL), pasante por defecto', async () => {
+    const tl = toolGeometry({ toolType: 'flat', dia: 3.175, depth: 0.1, stepdown: 1 });
+    const make = () => {
+      const chico = regionEl(circle(20, 20, 1.6), [], 'drill'), grande = regionEl(circle(50, 20, 5), [], 'drill');
+      [chico, grande].forEach(e => { e.op = elementOp(e, { depth: 0.1, thick: 3, dia: tl.D }); });
+      return [chico, grande];
+    };
+    for (const dialect of ['fanuc', 'grbl']) {
+      const els = make();
+      const plan = await computePlan(els, tl, { tol: 0.01 });
+      const g = generateGcode(plan, els, { ...TAREA, dialect });
+      expect(g.text).toMatch(/BARRENO DE 3\.20 MM/);
+      expect(g.text).toMatch(/BARRENO DE 10\.00 MM EN ESPIRAL/);
+      if (dialect === 'fanuc') expect(g.text).toMatch(/G98 G81 X20\.00 Y20\.00 Z-3\.20 R1\.00 F60/);
+      else expect(g.text).not.toMatch(/G8[13]/);
+      expect(g.text).toMatch(/G02 X46\.59 Y20\.00 Z-/); // la espiral del grande, por dentro de su orilla
+      expect(explainProgram(g.text).filter(e => e.kind === 'danger')).toEqual([]);
+    }
+  });
+  it('una figura que no es círculo no se barrena y lo dice', async () => {
+    const e = regionEl(square(0, 0, 10), [], 'drill');
+    e.op = elementOp(e, { depth: 0.1, thick: 3, dia: 3.175 });
+    await computePlan([e], toolGeometry({ toolType: 'flat', dia: 3.175, depth: 0.1 }), { tol: 0.01 });
+    expect(e.paths).toEqual([]); expect(e.warn).toMatch(/solo los círculos/);
+  });
+});

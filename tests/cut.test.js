@@ -24,6 +24,18 @@ describe('recortar', () => {
     expect([ox0, oy0, ox1, oy1].map(v => +v.toFixed(2))).toEqual([-1.5, -1.5, 41.5, 41.5]);
     expect(r.lost).toBe(0);
   });
+  it('al recortar, un hueco redondo del tamaño de la herramienta se barrena en vez de perderse', async () => {
+    const { toolpaths } = await import('../src/cam/toolpaths.js');
+    const { toolGeometry } = await import('../src/cam/tool.js');
+    const ring = (cx, cy, r) => Array.from({ length: 48 }, (_, k) => [cx + r * Math.cos(-2 * Math.PI * k / 48), cy + r * Math.sin(-2 * Math.PI * k / 48)]);
+    const e = { type: 'region', mode: 'cut', parts: [{ outer: toC(square(0, 0, 40)), holes: [toC(ring(10, 10, 1.6)), toC(ring(28, 20, 6))] }] };
+    const t = toolpaths(e, toolGeometry({ toolType: 'flat', dia: 3.175, depth: 3 }));
+    const drills = t.paths.filter(p => p.drill);
+    expect(drills).toHaveLength(1); expect(drills[0].drill.kind).toBe('point');
+    expect(drills[0].drill.cx).toBeCloseTo(10, 1);
+    expect(t.paths.filter(p => !p.drill && p.hole)).toHaveLength(1); // el grande se recorta por su orilla
+    expect(t.warn).toBe(null);
+  });
   it('un hueco más chico que la herramienta se cuenta como perdido', () => {
     const r = profilePaths([toC(square(0, 0, 40)), toC(hole(10, 10, 2))], 1.5);
     expect(r.paths).toHaveLength(1); expect(r.lost).toBe(1);

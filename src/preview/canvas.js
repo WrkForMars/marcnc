@@ -2,7 +2,7 @@
 import { area, fromC } from '../geometry/clipper.js';
 import { distSeg, pointInPolygon } from '../geometry/simplify.js';
 
-export const MODE_COLOR = { fill: '--m-fill', contour: '--m-contour', cut: '--m-cut', invert: '--m-invert', line: '--m-line', skip: '--m-skip' };
+export const MODE_COLOR = { fill: '--m-fill', contour: '--m-contour', cut: '--m-cut', drill: '--m-drill', invert: '--m-invert', line: '--m-line', skip: '--m-skip' };
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
 /** Contornos de un elemento en mm, para dibujar el borde y para la selección. */

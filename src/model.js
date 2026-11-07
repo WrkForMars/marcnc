@@ -8,7 +8,7 @@
  * Un trazo es una polilínea en mm.
  * @typedef {{pts: [number,number][], closed: boolean}} LinePart
  *
- * @typedef {'fill'|'contour'|'cut'|'invert'|'line'|'skip'} Mode
+ * @typedef {'fill'|'contour'|'cut'|'drill'|'invert'|'line'|'skip'} Mode
  *
  * Un elemento es lo que el usuario ve como una figura o un texto en la lista.
  * @typedef {{
@@ -32,11 +32,11 @@
 
 /** Modos disponibles por tipo de elemento, en el orden en que se muestran. */
 export const MODES = {
-  region: [['fill', 'Relleno'], ['contour', 'Contorno'], ['cut', 'Recortar'], ['invert', 'Invertir'], ['skip', 'Omitir']],
+  region: [['fill', 'Relleno'], ['contour', 'Contorno'], ['cut', 'Recortar'], ['drill', 'Barrenar'], ['invert', 'Invertir'], ['skip', 'Omitir']],
   line: [['line', 'Línea'], ['skip', 'Omitir']],
 };
 
 /** Nombre del modo en los comentarios del G-code (sin acentos: muchos controladores no los aceptan). */
-export const MODE_NAME = { fill: 'RELLENO', contour: 'CONTORNO', cut: 'RECORTE', invert: 'INVERTIR', line: 'LINEA', skip: 'OMITIR' };
+export const MODE_NAME = { fill: 'RELLENO', contour: 'CONTORNO', cut: 'RECORTE', drill: 'BARRENO', invert: 'INVERTIR', line: 'LINEA', skip: 'OMITIR' };
 
 export const MAX_ELEMENTS = 250;

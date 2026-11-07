@@ -21,6 +21,7 @@ export function elementOp(e, p) {
     return { depth: p.thick + BREAK, tabTop: -(p.thick - tabH), tabW: 3 + p.dia, tabs: e.opts?.tabs ?? null };
   }
   const d = e.opts?.depth;
+  if (e.mode === 'drill') return { depth: d > 0 ? d : p.thick + BREAK }; // pasante, salvo que se pida otra profundidad
   return { depth: d > 0 ? d : p.depth };
 }
 

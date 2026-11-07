@@ -56,6 +56,8 @@ src/
   cam/gcode.js       escritura del programa (función pura) — probado
   cam/cut.js         recortar: profundidad por figura (elementOp), herramienta por fuera/dentro (profilePaths), puentes,
                      rampa de entrada (passWalk: recorrido 3D de cada pasada) — probado
+  cam/drill.js       barrenos: círculos del tamaño de la herramienta con G81/G83 (GRBL: movimientos sueltos), más
+                     grandes en espiral con G02; al recortar, los huecos redondos chicos se barrenan — probado
   cam/checks.js      revisión antes de cortar: ficha de preparación (Exportar) y avisos de valores sin sentido — probado
   cam/material.js    perfiles de material: avances sugeridos por carga de viruta con el husillo de la máquina y avisos — probado
   cam/simulate.js    línea de tiempo del programa (duración por avance, posición en cada instante) — probado
@@ -104,6 +106,9 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
   - Contornos cerrados con pasadas de más de 0.25 mm, o recortes: bajan a Z0 y entran en **rampa de 5°** a lo largo del
     contorno (nunca de punta); en la última pasada repasan la rampa a fondo. Sobre un puente suben en vertical y vuelven
     a bajar con `fz`. Esos recorridos van en rectas (sin arcos). Con la tarea de referencia (0.1 mm) nada de esto aplica.
+  - Barrenos: Fanuc usa `G98 G81/G83 … R1 F{fz}` y `G80` después de cada uno; GRBL no tiene ciclos fijos y se escriben
+    con G00/G01 (picoteo: sube a R y baja rápido hasta 0.2 mm arriba de lo ya barrenado). El visor explica los ciclos y
+    la simulación recorre sus pasos (`steps`).
 - **No bloquear la página:** nada de `getPointAtLength` en bucles (era O(n) por punto y congelaba Chrome).
   Procesos largos van en `computePlan` con cesiones del hilo, o en el worker: se agregan a `JOBS` en `jobs.js` y se
   llaman con `run()` de `work.js` (con `lane` si un cambio nuevo debe cancelar el anterior). Lo que usa canvas o DOM se

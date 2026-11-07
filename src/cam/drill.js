@@ -9,7 +9,11 @@ import { fromC } from '../geometry/clipper.js';
  */
 export function circleOf(e) {
   if (e.type !== 'region' || e.parts.length !== 1 || e.parts[0].holes.length) return null;
-  const pts = fromC(e.parts[0].outer);
+  return circleOfPts(fromC(e.parts[0].outer));
+}
+
+/** El círculo que forman estos puntos (±1 %), o null. */
+export function circleOfPts(pts) {
   if (pts.length < 12) return null;
   let cx = 0, cy = 0;
   pts.forEach(([x, y]) => { cx += x; cy += y; });

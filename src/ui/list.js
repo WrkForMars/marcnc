@@ -1,6 +1,7 @@
 // Lista de figuras y textos con sus botones de modo.
 import { MODES } from '../model.js';
 import { MODE_COLOR, bbox, outlines } from '../preview/canvas.js';
+import { circleOf } from '../cam/drill.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const thumbs = new WeakMap(); // miniatura por elemento: se arma una vez
@@ -85,7 +86,8 @@ export function renderList(box, allBox, s) {
     seg.className = 'modes';
     seg.setAttribute('role', 'group');
     seg.setAttribute('aria-label', 'Modo de corte');
-    MODES[e.type].forEach(([m, label]) => {
+    // Barrenar solo tiene sentido en un círculo
+    MODES[e.type].filter(([m]) => m !== 'drill' || e.mode === 'drill' || circleOf(e)).forEach(([m, label]) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = label;
@@ -109,7 +111,7 @@ export function renderList(box, allBox, s) {
     lab.textContent = 'Todas las figuras';
     const g = document.createElement('div');
     g.className = 'modes';
-    MODES.region.forEach(([m, label]) => {
+    MODES.region.filter(([m]) => m !== 'drill').forEach(([m, label]) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = label;
@@ -143,15 +145,17 @@ function optsRow(e, i, onOpts, job) {
     note.textContent = `Atraviesa ${+(job.thick + 0.2).toFixed(2)} mm (grosor + 0.2)`;
     box.append(lab, note);
   } else {
+    // un barreno atraviesa la pieza salvo que se le dé su profundidad (ciego)
+    const through = e.mode === 'drill', def = through ? +(job.thick + 0.2).toFixed(2) : job.depth;
     lab.append('Profundidad (mm)');
     const inp = document.createElement('input');
     inp.type = 'number'; inp.min = '0.01'; inp.max = '100'; inp.step = '0.05';
-    inp.placeholder = String(job.depth);
+    inp.placeholder = String(def);
     inp.value = e.opts?.depth > 0 ? String(e.opts.depth) : '';
     inp.addEventListener('change', () => { const v = parseFloat(inp.value); onOpts(i, { depth: v > 0 ? v : null }); });
     lab.append(inp);
     const note = document.createElement('small');
-    note.textContent = inp.value ? 'Propia de esta figura' : 'La del trabajo';
+    note.textContent = inp.value ? 'Propia de esta figura' : through ? 'Pasante (grosor + 0.2)' : 'La del trabajo';
     box.append(lab, note);
   }
   return box;

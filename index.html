@@ -340,7 +340,8 @@
       <h3 id="secPiece">Pieza</h3>
       <label>Ancho (mm)<input type="number" id="pw" value="90" min="5" step="1"></label>
       <label>Alto (mm)<input type="number" id="ph" value="50" min="5" step="1"></label>
-      <label class="full">Material<select id="material"><option value="">Sin elegir (avances a mano)</option><option value="mdf">Madera / MDF</option><option value="acrilico">Acrílico</option><option value="aluminio">Aluminio</option><option value="laton">Latón</option></select></label>
+      <label>Grosor (mm)<input type="number" id="thick" value="3" min="0.5" max="100" step="0.5"></label>
+      <label>Material<select id="material"><option value="">Sin elegir (avances a mano)</option><option value="mdf">Madera / MDF</option><option value="acrilico">Acrílico</option><option value="aluminio">Aluminio</option><option value="laton">Latón</option></select></label>
       <label class="full">Tamaño del dibujo<select id="fit"><option value="fill">Ajustar a la pieza (con margen)</option><option value="width">Elegir ancho y alto (mm)</option><option value="native">Escala 1:1 (unidades del SVG = mm)</option></select></label>
       <label id="dwLbl" hidden>Ancho del dibujo (mm)<input type="number" id="dw" value="40" min="1" step="0.5"></label>
       <label id="dhLbl" hidden>Alto del dibujo (mm)<input type="number" id="dh" min="1" step="0.5"></label>
