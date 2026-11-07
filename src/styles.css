@@ -273,6 +273,8 @@ details.more .params{margin-bottom:8px}
 .el-opts{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;cursor:default}
 .el-opts label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:var(--muted)}
 .el-opts input,.el-opts select{width:160px;min-height:36px}
+.machine-save{display:flex;gap:8px;align-items:center}
+.machine-save input{flex:1;min-width:0}
 .tool-row{display:grid;grid-template-columns:auto 64px 1fr 96px auto;gap:8px;align-items:center;margin-bottom:8px}
 .tool-row .tool-t{font-weight:600;color:var(--muted)}
 .tools-more .pm-sec{margin-top:8px}

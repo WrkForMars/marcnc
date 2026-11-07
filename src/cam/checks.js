@@ -64,3 +64,20 @@ export function jobRisks(p, tl, g, o = {}) {
   if (g.lines > 100000) out.push(`El programa tiene ${g.lines.toLocaleString('es-MX')} líneas: muchos controles no tienen memoria para tanto (habría que mandarlo por DNC).`);
   return out;
 }
+
+/**
+ * Avisos por los límites de la máquina (si se conocen: 0 o vacío = no se revisa).
+ * @param {{W:number, H:number, rpm:number, maxX?:number, maxY?:number, maxZ?:number, maxRpm?:number, retract?:number}} p
+ * @param {number} deepest profundidad más honda del programa (mm)
+ */
+export function machineRisks(p, deepest) {
+  const out = [];
+  if (p.maxX > 0 && p.maxY > 0) {
+    const fits = (p.W <= p.maxX && p.H <= p.maxY) || (p.H <= p.maxX && p.W <= p.maxY);
+    if (!fits) out.push(`La pieza de ${n(p.W)} × ${n(p.H)} mm no cabe en el área de trabajo de la máquina (${n(p.maxX)} × ${n(p.maxY)} mm).`);
+    else if (p.W > p.maxX || p.H > p.maxY) out.push(`La pieza de ${n(p.W)} × ${n(p.H)} mm solo cabe girada 90° en la mesa (${n(p.maxX)} × ${n(p.maxY)} mm): gira también el dibujo.`);
+  }
+  if (p.maxZ > 0 && deepest + (p.retract || 0) > p.maxZ) out.push(`El programa necesita ${n(deepest + (p.retract || 0))} mm de recorrido en Z (profundidad más retracción) y la máquina tiene ${n(p.maxZ)} mm.`);
+  if (p.maxRpm > 0 && p.rpm > p.maxRpm) out.push(`El husillo pide S${p.rpm} y la máquina llega a ${p.maxRpm} rpm: bájalo en Ajustes de máquina (y los avances con él).`);
+  return out;
+}

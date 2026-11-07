@@ -45,6 +45,16 @@ describe('varias herramientas', () => {
     expect(t).toMatch(/\(HERRAMIENTAS: T3 BALL MILL D3.17 - T1 FRESA PLANA D6.35\)/);
     expect(explainProgram(t).filter(e => e.kind === 'danger')).toEqual([]);
   });
+  it('Fanuc sin cambiador automático: también se pausa con M00', async () => {
+    const p = { toolType: 'ball', dia: 3.175, depth: 0.1, stepdown: 1 };
+    const bases = TOOLS.map(t => toolGeometry({ ...p, toolType: t.type, dia: t.dia }));
+    const pieza = regionEl(square(10, 10, 30), [], 'cut'), letras = regionEl(square(50, 20, 6), [], 'contour');
+    [pieza, letras].forEach(e => { const k = toolFor(e, TOOLS); e.op = { ...elementOp(e, { depth: 0.1, thick: 3, dia: bases[k].D }), tool: k, base: bases[k] }; });
+    const plan = await computePlan([pieza, letras], bases[0], { tol: 0.01 });
+    const t = generateGcode(plan, [pieza, letras], { ...TAREA, W: 90, H: 80, tools: TOOLS, changer: false }).text;
+    expect(t).not.toMatch(/M06/);
+    expect(t).toMatch(/G28 G91 Z0\nG90\n\(CAMBIA A T1 FRESA PLANA D6\.35 Y TOMA DE NUEVO Z0\)\nM00/);
+  });
   it('GRBL: se pausa con M00 para que el operador cambie la herramienta y tome Z0 de nuevo', async () => {
     const t = await job('grbl');
     expect(t).not.toMatch(/M06/);

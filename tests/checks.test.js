@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { duration, inchName, jobRisks, setupSheet } from '../src/cam/checks.js';
+import { duration, inchName, jobRisks, machineRisks, setupSheet } from '../src/cam/checks.js';
 import { toolGeometry } from '../src/cam/tool.js';
 
 const P = { rpm: 2200, fz: 60, fxy: 130, toolNum: 3, W: 90, H: 50, dialect: 'fanuc' };
@@ -40,6 +40,14 @@ describe('revisión antes de cortar', () => {
     expect(s[3].v).toBe('0.1 mm de profundidad en 1 pasada · línea de 1.11 mm');
     expect(s[4].v).toBe('S2200 a la derecha (M03) · F60 al bajar · F130 al cortar');
     expect(setupSheet({ ...P, dialect: 'grbl' }, ball, G)[0].v).toMatch(/cámbiala a mano/);
+  });
+  it('límites de la máquina: pieza que no cabe (o solo girada), recorrido de Z y husillo máximo; sin límites, nada', () => {
+    const m = { ...P, maxX: 300, maxY: 200, maxZ: 10, maxRpm: 2000, retract: 3 };
+    expect(machineRisks({ ...m, W: 400, H: 100 }, 1)[0]).toMatch(/no cabe/);
+    expect(machineRisks({ ...m, W: 100, H: 250 }, 1)[0]).toMatch(/girada 90°/);
+    expect(machineRisks({ ...m, rpm: 1000 }, 8)[0]).toMatch(/11 mm de recorrido en Z/);
+    expect(machineRisks(m, 1)[0]).toMatch(/llega a 2000 rpm/);
+    expect(machineRisks(P, 50)).toEqual([]);
   });
   it('reconoce medidas en pulgadas y escribe duraciones', () => {
     expect(inchName(6.35)).toBe('1/4"'); expect(inchName(3)).toBe('');

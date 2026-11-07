@@ -12,7 +12,7 @@ import { parseSVG, SVG_QUALITY } from './input/svg.js';
 import { grayImage, traceImage } from './input/image.js';
 import { reliefLayout } from './cam/relief.js';
 import { Cancelled } from './work.js';
-import { duration, jobRisks, setupSheet } from './cam/checks.js';
+import { duration, jobRisks, machineRisks, setupSheet } from './cam/checks.js';
 import { elementOp } from './cam/cut.js';
 import { toolFor, toolLabel } from './cam/tools.js';
 import { toolFigure } from './ui/tool-figure.js';
@@ -68,6 +68,7 @@ function params() {
     toolType: $('ttype').value, dia: num('tdia', 3.175), depth: num('depth', 0.1), vAngle: num('vang', 60), vTip: num('vtip', 0.1),
     stepoverPct: num('stepover', 45), stepdown: num('stepdown', 0.2),
     toolNum: num('tnum', 1), rpm: num('rpm', 1000), fz: num('fz', 60), fxy: num('fxy', 130), retract: num('retract', 3),
+    maxX: num('maxX', 0), maxY: num('maxY', 0), maxZ: num('maxZ', 0), maxRpm: num('maxRpm', 0), changer: $('changer').checked,
     dialect: $('dialect').value, dec: +$('dec').value, tol: Math.max(0.002, num('tol', 0.05)), prog: num('prog', 1), arcs: $('arcs').checked,
   };
 }
@@ -150,6 +151,41 @@ function renderAll() {
   });
 }
 
+/* ---------- perfiles de máquina ---------- */
+// lo que define a una máquina: se guarda con su nombre y se pone de un clic
+const MACHINE_FIELDS = ['dialect', 'rpm', 'retract', 'fz', 'fxy', 'dec', 'prog', 'tol', 'arcs', 'maxX', 'maxY', 'maxZ', 'maxRpm', 'changer'];
+const MACHINES_STORE = 'marcnc:maquinas';
+let machines = {};
+try { machines = JSON.parse(localStorage.getItem(MACHINES_STORE) || '{}') || {}; } catch { machines = {}; }
+/** @param {string} [pick] perfil que queda elegido (por omisión, el que ya estaba) */
+function renderMachines(pick) {
+  const sel = $('machine'), cur = pick ?? sel.value;
+  sel.textContent = '';
+  const none = document.createElement('option'); none.value = ''; none.textContent = 'Sin nombre'; sel.append(none);
+  Object.keys(machines).sort().forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; sel.append(o); });
+  sel.value = machines[cur] ? cur : '';
+  $('machineDel').hidden = !sel.value;
+  $('machineName').value = sel.value;
+}
+$('machine').addEventListener('change', () => {
+  const m = machines[$('machine').value];
+  if (m) MACHINE_FIELDS.forEach(id => { if (id in m) { setVal(id, m[id]); $(id).dispatchEvent(new Event('change', { bubbles: true })); } });
+  renderMachines(); storeParams(); syncLabels(); jobSummary(); refresh();
+});
+$('machineSave').addEventListener('click', () => {
+  const name = $('machineName').value.trim();
+  if (!name) { $('machineName').focus(); return; }
+  machines[name] = Object.fromEntries(MACHINE_FIELDS.map(id => [id, getVal(id)]));
+  try { localStorage.setItem(MACHINES_STORE, JSON.stringify(machines)); } catch { /* solo esta sesión */ }
+  renderMachines(name); storeParams();
+  $('toast').textContent = `Perfil “${name}” guardado.`;
+});
+$('machineDel').addEventListener('click', () => {
+  delete machines[$('machine').value];
+  try { localStorage.setItem(MACHINES_STORE, JSON.stringify(machines)); } catch { /* solo esta sesión */ }
+  renderMachines(''); storeParams();
+});
+
 /* ---------- herramientas ---------- */
 const TOOLS_STORE = 'marcnc:herramientas';
 try { state.tools = JSON.parse(localStorage.getItem(TOOLS_STORE) || '[]').filter(t => t && t.t > 0 && t.dia > 0); } catch { state.tools = []; }
@@ -226,6 +262,7 @@ function warnings(p, plan, g) {
   const live = state.elements.filter(e => e.mode !== 'skip' && e.tl);
   const deep = live.reduce((t, e) => (e.tl.depth > t.depth ? e.tl : t), plan.tl);
   ws.push(...feedRisks($('material').value, p), ...jobRisks(p, deep, g, { material: !!$('material').value, cut: live.some(e => e.mode === 'cut') }));
+  ws.push(...machineRisks(p, deep.depth));
   const relief = live.find(e => e.mode === 'relief');
   if (relief && relief.tl.type !== 'ball') ws.push(`Para un relieve conviene una ball mill: ${relief.tl.type === 'v' ? 'el V-bit deja surcos' : 'la fresa plana deja escalones'} entre renglón y renglón.`);
   if (out.length) ws.push(`${out.join(', ')} se sale${out.length > 1 ? 'n' : ''} de la pieza; ajusta su tamaño o su posición.`);
@@ -615,12 +652,13 @@ $('dh').addEventListener('change', () => {
   storeParams(); rebuildDesign(); assemble(); refresh();
 });
 ['pw', 'ph', 'margin', 'speck', 'fit', 'dw'].forEach(id => $(id).addEventListener('change', () => { rebuildDesign(); assemble(); refresh(); }));
-['depth', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'rpm', 'fz', 'fxy', 'retract', 'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs']
+['depth', 'thick', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'rpm', 'fz', 'fxy', 'retract', 'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs',
+  'maxX', 'maxY', 'maxZ', 'maxRpm', 'changer']
   .forEach(id => $(id).addEventListener('change', () => { $('vAngLbl').hidden = $('vTipLbl').hidden = $('ttype').value !== 'v'; refresh(); }));
 $('showPath').addEventListener('change', () => drawOnly());
 
 // los parámetros se recuerdan entre sesiones (cada taller tiene su máquina y su herramienta)
-const SAVED = ['material', 'pw', 'ph', 'thick', 'margin', 'speck', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'depth', 'rpm', 'retract', 'fz', 'fxy',
+const SAVED = ['material', 'pw', 'ph', 'thick', 'maxX', 'maxY', 'maxZ', 'maxRpm', 'changer', 'machine', 'margin', 'speck', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'depth', 'rpm', 'retract', 'fz', 'fxy',
   'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs', 'imgHow', 'thr', 'svgQ', 'dw', 'imgMode', 'imgClean', 'imgDetail', 'imgInvert'];
 const STORE = 'marcnc:parametros';
 const getVal = id => ($(id).type === 'checkbox' ? $(id).checked : $(id).value);
@@ -1523,7 +1561,8 @@ function openExport() {
   const rows = setupSheet({ ...p, materialName: $('material').value ? mat.textContent : '' }, tl, g, cutEl ? { depth: cutEl.tl.depth } : null);
   // con varias herramientas: cuáles más y cómo se cambian
   const tools = allTools(p), used = [...new Set(state.plan.order.map(x => x.tool || 0))];
-  if (used.length > 1) rows.splice(1, 0, { k: 'En orden', v: used.map(k => toolLabel(tools[k])).join(' → ') + (p.dialect === 'grbl' ? ' · el programa se pausa (M00) en cada cambio: cambia la herramienta y toma Z0 de nuevo' : '') });
+  if ($('machine').value) rows.unshift({ k: 'Máquina', v: $('machine').value });
+  if (used.length > 1) rows.splice(rows[0].k === 'Máquina' ? 2 : 1, 0, { k: 'En orden', v: used.map(k => toolLabel(tools[k])).join(' → ') + (p.dialect === 'grbl' ? ' · el programa se pausa (M00) en cada cambio: cambia la herramienta y toma Z0 de nuevo' : '') });
   rows.forEach(({ k, v }) => {
     const dt = document.createElement('dt'), dd = document.createElement('dd');
     dt.textContent = k; dd.textContent = v; $('pfList').append(dt, dd);
@@ -1573,7 +1612,9 @@ const back = createBack([
 ], { guardExit: !isDesktop(), onExitHint: () => { $('toast').textContent = 'Presiona Atrás otra vez para salir.'; } });
 new MutationObserver(back.schedule).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['hidden', 'open', 'aria-pressed', 'aria-selected'] });
 (async () => {
+  renderMachines(); // las opciones primero, para que el perfil recordado se pueda elegir
   restoreParams();
+  renderMachines();
   loadSketch();
   setTool('select');
   // con un croquis guardado se abre ese; si no, la bienvenida (empezar, abrir, ejemplo o plantilla)

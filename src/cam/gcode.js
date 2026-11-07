@@ -15,6 +15,7 @@ import { helixDrill, pointDrill } from './drill.js';
  *   fz:number, fxy:number,         // avances en mm/min
  *   toolNum:number, rpm:number, prog:number,
  *   arcs:boolean,                  // convertir curvas a G02/G03 (solo con 2 o 3 decimales)
+ *   changer?:boolean,              // false: la máquina no cambia herramientas sola (Fanuc también pausa con M00)
  *   tools?:{t:number, type:string, dia:number}[],  // con varias herramientas: la 0 es la principal (toolNum); el plan
  *                                  // dice cuál usa cada figura (order[].tool) y entre una y otra se cambia
  * }} GcodeOptions
@@ -116,14 +117,15 @@ export function generateGcode(plan, elements, o) {
   const used = [...new Set(order.map(x => x.tool || 0))];
   if (used.length > 1) L.push(`(HERRAMIENTAS: ${used.map(tname).join(' - ')})`);
   L.push('G21 G90 G17 G40 G49 G80');
-  if (o.dialect === 'fanuc') L.push(`T${tools[cur].t} M06`);
+  const auto = o.dialect === 'fanuc' && o.changer !== false; // cambiador automático
+  if (auto) L.push(`T${tools[cur].t} M06`);
   else L.push(`(CAMBIO MANUAL A HERRAMIENTA T${tools[cur].t})`);
   L.push(`S${o.rpm} M03`, 'G54', `G00 Z${f(R)}`);
   /** Cambio de herramienta a media obra: Fanuc la cambia sola; GRBL se pausa para que el operador la cambie. */
   const changeTool = k => {
     L.push('M05');
-    if (o.dialect === 'fanuc') L.push('G28 G91 Z0', 'G90', `(${tname(k)})`, `T${tools[k].t} M06`);
-    else L.push(`(CAMBIA A ${tname(k)} Y TOMA DE NUEVO Z0)`, 'M00');
+    if (auto) L.push('G28 G91 Z0', 'G90', `(${tname(k)})`, `T${tools[k].t} M06`);
+    else L.push(...(o.dialect === 'fanuc' ? ['G28 G91 Z0', 'G90'] : []), `(CAMBIA A ${tname(k)} Y TOMA DE NUEVO Z0)`, 'M00');
     L.push(`S${o.rpm} M03`, `G00 Z${f(R)}`);
     cur = k;
   };

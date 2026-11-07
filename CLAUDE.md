@@ -124,7 +124,8 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
 - **Distribución de la interfaz:** la pieza es el centro (banco oscuro `--stage` con reglas en mm). Herramientas en el riel
   izquierdo; inspector a la derecha con pestañas Figuras / Código G que muestra solo lo seleccionado. **Parámetros del
   trabajo** (pieza, herramienta, profundidad) en `#jobDlg`, resumidos en la barra de arriba de la pieza; **ajustes de
-  máquina** (controlador, velocidades, formato) en `#setDlg`. Un solo botón principal: Exportar.
+  máquina** (perfil con nombre, controlador, velocidades, área de trabajo y límites, formato) en `#setDlg`; los perfiles
+  se guardan en `marcnc:maquinas` y los límites (0 = sin dato) los revisa `machineRisks` en `cam/checks.js`. Un solo botón principal: Exportar.
 - **El croquis se maneja como SolidWorks** (sin copiar su aspecto), para que lo aprendido allá sirva aquí: orden de
   herramientas de su pestaña Croquis, Cota inteligente, PropertyManager con vista previa y ✓ / ✕ (Enter / Esc), "Para
   construcción" en Opciones, azul = insuficientemente definido, clic derecho termina la cadena o abre el menú, rueda =
@@ -154,8 +155,7 @@ es un cambio de comportamiento que hay que justificar.
 
 ## Pendiente (en orden de valor)
 
-1. Perfiles de máquina (husillo máximo, recorrido) además de los de material.
-2. Pasar al worker también la escritura y explicación del código G de programas enormes y los textos rellenos
+1. Pasar al worker también la escritura y explicación del código G de programas enormes y los textos rellenos
    (el vectorizado de imágenes y la separación de objetos ya corren ahí).
 
 No se firmará el .exe: Windows mostrará la advertencia de SmartScreen la primera vez (Más información → Ejecutar de todas formas).
