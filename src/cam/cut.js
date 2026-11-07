@@ -5,6 +5,8 @@ import { offset, fromC } from '../geometry/clipper.js';
 
 /** Cuánto más abajo del grosor baja el recorte, para que atraviese aunque la cara no esté perfectamente plana. */
 export const BREAK = 0.2;
+/** Profundidad de un relieve si no se le da otra: lo más oscuro baja 2 mm. */
+export const RELIEF_DEPTH = 2;
 /** Pendiente de la rampa de entrada: 5° (una fresa corta bien de lado, mal de punta). */
 const RAMP = Math.tan(5 * Math.PI / 180);
 
@@ -22,6 +24,7 @@ export function elementOp(e, p) {
   }
   const d = e.opts?.depth;
   if (e.mode === 'drill') return { depth: d > 0 ? d : p.thick + BREAK }; // pasante, salvo que se pida otra profundidad
+  if (e.mode === 'relief') return { depth: d > 0 ? d : RELIEF_DEPTH };
   return { depth: d > 0 ? d : p.depth };
 }
 

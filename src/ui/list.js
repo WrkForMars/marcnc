@@ -67,7 +67,7 @@ export function renderList(box, allBox, s) {
       sm.textContent = `${e.text.h} mm · ${e.type === 'line' ? 'una línea' : 'rellena'}`;
     } else {
       t.textContent = e.label || (e.type === 'line' ? 'Trazo' : 'Figura');
-      const p = e.parts[0];
+      const p = e.parts && e.parts[0]; // un relieve no tiene contornos: trae su detalle
       sm.textContent = e.detail ? e.detail : e.type === 'line'
         ? (e.parts.length > 1 ? `${e.parts.length} tramos` : p.closed ? 'cerrado' : 'abierto')
         : (p.holes.length ? `${p.holes.length} hueco${p.holes.length > 1 ? 's' : ''}` : 'sin huecos');
@@ -158,7 +158,7 @@ function optsRow(e, i, onOpts, job) {
     box.append(lab, note);
   } else {
     // un barreno atraviesa la pieza salvo que se le dé su profundidad (ciego)
-    const through = e.mode === 'drill', def = through ? +(job.thick + 0.2).toFixed(2) : job.depth;
+    const through = e.mode === 'drill', def = through ? +(job.thick + 0.2).toFixed(2) : e.mode === 'relief' ? 2 : job.depth;
     lab.append('Profundidad (mm)');
     const inp = document.createElement('input');
     inp.type = 'number'; inp.min = '0.01'; inp.max = '100'; inp.step = '0.05';
@@ -167,7 +167,7 @@ function optsRow(e, i, onOpts, job) {
     inp.addEventListener('change', () => { const v = parseFloat(inp.value); onOpts(i, { depth: v > 0 ? v : null }); });
     lab.append(inp);
     const note = document.createElement('small');
-    note.textContent = inp.value ? 'Propia de esta figura' : through ? 'Pasante (grosor + 0.2)' : 'La del trabajo';
+    note.textContent = e.mode === 'relief' ? 'Lo más oscuro baja esto' : inp.value ? 'Propia de esta figura' : through ? 'Pasante (grosor + 0.2)' : 'La del trabajo';
     box.append(lab, note);
   }
   return box;

@@ -9,7 +9,8 @@ import { computePlan } from './cam/plan.js';
 import { isDesktop, saveTextDesktop } from './desktop.js';
 import { toolGeometry } from './cam/tool.js';
 import { parseSVG, SVG_QUALITY } from './input/svg.js';
-import { traceImage } from './input/image.js';
+import { grayImage, traceImage } from './input/image.js';
+import { reliefLayout } from './cam/relief.js';
 import { Cancelled } from './work.js';
 import { duration, jobRisks, setupSheet } from './cam/checks.js';
 import { elementOp } from './cam/cut.js';
@@ -73,6 +74,15 @@ function params() {
 
 /* ---------- elementos ---------- */
 function rebuildDesign() {
+  if (state.reliefSrc) {
+    // un relieve no se vectoriza: es un solo elemento con su imagen en grises, acomodado en la pieza
+    const p = params(), g = state.reliefSrc, lay = reliefLayout(g.gw, g.gh, p), prev = state.design[0];
+    const el = { src: 'design', type: 'relief', mode: prev && prev.type === 'relief' ? prev.mode : 'relief', relief: { ...lay, ...g }, label: 'Relieve', detail: `${lay.w.toFixed(1)} × ${lay.h.toFixed(1)} mm` };
+    if (prev && prev.type === 'relief' && prev.opts) el.opts = prev.opts;
+    state.design = [el]; state.designNote = ''; state.designScale = lay.w / g.gw; state.designSize = [lay.w, lay.h]; state.cache.clear();
+    svgQualityLabel(); syncSize();
+    return;
+  }
   const r = buildDesign(state.raw, params(), state.design);
   state.design = r.elements; state.designNote = r.note; state.designScale = r.scale; state.designSize = r.size; state.cache.clear();
   svgQualityLabel(); syncSize();
@@ -216,6 +226,8 @@ function warnings(p, plan, g) {
   const live = state.elements.filter(e => e.mode !== 'skip' && e.tl);
   const deep = live.reduce((t, e) => (e.tl.depth > t.depth ? e.tl : t), plan.tl);
   ws.push(...feedRisks($('material').value, p), ...jobRisks(p, deep, g, { material: !!$('material').value, cut: live.some(e => e.mode === 'cut') }));
+  const relief = live.find(e => e.mode === 'relief');
+  if (relief && relief.tl.type !== 'ball') ws.push(`Para un relieve conviene una ball mill: ${relief.tl.type === 'v' ? 'el V-bit deja surcos' : 'la fresa plana deja escalones'} entre renglón y renglón.`);
   if (out.length) ws.push(`${out.join(', ')} se sale${out.length > 1 ? 'n' : ''} de la pieza; ajusta su tamaño o su posición.`);
   if (thin.length > 3) {
     const tot = thin.reduce((a, { e }) => a + (parseFloat(e.warn) || 0), 0);
@@ -292,7 +304,7 @@ async function loadShapes(fn, isImage, msg) {
   await tick();
   try {
     const t0 = performance.now();
-    state.raw = await fn(); state.rawId++;
+    state.raw = await fn(); state.rawId++; state.reliefSrc = null;
     select(-1);
     busy('Separando figuras…');
     await tick();
@@ -337,6 +349,15 @@ function loadImage() {
     mode: $('imgMode').value, thr: +$('thr').value, invert: $('imgInvert').checked, clean: +$('imgClean').value,
     how: $('imgHow').value, detail: +$('imgDetail').value, crop: state.imgCrop, seeds: state.imgSeeds,
   };
+  if (opts.mode === 'relief') {
+    // relieve: la imagen en grises entra tal cual, sin vectorizar
+    state.reliefSrc = grayImage(state.lastImage, opts); state.raw = null; state.imgMask = null; state.imgInfo = null; state.rawId++;
+    state.design = [];
+    rebuildDesign(); assemble(); select(-1); refresh();
+    $('imgOpts').hidden = false; $('svgOpts').hidden = true; $('loadErr').textContent = '';
+    drawImgView();
+    return;
+  }
   const object = opts.mode === 'object';
   if (object && !state.imgSeeds.some(s => s.fg)) {
     // todavía no hay qué separar: se muestra la foto para tocar el objeto
@@ -433,7 +454,7 @@ async function openDemo() {
   await loadSvg(); await addDemoText(); select(-1); refresh();
 }
 $('clear').addEventListener('click', () => {
-  Object.assign(state, { raw: null, design: [], texts: [], lastImage: null, imgSeeds: [], lastSvg: '', designNote: '', fileName: '', designSize: [0, 0] });
+  Object.assign(state, { raw: null, reliefSrc: null, design: [], texts: [], lastImage: null, imgSeeds: [], lastSvg: '', designNote: '', fileName: '', designSize: [0, 0] });
   $('docName').value = '';
   syncSize();
   sketch.clear(); // se puede deshacer con Ctrl+Z
@@ -446,13 +467,14 @@ $('imgDetect').addEventListener('change', () => setImgKind(false));
 /** Dibujo (con el modo de detección elegido en Más opciones) u objeto en una foto. imgMode guarda el modo que se aplica. */
 function setImgKind(object) {
   const before = $('imgMode').value;
-  $('imgMode').value = object ? 'object' : $('imgDetect').value;
+  $('imgMode').value = object === 'relief' ? 'relief' : object ? 'object' : $('imgDetect').value;
   $('imgMode').dispatchEvent(new Event('change')); // se recuerda para la próxima imagen
   syncLabels();
   if ($('imgMode').value !== before || !object) loadImage();
 }
 $('kindDraw').addEventListener('click', () => setImgKind(false));
 $('kindObj').addEventListener('click', () => setImgKind(true));
+$('kindRelief').addEventListener('click', () => setImgKind('relief'));
 
 /* ---------- imagen: lo que detecta y recorte ---------- */
 const iv = $('imgView'), ivx = iv.getContext('2d');
@@ -521,7 +543,9 @@ function drawImgView() {
   $('objBar').hidden = !object;
   const info = state.imgInfo;
   const auto = $('imgMode').value === 'auto';
-  $('imgInfo').textContent = object
+  const rel = state.reliefSrc && state.design[0]?.type === 'relief' ? state.design[0] : null;
+  $('imgInfo').textContent = rel ? `Relieve de ${rel.relief.w.toFixed(1)} × ${rel.relief.h.toFixed(1)} mm: lo más oscuro baja ${+(rel.op?.depth ?? 2).toFixed(2)} mm (cámbialo en la lista). Arrastra para recortar.`
+    : object
     ? (info ? `Objeto: ${(info.ink * 100).toFixed(1)} % de la imagen. ¿Sobra algo? Elige Fondo y tócalo.` : 'Toca el objeto para separarlo del fondo.')
     : info ? `Dibujo: ${(info.ink * 100).toFixed(1)} % de la imagen${auto && info.used === 'photo' ? ' · parece foto: se ignoran sombras' : ''}${info.inverted ? ' · invertida' : ''}${state.imgMask ? ` · ${state.imgMask.w} × ${state.imgMask.h} px` : ''}` : '';
   $('imgUncrop').hidden = !state.imgCrop;
@@ -536,7 +560,7 @@ iv.addEventListener('pointermove', ev => { if (ivDrag) { ivDrag.cur = ivPos(ev);
  */
 function ivTap([px, py], fg) {
   const L = ivLayout(), x = (px - L.ox) / (L.iw * L.k), y = (py - L.oy) / (L.ih * L.k);
-  if (x < 0 || y < 0 || x > 1 || y > 1) return;
+  if (x < 0 || y < 0 || x > 1 || y > 1 || $('imgMode').value === 'relief') return; // en un relieve solo se recorta
   if ($('imgMode').value !== 'object') { $('imgMode').value = 'object'; $('imgMode').dispatchEvent(new Event('change')); syncLabels(); fg = true; setSeedFg(true); }
   const hit = state.imgSeeds.findIndex(s => Math.hypot((s.x - x) * L.iw * L.k, (s.y - y) * L.ih * L.k) < 10);
   if (hit >= 0) state.imgSeeds.splice(hit, 1);
@@ -605,10 +629,11 @@ const DEFAULTS = Object.fromEntries(SAVED.map(id => [id, getVal(id)]));
 const syncLabels = () => { $('vAngLbl').hidden = $('vTipLbl').hidden = $('ttype').value !== 'v'; $('thrVal').textContent = $('thr').value; syncImgKind(); svgQualityLabel(); };
 /** Botones de tipo de imagen y opciones que solo aplican a un dibujo, según imgMode. */
 function syncImgKind() {
-  const mode = $('imgMode').value, object = mode === 'object';
-  if (!object) $('imgDetect').value = mode;
-  $('kindDraw').setAttribute('aria-pressed', String(!object)); $('kindObj').setAttribute('aria-pressed', String(object));
-  document.querySelectorAll('.draw-only').forEach(el => { el.hidden = object; });
+  const mode = $('imgMode').value, object = mode === 'object', relief = mode === 'relief';
+  if (!object && !relief) $('imgDetect').value = mode;
+  $('kindDraw').setAttribute('aria-pressed', String(!object && !relief)); $('kindObj').setAttribute('aria-pressed', String(object));
+  $('kindRelief').setAttribute('aria-pressed', String(relief));
+  document.querySelectorAll('.draw-only').forEach(el => { el.hidden = (object || relief) && !(relief && el.classList.contains('relief-too')); });
   $('thrLbl').hidden = mode !== 'manual';
 }
 function storeParams() {
@@ -1002,7 +1027,7 @@ function copySelection(keep = false) {
   if (sketch.selection.length > 1) clip = { entities: JSON.parse(JSON.stringify(sketch.selection)), texts: [] };
   else if (e) clip = { entities: [JSON.parse(JSON.stringify(e))], texts: [] };
   else if (el && el.src === 'text') clip = { entities: [], texts: [{ ...el.text, local: null }] };
-  else if (el) {
+  else if (el && el.type !== 'relief') { // un relieve es una imagen: no se copia como croquis
     const entities = el.type === 'region'
       ? el.parts.flatMap(p => [p.outer, ...p.holes].map(q => ({ type: 'line', pts: fromC(q), closed: true })))
       : el.parts.map(p => ({ type: 'line', pts: p.pts.map(q => q.slice()), closed: p.closed }));

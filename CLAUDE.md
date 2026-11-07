@@ -60,6 +60,8 @@ src/
   cam/drill.js       barrenos: círculos del tamaño de la herramienta con G81/G83 (GRBL: movimientos sueltos), más
                      grandes en espiral con G02; al recortar, los huecos redondos chicos se barrenan — probado
   cam/tools.js       varias herramientas: cuál usa cada figura (toolFor: la elegida; recortar/barrenar → fresa plana)
+  cam/relief.js      relieve 3D desde una imagen en grises: acomodo en la pieza, drop cutter (la punta toca la superficie
+                     sin comerse lo de al lado) y zigzag simplificado en 3D; se desbasta por niveles — probado
   cam/checks.js      revisión antes de cortar: ficha de preparación (Exportar) y avisos de valores sin sentido — probado
   cam/material.js    perfiles de material: avances sugeridos por carga de viruta con el husillo de la máquina y avisos — probado
   cam/simulate.js    línea de tiempo del programa (duración por avance, posición en cada instante) — probado
@@ -128,7 +130,9 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
   construcción" en Opciones, azul = insuficientemente definido, clic derecho termina la cadena o abre el menú, rueda =
   zoom en el cursor, botón central = desplazar, F = ajustar, Enter = repetir el último comando. Usar sus nombres en español.
 - **Simple primero:** cada panel o diálogo muestra lo que casi todos usan; lo técnico va en un `details.more` ("Más opciones").
-  La imagen abierta va arriba de la lista de figuras y pregunta una sola cosa: dibujo u objeto en una foto.
+  La imagen abierta va arriba de la lista de figuras y pregunta una sola cosa: dibujo, objeto en una foto o relieve 3D.
+  Un relieve no se vectoriza: `state.reliefSrc` guarda la imagen en grises y `rebuildDesign` arma un solo elemento
+  `type: 'relief'` (sin `parts`; todo lo que recorra `parts` debe saltarlo).
 - **Atrás regresa, no saca:** cada capa (diálogo, menú, ayuda, herramienta de dibujo, PropertyManager, panel de texto,
   pestaña Código G) tiene su entrada en el historial vía `createBack` en `main.js`. Una capa nueva se agrega a esa lista
   con `isOpen` y `close`; el observador de atributos (`hidden`, `open`, `aria-pressed`, `aria-selected`) la sincroniza sola.

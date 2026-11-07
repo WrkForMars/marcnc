@@ -72,7 +72,7 @@ export async function computePlan(elements, tl, opts) {
       // pts: simplificada (vista previa, orden, rectas); dense: la original, para ajustar arcos sobre la curva real
       e.paths = t.paths
         .map(p => {
-          if (p.drill) return p; // un barreno se escribe con su ciclo, no con su trazo
+          if (p.drill || p.pts3) return p; // un barreno se escribe con su ciclo; un relieve ya viene simplificado en 3D
           const pts = simplify(p.pts, p.closed, tol);
           const dense = p.closed ? simplify(p.pts, true, 0) : p.pts;
           const q = dense.length > pts.length ? { pts, closed: p.closed, dense } : { pts, closed: p.closed };

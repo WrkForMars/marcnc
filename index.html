@@ -253,6 +253,7 @@
           <div class="seg" role="group" aria-labelledby="kindLbl">
             <button type="button" id="kindDraw" aria-pressed="true" title="Un dibujo, logo o letras sobre fondo liso">Dibujo o logo</button>
             <button type="button" id="kindObj" aria-pressed="false" title="Una cosa fotografiada: tócala y se separa del fondo">Objeto en una foto</button>
+            <button type="button" id="kindRelief" aria-pressed="false" title="Lo claro queda arriba y lo oscuro se hunde: una placa en relieve">Relieve 3D</button>
           </div>
         </div>
         <input type="hidden" id="imgMode" value="auto">
@@ -280,7 +281,7 @@
             <label class="full" id="thrLbl" for="thr" hidden>Umbral: <b id="thrVal">128</b><input type="range" id="thr" min="20" max="235" value="128"></label>
             <label>Limpieza<select id="imgClean"><option value="0">Ninguna</option><option value="1" selected>Suave</option><option value="2">Media</option><option value="3">Fuerte</option></select></label>
             <label>Detalle<select id="imgDetail"><option value="600" selected>Normal</option><option value="1200">Alto</option><option value="2000">Máximo</option></select></label>
-            <label class="full check draw-only"><input type="checkbox" id="imgInvert"> Invertir (el dibujo es lo claro)</label>
+            <label class="full check draw-only relief-too"><input type="checkbox" id="imgInvert"> Invertir (el dibujo es lo claro; en un relieve, lo claro se hunde)</label>
           </div>
           <p class="hint">Arrastra sobre la imagen para recortarla. Limpieza quita puntitos y tapa huecos chicos; más detalle conserva líneas finas.</p>
         </details>

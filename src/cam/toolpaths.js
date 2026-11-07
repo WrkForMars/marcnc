@@ -2,6 +2,7 @@
 import { area, fromC, offset, simplifyPaths } from '../geometry/clipper.js';
 import { profilePaths } from './cut.js';
 import { circleOf, circleOfPts, drillPlan } from './drill.js';
+import { reliefPath } from './relief.js';
 
 // 5 µm: muy por debajo de lo que repite una máquina; reduce ~5× los vértices y el tiempo del vaciado
 const POCKET_TOL = 0.005;
@@ -64,6 +65,8 @@ export function toolpaths(e, tl) {
     }
     return out;
   }
+
+  if (e.mode === 'relief') { out.paths.push(reliefPath(e.relief, tl.depth, tl)); return out; }
 
   if (e.mode === 'vcarve') {
     if (tl.type !== 'v') { out.warn = 'el tallado en V necesita un V-bit'; return out; }

@@ -155,6 +155,32 @@ export function generateGcode(plan, elements, o) {
       const zsP = p0.z != null ? levels({ depth: -p0.z, down: te.down }) : zsE;
       if (p0.z != null && -p0.z < 1e-6) return; // a ras de la cara no corta nada
       const p = p0;
+      if (p.pts3) {
+        // relieve: el mismo zigzag en cada nivel, sin bajar de ese nivel (desbaste por capas hasta el acabado)
+        zsE.forEach(level => {
+          const q = p.pts3.map(([x, y, z]) => [x, y, Math.max(z, level)]);
+          const [x0, y0, z0] = q[0];
+          rapLen += Math.hypot(x0 - pos[0], y0 - pos[1]);
+          L.push(`G00 X${f(x0)} Y${f(y0)}`, `G01 Z${f(z0)} F${fz}`);
+          plunges++;
+          let lx = x0, ly = y0, lz = z0, first = true;
+          q.slice(1).forEach(([x, y, z]) => {
+            const sx = f(x), sy = f(y), sz = f(z);
+            if (sx === f(lx) && sy === f(ly) && sz === f(lz)) return;
+            let t = 'G01';
+            if (sx !== f(lx)) t += ` X${sx}`;
+            if (sy !== f(ly)) t += ` Y${sy}`;
+            if (sz !== f(lz)) t += ` Z${sz}`;
+            if (first) { t += ` F${fxy}`; first = false; }
+            L.push(t);
+            cutLen += Math.hypot(x - lx, y - ly, z - lz);
+            lx = x; ly = y; lz = z;
+          });
+          pos = [lx, ly];
+          L.push(`G00 Z${f(R)}`);
+        });
+        return;
+      }
       if (p.drill) {
         const d = p.drill;
         const start = d.kind === 'point' ? [d.cx, d.cy] : [d.cx + d.rc, d.cy];

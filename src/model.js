@@ -8,12 +8,12 @@
  * Un trazo es una polilínea en mm.
  * @typedef {{pts: [number,number][], closed: boolean}} LinePart
  *
- * @typedef {'fill'|'contour'|'vcarve'|'cut'|'drill'|'invert'|'line'|'skip'} Mode
+ * @typedef {'fill'|'contour'|'vcarve'|'cut'|'drill'|'invert'|'line'|'relief'|'skip'} Mode
  *
  * Un elemento es lo que el usuario ve como una figura o un texto en la lista.
  * @typedef {{
  *   src: 'design'|'text',
- *   type: 'region'|'line',
+ *   type: 'region'|'line'|'relief',   // relief: e.relief (cam/relief.js) en vez de parts
  *   parts: (RegionPart|LinePart)[],
  *   mode: Mode,
  *   text?: TextItem,
@@ -34,9 +34,10 @@
 export const MODES = {
   region: [['fill', 'Relleno'], ['contour', 'Contorno'], ['vcarve', 'Tallado V'], ['cut', 'Recortar'], ['drill', 'Barrenar'], ['invert', 'Invertir'], ['skip', 'Omitir']],
   line: [['line', 'Línea'], ['skip', 'Omitir']],
+  relief: [['relief', 'Relieve'], ['skip', 'Omitir']],
 };
 
 /** Nombre del modo en los comentarios del G-code (sin acentos: muchos controladores no los aceptan). */
-export const MODE_NAME = { fill: 'RELLENO', contour: 'CONTORNO', vcarve: 'TALLADO V', cut: 'RECORTE', drill: 'BARRENO', invert: 'INVERTIR', line: 'LINEA', skip: 'OMITIR' };
+export const MODE_NAME = { fill: 'RELLENO', contour: 'CONTORNO', vcarve: 'TALLADO V', cut: 'RECORTE', drill: 'BARRENO', invert: 'INVERTIR', line: 'LINEA', relief: 'RELIEVE', skip: 'OMITIR' };
 
 export const MAX_ELEMENTS = 250;
