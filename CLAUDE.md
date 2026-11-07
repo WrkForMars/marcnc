@@ -50,10 +50,18 @@ src/
   geometry/clipper.js  envolturas de Clipper (offset, unión, resta, regiones)
   geometry/simplify.js RDP, distancia a segmento, punto en polígono
   cam/tool.js        ancho de línea según herramienta y profundidad — probado
-  cam/toolpaths.js   relleno / contorno / invertir por elemento — probado
+  cam/toolpaths.js   relleno / contorno / tallado V (vcarve: vueltas cada vez más hondas, 0.1 mm hacia adentro) / invertir
+                     / recortar / barrenar por elemento — probado
   cam/arcs.js        ajuste de arcos G02/G03 — probado
   cam/plan.js        cálculo con caché y orden de corte, cede el hilo cada ~30 ms
   cam/gcode.js       escritura del programa (función pura) — probado
+  cam/cut.js         recortar: profundidad por figura (elementOp), herramienta por fuera/dentro (profilePaths), puentes,
+                     rampa de entrada (passWalk: recorrido 3D de cada pasada) — probado
+  cam/drill.js       barrenos: círculos del tamaño de la herramienta con G81/G83 (GRBL: movimientos sueltos), más
+                     grandes en espiral con G02; al recortar, los huecos redondos chicos se barrenan — probado
+  cam/tools.js       varias herramientas: cuál usa cada figura (toolFor: la elegida; recortar/barrenar → fresa plana)
+  cam/relief.js      relieve 3D desde una imagen en grises: acomodo en la pieza, drop cutter (la punta toca la superficie
+                     sin comerse lo de al lado) y zigzag simplificado en 3D; se desbasta por niveles — probado
   cam/checks.js      revisión antes de cortar: ficha de preparación (Exportar) y avisos de valores sin sentido — probado
   cam/material.js    perfiles de material: avances sugeridos por carga de viruta con el husillo de la máquina y avisos — probado
   cam/simulate.js    línea de tiempo del programa (duración por avance, posición en cada instante) — probado
@@ -97,6 +105,18 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
     Si ninguno cumple, o el arco se aparta más de la tolerancia, se escribe con rectas. Los arcos se ajustan sobre
     la trayectoria densa (`path.dense`), no la simplificada. `tests/fuzz.test.js` vigila todo esto con piezas aleatorias.
   - Fanuc: `%`, `O####`, `T# M06`, `G28 G91 Z0`. GRBL: nada de eso (lo rechaza).
+  - **Varias herramientas** (Parámetros → Otras herramientas, guardadas en `marcnc:herramientas`; la principal es la 0):
+    el programa empieza con la de lo primero que se corta, agrupa por herramienta (grabar y luego recortar) y entre una
+    y otra cambia: Fanuc `M05` `G28 G91 Z0` `G90` `T# M06` `S M03`; GRBL `M05`, comentario y `M00` (pausa para cambiarla
+    y tomar Z0). Con una sola herramienta el programa no cambia.
+  - **Cada figura tiene su profundidad** (`e.op.depth`: la del trabajo, la suya o el grosor + 0.2 si se recorta) y su
+    herramienta a esa profundidad (`e.tl`). Lo recortado va al final y, en cada pieza, los huecos antes que el contorno.
+  - Contornos cerrados con pasadas de más de 0.25 mm, o recortes: bajan a Z0 y entran en **rampa de 5°** a lo largo del
+    contorno (nunca de punta); en la última pasada repasan la rampa a fondo. Sobre un puente suben en vertical y vuelven
+    a bajar con `fz`. Esos recorridos van en rectas (sin arcos). Con la tarea de referencia (0.1 mm) nada de esto aplica.
+  - Barrenos: Fanuc usa `G98 G81/G83 … R1 F{fz}` y `G80` después de cada uno; GRBL no tiene ciclos fijos y se escriben
+    con G00/G01 (picoteo: sube a R y baja rápido hasta 0.2 mm arriba de lo ya barrenado). El visor explica los ciclos y
+    la simulación recorre sus pasos (`steps`).
 - **No bloquear la página:** nada de `getPointAtLength` en bucles (era O(n) por punto y congelaba Chrome).
   Procesos largos van en `computePlan` con cesiones del hilo, o en el worker: se agregan a `JOBS` en `jobs.js` y se
   llaman con `run()` de `work.js` (con `lane` si un cambio nuevo debe cancelar el anterior). Lo que usa canvas o DOM se
@@ -104,13 +124,16 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
 - **Distribución de la interfaz:** la pieza es el centro (banco oscuro `--stage` con reglas en mm). Herramientas en el riel
   izquierdo; inspector a la derecha con pestañas Figuras / Código G que muestra solo lo seleccionado. **Parámetros del
   trabajo** (pieza, herramienta, profundidad) en `#jobDlg`, resumidos en la barra de arriba de la pieza; **ajustes de
-  máquina** (controlador, velocidades, formato) en `#setDlg`. Un solo botón principal: Exportar.
+  máquina** (perfil con nombre, controlador, velocidades, área de trabajo y límites, formato) en `#setDlg`; los perfiles
+  se guardan en `marcnc:maquinas` y los límites (0 = sin dato) los revisa `machineRisks` en `cam/checks.js`. Un solo botón principal: Exportar.
 - **El croquis se maneja como SolidWorks** (sin copiar su aspecto), para que lo aprendido allá sirva aquí: orden de
   herramientas de su pestaña Croquis, Cota inteligente, PropertyManager con vista previa y ✓ / ✕ (Enter / Esc), "Para
   construcción" en Opciones, azul = insuficientemente definido, clic derecho termina la cadena o abre el menú, rueda =
   zoom en el cursor, botón central = desplazar, F = ajustar, Enter = repetir el último comando. Usar sus nombres en español.
 - **Simple primero:** cada panel o diálogo muestra lo que casi todos usan; lo técnico va en un `details.more` ("Más opciones").
-  La imagen abierta va arriba de la lista de figuras y pregunta una sola cosa: dibujo u objeto en una foto.
+  La imagen abierta va arriba de la lista de figuras y pregunta una sola cosa: dibujo, objeto en una foto o relieve 3D.
+  Un relieve no se vectoriza: `state.reliefSrc` guarda la imagen en grises y `rebuildDesign` arma un solo elemento
+  `type: 'relief'` (sin `parts`; todo lo que recorra `parts` debe saltarlo).
 - **Atrás regresa, no saca:** cada capa (diálogo, menú, ayuda, herramienta de dibujo, PropertyManager, panel de texto,
   pestaña Código G) tiene su entrada en el historial vía `createBack` en `main.js`. Una capa nueva se agrega a esa lista
   con `isOpen` y `close`; el observador de atributos (`hidden`, `open`, `aria-pressed`, `aria-selected`) la sincroniza sola.
@@ -132,8 +155,7 @@ es un cambio de comportamiento que hay que justificar.
 
 ## Pendiente (en orden de valor)
 
-1. Perfiles de máquina (husillo máximo, recorrido) además de los de material.
-2. Pasar al worker también la escritura y explicación del código G de programas enormes y los textos rellenos
+1. Pasar al worker también la escritura y explicación del código G de programas enormes y los textos rellenos
    (el vectorizado de imágenes y la separación de objetos ya corren ahí).
 
 No se firmará el .exe: Windows mostrará la advertencia de SmartScreen la primera vez (Más información → Ejecutar de todas formas).

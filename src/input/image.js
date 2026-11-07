@@ -52,3 +52,27 @@ export async function traceImage(img, o) {
   return wrap(await run('trace', { rgba, w, h, o: opts }, { lane: 'imagen' }), w, h);
 }
 
+
+/**
+ * Imagen en grises para un relieve: qué tan hondo va cada píxel (0 = blanco, la cara; 1 = negro, lo más hondo),
+ * con el lado mayor de hasta `max` píxeles (con más no se gana detalle: la herramienta es más gruesa que eso).
+ * @param {HTMLImageElement} img @param {{crop?:object|null, invert?:boolean}} o
+ * @returns {{data:Float32Array, gw:number, gh:number}}
+ */
+export function grayImage(img, o, max = 300) {
+  const c0 = o.crop || { x: 0, y: 0, w: 1, h: 1 };
+  const sx = c0.x * img.naturalWidth, sy = c0.y * img.naturalHeight, sw = c0.w * img.naturalWidth, sh = c0.h * img.naturalHeight;
+  const k = Math.min(1, max / Math.max(sw, sh));
+  const gw = Math.max(4, Math.round(sw * k)), gh = Math.max(4, Math.round(sh * k));
+  const c = document.createElement('canvas');
+  c.width = gw; c.height = gh;
+  const x = c.getContext('2d');
+  x.fillStyle = '#fff'; x.fillRect(0, 0, gw, gh); // lo transparente cuenta como la cara
+  x.drawImage(img, sx, sy, sw, sh, 0, 0, gw, gh);
+  const px = x.getImageData(0, 0, gw, gh).data, data = new Float32Array(gw * gh);
+  for (let i = 0; i < gw * gh; i++) {
+    const v = 1 - (0.299 * px[4 * i] + 0.587 * px[4 * i + 1] + 0.114 * px[4 * i + 2]) / 255;
+    data[i] = o.invert ? 1 - v : v;
+  }
+  return { data, gw, gh };
+}

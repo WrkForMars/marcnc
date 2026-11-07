@@ -68,7 +68,7 @@ export const TEMPLATES = {
   llavero: {
     name: 'Llavero', W: 60, H: 30,
     entities: [{ type: 'rect', x: 2, y: 2, w: 56, h: 26, rr: 8 }, { type: 'circle', cx: 10, cy: 15, r: 3.5 }],
-    modes: ['contour', 'contour'],
+    modes: ['cut', 'cut'], // sale recortado, con el aro hueco
     texts: [{ text: 'NOMBRE', h: 5, x: 36, y: 15 }], // a la derecha del aro, sin tocarlo
   },
   placa: {
@@ -87,7 +87,7 @@ export const TEMPLATES = {
       { type: 'line', pts: keyedBore(34, 34, 5, 3, 1.5), closed: true },
       ...ring(34, 34, 13, 4, 3.2, 45), // aligerado: cuatro huecos en matriz circular
     ],
-    modes: ['contour', 'contour', 'contour', 'contour', 'contour', 'contour'],
+    modes: ['cut', 'cut', 'cut', 'cut', 'cut', 'cut'], // sale recortado, con barreno y aligerados huecos
     texts: [],
   },
   posavasos: {
@@ -101,8 +101,8 @@ export const TEMPLATES = {
   },
   regla: {
     name: 'Regla de 10 cm', W: 114, H: 30,
-    entities: [{ type: 'rect', x: 1, y: 1, w: 112, h: 28, rr: 3 }, ...R.ents],
-    modes: ['contour', ...R.ents.map(() => 'line')],
+    entities: [{ type: 'rect', x: 2, y: 2, w: 110, h: 26, rr: 3 }, ...R.ents],
+    modes: ['cut', ...R.ents.map(() => 'line')], // marcas grabadas, regla recortada
     texts: R.texts,
   },
 };

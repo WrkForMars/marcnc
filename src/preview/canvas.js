@@ -2,11 +2,12 @@
 import { area, fromC } from '../geometry/clipper.js';
 import { distSeg, pointInPolygon } from '../geometry/simplify.js';
 
-export const MODE_COLOR = { fill: '--m-fill', contour: '--m-contour', invert: '--m-invert', line: '--m-line', skip: '--m-skip' };
+export const MODE_COLOR = { fill: '--m-fill', contour: '--m-contour', relief: '--m-relief', vcarve: '--m-vcarve', cut: '--m-cut', drill: '--m-drill', invert: '--m-invert', line: '--m-line', skip: '--m-skip' };
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
 /** Contornos de un elemento en mm, para dibujar el borde y para la selección. */
 export function outlines(e) {
+  if (e.type === 'relief') { const r = e.relief; return [{ pts: [[r.x0, r.y0], [r.x0 + r.w, r.y0], [r.x0 + r.w, r.y0 + r.h], [r.x0, r.y0 + r.h]], closed: true }]; }
   return e.type === 'line'
     ? e.parts.map(p => ({ pts: p.pts, closed: p.closed }))
     : e.parts.flatMap(p => [p.outer, ...p.holes].map(q => ({ pts: fromC(q), closed: true })));
@@ -108,13 +109,35 @@ export function createPreview(cv) {
     elements.forEach(e => { if (e.mode !== 'skip' && !isDragged(e) && e.paths && !e.paths.length) outline(e); });
     ctx.setLineDash([]); ctx.lineWidth = 1;
 
+    // relieve: la imagen en grises sobre la placa (más oscuro = más hondo); su zigzag sería una mancha a esta escala
+    elements.forEach(e => {
+      if (e.type !== 'relief' || e.mode === 'skip') return;
+      const r = e.relief;
+      if (!r.img) {
+        const c = document.createElement('canvas'); c.width = r.gw; c.height = r.gh;
+        const id = c.getContext('2d').createImageData(r.gw, r.gh);
+        const [pr, pg, pb] = [1, 3, 5].map(i => parseInt(css('--plate').slice(i, i + 2), 16)), [cr, cg, cb] = [1, 3, 5].map(i => parseInt(css('--cut').slice(i, i + 2), 16));
+        for (let i = 0; i < r.gw * r.gh; i++) { const t = r.data[i]; id.data[4 * i] = pr + (cr - pr) * t; id.data[4 * i + 1] = pg + (cg - pg) * t; id.data[4 * i + 2] = pb + (cb - pb) * t; id.data[4 * i + 3] = 255; }
+        c.getContext('2d').putImageData(id, 0, 0);
+        r.img = c;
+      }
+      ctx.drawImage(r.img, X(r.x0), Y(r.y0 + r.h), r.w * k, r.h * k);
+    });
+
     // grabado simulado: cada trayectoria con el ancho real de la línea
     ctx.strokeStyle = css('--cut'); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.lineWidth = Math.max(1, toolWidth * k);
     if (simulating) {
       ctx.lineWidth = 1; ctx.strokeStyle = css('--plate-edge');
       elements.forEach(e => (e.paths || []).forEach(p => { path(p.pts, false); ctx.stroke(); }));
-    } else elements.forEach(e => { if (!isDragged(e)) (e.paths || []).forEach(p => { path(p.pts, false); ctx.stroke(); }); });
+    } else elements.forEach(e => {
+      if (isDragged(e) || e.type === 'relief') return;
+      ctx.lineWidth = Math.max(1, (e.tl ? e.tl.w : toolWidth) * k); // cada figura con el ancho a su profundidad (un recorte, el diámetro)
+      (e.paths || []).forEach(p => {
+        if (p.w != null) ctx.lineWidth = Math.max(1, p.w * k); // tallado en V: cada vuelta con su ancho
+        path(p.pts, false); ctx.stroke();
+      });
+    });
 
     if (plan && showPath && !dragging && !simulating) {
       ctx.lineWidth = 1; ctx.strokeStyle = css('--plate-accent'); ctx.globalAlpha = 0.9;
@@ -167,7 +190,7 @@ export function createPreview(cv) {
     elements.forEach((e, i) => {
       const bb = bbox(e);
       if (!bb || x < bb[0] - tol || x > bb[2] + tol || y < bb[1] - tol || y > bb[3] + tol) return;
-      if (e.src === 'text') {
+      if (e.src === 'text' || e.type === 'relief') {
         const a = (bb[2] - bb[0]) * (bb[3] - bb[1]);
         if (a < bestA) { best = i; bestA = a; }
         return;

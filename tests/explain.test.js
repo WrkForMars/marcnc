@@ -63,3 +63,14 @@ describe('explainProgram', () => {
     r.forEach(b => expect(b.last).toBeGreaterThan(b.first));
   });
 });
+
+describe('rampas y puentes', () => {
+  it('explica la entrada en rampa y la subida sobre un puente', async () => {
+    const { explainProgram } = await import('../src/cam/explain.js');
+    const ex = explainProgram('G21 G90\nG00 Z3.00\nG00 X10.00 Y10.00\nG01 Z0.00 F60\nG01 X20.00 Z-0.40 F130\nG01 Z-0.20\nG01 X25.00\nG01 Z-0.40 F60\n');
+    const by = c => ex.find(e => e.code === c).text;
+    expect(by('G01 Z0.00 F60')).toMatch(/cara de la pieza/);
+    expect(by('G01 X20.00 Z-0.40 F130')).toMatch(/rampa/);
+    expect(by('G01 Z-0.20')).toMatch(/puente/);
+  });
+});

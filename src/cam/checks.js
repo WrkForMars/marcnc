@@ -22,16 +22,18 @@ export function duration(mins) {
  * Lo que hay que preparar en la máquina para este programa, en el orden en que se hace.
  * @param {{toolNum:number, rpm:number, fz:number, fxy:number, W:number, H:number, dialect:string, materialName?:string}} p
  * @param {{type:string, D:number, w:number, depth:number}} tl
- * @param {{passes:number, mins:number}} g
+ * @param {{passes:number, mins:number, tabs?:number}} g
+ * @param {{depth:number}|null} [cut] si hay recortes: hasta dónde baja
  * @returns {{k:string, v:string}[]}
  */
-export function setupSheet(p, tl, g) {
+export function setupSheet(p, tl, g, cut = null) {
   const inch = inchName(tl.D);
   return [
     { k: 'Herramienta', v: `T${p.toolNum} · ${TOOL_LABEL[tl.type] || tl.type} de ${n(tl.D, 3)} mm${inch ? ` (${inch})` : ''}${p.dialect === 'grbl' ? ' · cámbiala a mano' : ''}` },
     { k: 'Pieza', v: `${n(p.W)} × ${n(p.H)} mm${p.materialName ? ` de ${p.materialName.toLowerCase()}` : ''}, bien sujeta` },
     { k: 'Ceros', v: 'X0 Y0 en la esquina inferior izquierda; Z0 en la cara de arriba' },
     { k: 'Corte', v: `${n(tl.depth)} mm de profundidad en ${g.passes} pasada${g.passes > 1 ? 's' : ''} · línea de ${n(tl.w)} mm` },
+    ...(cut ? [{ k: 'Recorte', v: `atraviesa ${n(cut.depth)} mm${g.tabs ? ` con ${g.tabs} puente${g.tabs > 1 ? 's' : ''}: córtalos a mano al final` : ''}; pon una tabla de sacrificio debajo` }] : []),
     { k: 'Husillo y avances', v: `S${p.rpm} a la derecha (M03) · F${p.fz} al bajar · F${p.fxy} al cortar` },
     { k: 'Duración', v: `~${duration(g.mins)}` },
   ];
@@ -42,10 +44,12 @@ export function setupSheet(p, tl, g) {
  * @param {{rpm:number, fz:number, fxy:number, vAngle?:number, vTip?:number}} p
  * @param {{type:string, D:number, depth:number, down:number}} tl
  * @param {{passes:number, mins:number, lines:number}} g
- * @param {{material?:boolean}} [o] material: ya hay un perfil de material que revisa los avances
+ * @param {{material?:boolean, cut?:boolean}} [o] material: ya hay un perfil de material que revisa los avances;
+ *   cut: hay figuras en modo Recortar (tl es la herramienta a la profundidad más honda)
  */
 export function jobRisks(p, tl, g, o = {}) {
   const out = [];
+  if (o.cut && tl.type !== 'flat') out.push(`Para recortar conviene una fresa plana: ${tl.type === 'v' ? 'el V-bit deja la orilla inclinada' : 'la ball mill deja la orilla redondeada abajo'} y corta peor de lado.`);
   if (!(p.rpm >= 100)) out.push(`El husillo está en S${p.rpm}: la herramienta no giraría y se rompe al tocar la pieza. Ponlo en Ajustes de máquina.`);
   if (!o.material && p.fz > p.fxy) out.push(`El avance en Z (F${p.fz}) es mayor que en X-Y (F${p.fxy}): de punta la herramienta corta peor; bájalo.`);
   // el filo de una fresa chica mide unas 3 veces su diámetro: más abajo roza el cuerpo, o el portaherramientas
@@ -58,5 +62,22 @@ export function jobRisks(p, tl, g, o = {}) {
   if (g.passes > 50) out.push(`${g.passes} pasadas de ${n(tl.depth / g.passes, 3)} mm: el programa se vuelve enorme. Sube la profundidad por pasada.`);
   if (g.mins > 8 * 60) out.push(`El corte dura ~${duration(g.mins)}. Revisa los avances y la profundidad por pasada, o usa Contorno en vez de Relleno.`);
   if (g.lines > 100000) out.push(`El programa tiene ${g.lines.toLocaleString('es-MX')} líneas: muchos controles no tienen memoria para tanto (habría que mandarlo por DNC).`);
+  return out;
+}
+
+/**
+ * Avisos por los límites de la máquina (si se conocen: 0 o vacío = no se revisa).
+ * @param {{W:number, H:number, rpm:number, maxX?:number, maxY?:number, maxZ?:number, maxRpm?:number, retract?:number}} p
+ * @param {number} deepest profundidad más honda del programa (mm)
+ */
+export function machineRisks(p, deepest) {
+  const out = [];
+  if (p.maxX > 0 && p.maxY > 0) {
+    const fits = (p.W <= p.maxX && p.H <= p.maxY) || (p.H <= p.maxX && p.W <= p.maxY);
+    if (!fits) out.push(`La pieza de ${n(p.W)} × ${n(p.H)} mm no cabe en el área de trabajo de la máquina (${n(p.maxX)} × ${n(p.maxY)} mm).`);
+    else if (p.W > p.maxX || p.H > p.maxY) out.push(`La pieza de ${n(p.W)} × ${n(p.H)} mm solo cabe girada 90° en la mesa (${n(p.maxX)} × ${n(p.maxY)} mm): gira también el dibujo.`);
+  }
+  if (p.maxZ > 0 && deepest + (p.retract || 0) > p.maxZ) out.push(`El programa necesita ${n(deepest + (p.retract || 0))} mm de recorrido en Z (profundidad más retracción) y la máquina tiene ${n(p.maxZ)} mm.`);
+  if (p.maxRpm > 0 && p.rpm > p.maxRpm) out.push(`El husillo pide S${p.rpm} y la máquina llega a ${p.maxRpm} rpm: bájalo en Ajustes de máquina (y los avances con él).`);
   return out;
 }

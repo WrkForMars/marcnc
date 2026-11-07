@@ -4,12 +4,13 @@
 /**
  * @typedef {{
  *   n:number, code:string,
- *   kind:'comment'|'setup'|'tool'|'spindle'|'rapid'|'plunge'|'retract'|'cut'|'arc'|'end'|'danger'|'other',
+ *   kind:'comment'|'setup'|'tool'|'spindle'|'rapid'|'plunge'|'retract'|'cut'|'arc'|'drill'|'end'|'danger'|'other',
  *   text:string,                                  // qué hace la línea
  *   from?:[number,number,number], to?:[number,number,number],
  *   g?:number, f?:number|null,                    // modo de movimiento y avance vigentes (mm/min) en las líneas que mueven
  *   arc?:{c:[number,number], r:number, ccw:boolean},
  *   block?:string,                                // figura o texto a la que pertenece (del comentario anterior)
+ *   steps?:{from:[number,number,number], to:[number,number,number], g:number, f:number|null}[],  // ciclo de taladrado: sus movimientos
  * }} Explained
  */
 
@@ -21,7 +22,8 @@ const SETUP = {
   17: 'Plano de trabajo X-Y (en él se trazan los arcos).',
   40: 'Cancela la compensación de radio de la herramienta.',
   49: 'Cancela la compensación de longitud de la herramienta.',
-  80: 'Cancela cualquier ciclo fijo (como los de taladrado).',
+  80: 'Cancela el ciclo de taladrado: las siguientes líneas ya no barrenan.',
+  98: 'Al terminar el ciclo, la herramienta regresa a la altura donde empezó (no solo al plano R).',
   54: 'Usa el sistema de coordenadas de trabajo 1: el cero que se fijó en la máquina para esta pieza.',
 };
 const M_TEXT = {
@@ -100,6 +102,33 @@ export function explainProgram(text) {
     });
     if (S !== undefined && !ms.some(v => v === 3 || v === 4)) parts.push(`Velocidad del husillo: ${S} rpm.`);
 
+    // ciclos de taladrado: G81 (de un golpe) y G83 (con picoteo para sacar la viruta)
+    const cyc = gs.find(v => v === 81 || v === 83);
+    if (cyc !== undefined) {
+      const cx = get('X') ?? x, cy = get('Y') ?? y, cz = get('Z'), rp = get('R') ?? z, q = get('Q');
+      if (get('F') !== undefined) f = get('F');
+      const z0 = z, steps = [], mv = (to, gg) => { const from = steps.length ? steps[steps.length - 1].to : [x, y, z]; steps.push({ from, to, g: gg, f: gg ? f : null }); };
+      mv([cx, cy, z0], 0); mv([cx, cy, rp], 0);
+      if (cyc === 81 || !q) mv([cx, cy, cz], 1);
+      else {
+        for (let d = q; ; d += q) {
+          const zz = Math.max(cz, rp - d);
+          mv([cx, cy, zz], 1);
+          if (zz <= cz + 1e-9) break;
+          mv([cx, cy, rp], 0); mv([cx, cy, zz + 0.2], 0);
+        }
+      }
+      mv([cx, cy, gs.includes(99) ? rp : z0], 0);
+      e.kind = 'drill';
+      e.from = [x, y, z]; e.to = steps[steps.length - 1].to; e.g = 1; e.f = f; e.steps = steps;
+      parts.unshift(cyc === 81
+        ? `Barrena en ${pt(cx, cy)} (ciclo G81): va rápido arriba del barreno, baja rápido hasta R${fx(rp)}, barrena hasta Z${fx(cz)} a ${f} mm/min y sube rápido.`
+        : `Barrena en ${pt(cx, cy)} con picoteo (ciclo G83): baja ${fx(q)} mm a la vez hasta Z${fx(cz)} a ${f} mm/min y sube a R${fx(rp)} entre cada bajada para sacar la viruta.`);
+      [x, y, z] = e.to;
+      out.push({ ...e, text: parts.join(' ') });
+      return;
+    }
+
     const motion = gs.find(v => v >= 0 && v <= 3);
     const X = get('X'), Y = get('Y'), Z = get('Z'), I = get('I'), J = get('J'), F = get('F');
     const moves = X !== undefined || Y !== undefined || Z !== undefined;
@@ -126,12 +155,16 @@ export function explainProgram(text) {
           e.kind = 'plunge';
           txt = nz < 0
             ? `Baja la herramienta cortando hasta Z${fx(nz)}: entra ${fx(-nz)} mm en el material${feed}.`
-            : `Baja cortando hasta Z${fx(nz)}${feed}.`;
-        } else if (!xy && dz > 0) { e.kind = 'retract'; txt = `Sube cortando hasta Z${fx(nz)}${feed}.`; }
-        else {
+            : nz === 0 ? `Baja hasta la cara de la pieza (Z0)${feed}; de ahí entra en rampa.` : `Baja cortando hasta Z${fx(nz)}${feed}.`;
+        } else if (!xy && dz > 0) {
+          e.kind = 'retract';
+          txt = nz < 0 ? `Sube a Z${fx(nz)} sin salir del material: deja un puente para que la pieza no se suelte${feed}.` : `Sube cortando hasta Z${fx(nz)}${feed}.`;
+        } else {
           e.kind = 'cut';
           const L = Math.hypot(nx - x, ny - y, dz);
-          txt = `Corta en línea recta hasta ${pt(nx, ny)}${dz ? ` Z${fx(nz)}` : ''} (${fx(L)} mm)${feed}${modal}.`;
+          txt = dz < 0
+            ? `Baja en rampa hasta ${pt(nx, ny)} Z${fx(nz)} (${fx(L)} mm): entra de lado, que es como mejor corta la herramienta${feed}${modal}.`
+            : `Corta en línea recta hasta ${pt(nx, ny)}${dz ? ` Z${fx(nz)}` : ''} (${fx(L)} mm)${feed}${modal}.`;
         }
       } else {
         const ccw = g === 3;

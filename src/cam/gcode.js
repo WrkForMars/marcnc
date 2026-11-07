@@ -3,6 +3,8 @@ import { MODE_NAME } from '../model.js';
 import { rdp } from '../geometry/simplify.js';
 import { fitArcs } from './arcs.js';
 import { RAPID_MM_MIN } from './simulate.js';
+import { passWalk, perimeter, tabIntervals } from './cut.js';
+import { helixDrill, pointDrill } from './drill.js';
 
 /**
  * @typedef {{
@@ -13,6 +15,9 @@ import { RAPID_MM_MIN } from './simulate.js';
  *   fz:number, fxy:number,         // avances en mm/min
  *   toolNum:number, rpm:number, prog:number,
  *   arcs:boolean,                  // convertir curvas a G02/G03 (solo con 2 o 3 decimales)
+ *   changer?:boolean,              // false: la máquina no cambia herramientas sola (Fanuc también pausa con M00)
+ *   tools?:{t:number, type:string, dia:number}[],  // con varias herramientas: la 0 es la principal (toolNum); el plan
+ *                                  // dice cuál usa cada figura (order[].tool) y entre una y otra se cambia
  * }} GcodeOptions
  */
 
@@ -93,29 +98,142 @@ export function generateGcode(plan, elements, o) {
   // con 1 decimal el redondeo de los extremos deforma el arco más de lo que toleran los controladores
   const useArcs = o.arcs && dec >= 2;
   const arcTol = Math.max(tol, eps * 1.5); // la tolerancia de curvas, repartida entre el ajuste (55 %) y el redondeo (45 %)
-  const passes = Math.max(1, Math.ceil(tl.depth / tl.down - 1e-9));
-  const zs = [];
-  for (let p = 1; p <= passes; p++) zs.push(-Math.min(tl.depth, p * tl.depth / passes));
+  /** Pasadas de igual profundidad hasta llegar al fondo. */
+  const levels = t => {
+    const n = Math.max(1, Math.ceil(t.depth / t.down - 1e-9)), out = [];
+    for (let p = 1; p <= n; p++) out.push(-Math.min(t.depth, p * t.depth / n));
+    return out;
+  };
+  const zs = levels(tl), passes = zs.length;
 
+  const tools = o.tools && o.tools.length ? o.tools : [{ t: o.toolNum, type: tl.type, dia: tl.D }];
+  const tname = k => `T${tools[k].t} ${TOOL_NAME[tools[k].type]} D${f(tools[k].dia)}`;
+  let cur = order.length ? order[0].tool || 0 : 0; // empieza con la que usa lo primero que se corta
   const L = [];
   if (o.dialect === 'fanuc') L.push('%', `O${String(o.prog || 1).padStart(4, '0')} (MARCNC - PIEZA ${o.W}X${o.H})`);
   L.push(`(PIEZA ${o.W} X ${o.H} MM - CERO EN ESQUINA INFERIOR IZQUIERDA - Z0 EN CARA SUPERIOR)`);
-  L.push(`(T${o.toolNum} ${TOOL_NAME[tl.type]} D${f(tl.D)} - ANCHO DE LINEA ${f(tl.w)} MM - PROF. ${f(tl.depth)} MM EN ${passes} PASADA${passes > 1 ? 'S' : ''})`);
+  if (cur === 0) L.push(`(T${o.toolNum} ${TOOL_NAME[tl.type]} D${f(tl.D)} - ANCHO DE LINEA ${f(tl.w)} MM - PROF. ${f(tl.depth)} MM EN ${passes} PASADA${passes > 1 ? 'S' : ''})`);
+  else L.push(`(${tname(cur)})`);
+  const used = [...new Set(order.map(x => x.tool || 0))];
+  if (used.length > 1) L.push(`(HERRAMIENTAS: ${used.map(tname).join(' - ')})`);
   L.push('G21 G90 G17 G40 G49 G80');
-  if (o.dialect === 'fanuc') L.push(`T${o.toolNum} M06`);
-  else L.push(`(CAMBIO MANUAL A HERRAMIENTA T${o.toolNum})`);
+  const auto = o.dialect === 'fanuc' && o.changer !== false; // cambiador automático
+  if (auto) L.push(`T${tools[cur].t} M06`);
+  else L.push(`(CAMBIO MANUAL A HERRAMIENTA T${tools[cur].t})`);
   L.push(`S${o.rpm} M03`, 'G54', `G00 Z${f(R)}`);
+  /** Cambio de herramienta a media obra: Fanuc la cambia sola; GRBL se pausa para que el operador la cambie. */
+  const changeTool = k => {
+    L.push('M05');
+    if (auto) L.push('G28 G91 Z0', 'G90', `(${tname(k)})`, `T${tools[k].t} M06`);
+    else L.push(...(o.dialect === 'fanuc' ? ['G28 G91 Z0', 'G90'] : []), `(CAMBIA A ${tname(k)} Y TOMA DE NUEVO Z0)`, 'M00');
+    L.push(`S${o.rpm} M03`, `G00 Z${f(R)}`);
+    cur = k;
+  };
 
-  let cutLen = 0, rapLen = 0, plunges = 0, arcsN = 0, pos = [0, 0];
-  order.forEach(({ i, seq }) => {
+  let cutLen = 0, rapLen = 0, plunges = 0, arcsN = 0, pos = [0, 0], zLen = 0, tabsN = 0;
+  order.forEach(({ i, seq, tool }) => {
     const e = elements[i];
+    if ((tool || 0) !== cur) changeTool(tool || 0);
+    const te = e.tl || tl, zsE = te === tl ? zs : levels(te);
     const holes = e.type === 'region' && e.parts.length === 1 ? e.parts[0].holes.length : 0;
     const label = e.src === 'text' ? `TEXTO "${commentSafe(e.text.text)}"` : `FIGURA ${i + 1}`;
-    L.push(`(${label} - ${MODE_NAME[e.mode]}${holes ? ` - ${holes} HUECO${holes > 1 ? 'S' : ''}` : ''})`);
+    // la profundidad solo se repite si esta figura tiene la suya
+    const own = te.depth === tl.depth ? '' : e.mode === 'drill' ? ` - PROF. ${f(te.depth)} MM`
+      : ` - PROF. ${f(te.depth)} MM EN ${zsE.length} PASADA${zsE.length > 1 ? 'S' : ''}`;
+    const dzPass = te.depth / zsE.length, rampFor = len => Math.min(len, dzPass / Math.tan(5 * Math.PI / 180));
+    const ring = p => (p.pts[0][0] === p.pts[p.pts.length - 1][0] && p.pts[0][1] === p.pts[p.pts.length - 1][1] ? p.pts.slice(0, -1) : p.pts);
+    // puentes: los del usuario (o automáticos) en el contorno de afuera; dos en los huecos grandes para que no salten
+    const tabsOf = p => {
+      if (e.mode !== 'cut' || !e.op) return [];
+      const len = perimeter(ring(p));
+      return tabIntervals(len, p.hole ? (e.op.tabs ?? (len > 40 ? 2 : 0)) : e.op.tabs, e.op.tabW, rampFor(len));
+    };
+    const nTabs = seq.reduce((a, p) => a + (p.closed ? tabsOf(p).length : 0), 0);
+    const dr = seq[0] && seq[0].drill;
+    L.push(`(${label} - ${MODE_NAME[e.mode]}${dr ? ` DE ${f(2 * dr.r)} MM${dr.kind === 'helix' ? ' EN ESPIRAL' : ''}` : ''}${holes ? ` - ${holes} HUECO${holes > 1 ? 'S' : ''}` : ''}${own}${nTabs ? ` - ${nTabs} PUENTE${nTabs > 1 ? 'S' : ''}` : ''})`);
 
-    seq.forEach(p => {
+    seq.forEach(p0 => {
+      // una vuelta de tallado en V va a su propia profundidad (en pasadas si es más honda que la profundidad por pasada)
+      const zsP = p0.z != null ? levels({ depth: -p0.z, down: te.down }) : zsE;
+      if (p0.z != null && -p0.z < 1e-6) return; // a ras de la cara no corta nada
+      const p = p0;
+      if (p.pts3) {
+        // relieve: el mismo zigzag en cada nivel, sin bajar de ese nivel (desbaste por capas hasta el acabado)
+        zsE.forEach(level => {
+          const q = p.pts3.map(([x, y, z]) => [x, y, Math.max(z, level)]);
+          const [x0, y0, z0] = q[0];
+          rapLen += Math.hypot(x0 - pos[0], y0 - pos[1]);
+          L.push(`G00 X${f(x0)} Y${f(y0)}`, `G01 Z${f(z0)} F${fz}`);
+          plunges++;
+          let lx = x0, ly = y0, lz = z0, first = true;
+          q.slice(1).forEach(([x, y, z]) => {
+            const sx = f(x), sy = f(y), sz = f(z);
+            if (sx === f(lx) && sy === f(ly) && sz === f(lz)) return;
+            let t = 'G01';
+            if (sx !== f(lx)) t += ` X${sx}`;
+            if (sy !== f(ly)) t += ` Y${sy}`;
+            if (sz !== f(lz)) t += ` Z${sz}`;
+            if (first) { t += ` F${fxy}`; first = false; }
+            L.push(t);
+            cutLen += Math.hypot(x - lx, y - ly, z - lz);
+            lx = x; ly = y; lz = z;
+          });
+          pos = [lx, ly];
+          L.push(`G00 Z${f(R)}`);
+        });
+        return;
+      }
+      if (p.drill) {
+        const d = p.drill;
+        const start = d.kind === 'point' ? [d.cx, d.cy] : [d.cx + d.rc, d.cy];
+        rapLen += Math.hypot(start[0] - pos[0], start[1] - pos[1]);
+        if (d.kind === 'point') {
+          const r = pointDrill(d, te, { dialect: o.dialect, R, fz, f });
+          L.push(...r.lines); zLen += r.zLen;
+          pos = [d.cx, d.cy];
+        } else {
+          const r = helixDrill(d, te, { R, fz, fxy, f });
+          L.push(...r.lines); cutLen += r.cutLen; zLen += R;
+          pos = [d.cx, d.cy];
+        }
+        return;
+      }
+      // contorno cerrado que entra hondo (o un recorte): rampa de entrada y puentes, en vez de bajar de punta
+      if (p.closed && p.pts.length > 2 && (e.mode === 'cut' || (p.z != null ? -p.z / zsP.length : dzPass) > 0.25)) {
+        const pts = ring(p), tabs = tabsOf(p);
+        tabsN += tabs.length;
+        const [x0, y0] = pts[0];
+        rapLen += Math.hypot(x0 - pos[0], y0 - pos[1]);
+        L.push(`G00 X${f(x0)} Y${f(y0)}`);
+        L.push(`G01 Z${f(0)} F${fz}`); // a ras de la cara; de ahí baja en rampa
+        plunges++;
+        let lx = x0, ly = y0, lz = 0;
+        zsP.forEach((z, zi) => {
+          const w = passWalk(pts, { zFrom: zi ? zsP[zi - 1] : 0, z, ramp: true, tabs, tabTop: e.op?.tabTop, cleanup: zi === zsP.length - 1 });
+          let needF = true;
+          w.slice(1).forEach(([x, y, zz]) => {
+            const sx = f(x), sy = f(y), sz = f(zz);
+            if (sx === f(lx) && sy === f(ly) && sz === f(lz)) return;
+            const vertical = sx === f(lx) && sy === f(ly);
+            let t = 'G01';
+            if (sx !== f(lx)) t += ` X${sx}`;
+            if (sy !== f(ly)) t += ` Y${sy}`;
+            if (sz !== f(lz)) t += ` Z${sz}`;
+            if (vertical && zz < lz) { t += ` F${fz}`; needF = true; zLen += lz - zz; } // baja después de un puente: de punta, despacio
+            else {
+              if (needF) { t += ` F${fxy}`; needF = false; }
+              cutLen += Math.hypot(x - lx, y - ly, zz - lz);
+            }
+            L.push(t);
+            lx = x; ly = y; lz = zz;
+          });
+        });
+        pos = [lx, ly];
+        L.push(`G00 Z${f(R)}`);
+        return;
+      }
       const moves = useArcs ? arcMoves(p.dense || p.pts, arcTol) : p.pts.slice(1).map(q => ({ arc: false, to: q }));
-      zs.forEach((z, zi) => {
+      zsP.forEach((z, zi) => {
         const [x0, y0] = p.pts[0];
         // un contorno cerrado termina donde empezó: la siguiente pasada baja sin moverse
         if (zi === 0 || !p.closed) {
@@ -173,6 +291,6 @@ export function generateGcode(plan, elements, o) {
   if (o.dialect === 'fanuc') L.push('G28 G91 Z0', 'G90', 'M30', '%');
   else L.push('M30');
 
-  const mins = cutLen / fxy + plunges * (tl.depth / passes + R) / fz + rapLen / RAPID_MM_MIN;
-  return { text: L.join('\n') + '\n', lines: L.length, cutLen, mins, plunges, arcsN, passes };
+  const mins = cutLen / fxy + plunges * (tl.depth / passes + R) / fz + zLen / fz + rapLen / RAPID_MM_MIN;
+  return { text: L.join('\n') + '\n', lines: L.length, cutLen, mins, plunges, arcsN, passes, tabs: tabsN };
 }

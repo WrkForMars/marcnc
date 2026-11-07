@@ -1,34 +1,49 @@
 // Calcula las trayectorias de todos los elementos (con caché) y el orden de corte.
 import { simplify } from '../geometry/simplify.js';
 import { toolpaths } from './toolpaths.js';
+import { toolAt } from './tool.js';
 
 const tick = () => new Promise(r => setTimeout(r, 0));
 
 /**
  * Ordena por vecino más cercano: primero entre elementos, luego entre los caminos de cada uno.
- * @returns {{i:number, seq: import('../model.js').LinePart[]}[]}
+ * Los recortes van al final (una pieza suelta ya no se puede grabar) y, dentro de cada uno, los huecos antes que el
+ * contorno de afuera. Con varias herramientas, cada etapa (grabar, recortar) va agrupada por herramienta, la principal
+ * primero, para cambiarla lo menos posible.
+ * @returns {{i:number, seq: import('../model.js').LinePart[], tool:number}[]}
  */
 export function orderPaths(elements, start = [0, 0]) {
   const order = [];
-  const left = elements.map((_, i) => i).filter(i => elements[i].paths && elements[i].paths.length);
+  const has = i => elements[i].paths && elements[i].paths.length;
+  const all = elements.map((_, i) => i).filter(has);
+  const toolOf = i => elements[i].op?.tool ?? 0;
+  const groups = [];
+  [all.filter(i => elements[i].mode !== 'cut'), all.filter(i => elements[i].mode === 'cut')].forEach(phase => {
+    [...new Set(phase.map(toolOf))].sort((a, b) => a - b).forEach(k => groups.push(phase.filter(i => toolOf(i) === k)));
+  });
   let pos = start;
-  while (left.length) {
-    let bi = 0, bd = Infinity;
-    left.forEach((i, j) => {
-      const p = elements[i].paths[0].pts[0];
-      const d = Math.hypot(p[0] - pos[0], p[1] - pos[1]);
-      if (d < bd) { bd = d; bi = j; }
-    });
-    const i = left.splice(bi, 1)[0];
-    const ps = elements[i].paths.slice(), seq = [];
-    while (ps.length) {
-      let bj = 0, bdd = Infinity;
-      ps.forEach((p, j) => { const d = Math.hypot(p.pts[0][0] - pos[0], p.pts[0][1] - pos[1]); if (d < bdd) { bdd = d; bj = j; } });
-      const p = ps.splice(bj, 1)[0];
-      seq.push(p);
-      pos = p.pts[p.pts.length - 1];
+  for (const left of groups) {
+    while (left.length) {
+      let bi = 0, bd = Infinity;
+      left.forEach((i, j) => {
+        const p = elements[i].paths[0].pts[0];
+        const d = Math.hypot(p[0] - pos[0], p[1] - pos[1]);
+        if (d < bd) { bd = d; bi = j; }
+      });
+      const i = left.splice(bi, 1)[0];
+      const seq = [];
+      const groups = elements[i].mode === 'cut' ? [elements[i].paths.filter(p => p.hole), elements[i].paths.filter(p => !p.hole)] : [elements[i].paths.slice()];
+      groups.forEach(ps => {
+        while (ps.length) {
+          let bj = 0, bdd = Infinity;
+          ps.forEach((p, j) => { const d = Math.hypot(p.pts[0][0] - pos[0], p.pts[0][1] - pos[1]); if (d < bdd) { bdd = d; bj = j; } });
+          const p = ps.splice(bj, 1)[0];
+          seq.push(p);
+          pos = p.pts[p.pts.length - 1];
+        }
+      });
+      order.push({ i, seq, tool: toolOf(i) });
     }
-    order.push({ i, seq });
   }
   return order;
 }
@@ -45,19 +60,25 @@ export async function computePlan(elements, tl, opts) {
   let last = performance.now();
   for (let n = 0; n < elements.length; n++) {
     const e = elements[n];
-    const k = keyOf ? `${keyOf(e)}|${e.mode}|${tl.r.toFixed(4)}|${tl.step.toFixed(4)}|${tol}` : null;
+    // cada figura con la herramienta a su profundidad (la del trabajo, la suya propia o la del recorte)
+    const te = e.tl = e.op ? toolAt(e.op.base || tl, e.op.depth) : tl;
+    const k = keyOf ? `${keyOf(e)}|${e.mode}|${te.r.toFixed(4)}|${te.step.toFixed(4)}|${te.D}|${te.type}|${tol}` : null;
     if (k && cache && cache.has(k)) {
       const c = cache.get(k);
       e.paths = c.paths; e.warn = c.warn;
     } else {
-      const t = toolpaths(e, tl);
+      const t = toolpaths(e, te);
       e.warn = t.warn;
       // pts: simplificada (vista previa, orden, rectas); dense: la original, para ajustar arcos sobre la curva real
       e.paths = t.paths
         .map(p => {
+          if (p.drill || p.pts3) return p; // un barreno se escribe con su ciclo; un relieve ya viene simplificado en 3D
           const pts = simplify(p.pts, p.closed, tol);
           const dense = p.closed ? simplify(p.pts, true, 0) : p.pts;
-          return dense.length > pts.length ? { pts, closed: p.closed, dense } : { pts, closed: p.closed };
+          const q = dense.length > pts.length ? { pts, closed: p.closed, dense } : { pts, closed: p.closed };
+          if (p.hole) q.hole = true;
+          if (p.z != null) { q.z = p.z; q.w = p.w; } // tallado en V: cada vuelta a su profundidad
+          return q;
         })
         .filter(p => p.pts.length > 1);
       if (k && cache) cache.set(k, { paths: e.paths, warn: e.warn });

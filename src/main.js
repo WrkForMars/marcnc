@@ -9,9 +9,12 @@ import { computePlan } from './cam/plan.js';
 import { isDesktop, saveTextDesktop } from './desktop.js';
 import { toolGeometry } from './cam/tool.js';
 import { parseSVG, SVG_QUALITY } from './input/svg.js';
-import { traceImage } from './input/image.js';
+import { grayImage, traceImage } from './input/image.js';
+import { reliefLayout } from './cam/relief.js';
 import { Cancelled } from './work.js';
-import { duration, jobRisks, setupSheet } from './cam/checks.js';
+import { duration, jobRisks, machineRisks, setupSheet } from './cam/checks.js';
+import { elementOp } from './cam/cut.js';
+import { toolFor, toolLabel } from './cam/tools.js';
 import { toolFigure } from './ui/tool-figure.js';
 import { createBack } from './ui/back.js';
 import { dxfEntities, parseDxf } from './input/dxf.js';
@@ -61,22 +64,32 @@ document.addEventListener('change', ev => {
 
 function params() {
   return {
-    W: num('pw', 90), H: num('ph', 50), margin: num('margin', 3), fit: $('fit').value, drawW: num('dw', 0), speck: num('speck', 0.5),
+    W: num('pw', 90), H: num('ph', 50), thick: num('thick', 3), margin: num('margin', 3), fit: $('fit').value, drawW: num('dw', 0), speck: num('speck', 0.5),
     toolType: $('ttype').value, dia: num('tdia', 3.175), depth: num('depth', 0.1), vAngle: num('vang', 60), vTip: num('vtip', 0.1),
     stepoverPct: num('stepover', 45), stepdown: num('stepdown', 0.2),
     toolNum: num('tnum', 1), rpm: num('rpm', 1000), fz: num('fz', 60), fxy: num('fxy', 130), retract: num('retract', 3),
+    maxX: num('maxX', 0), maxY: num('maxY', 0), maxZ: num('maxZ', 0), maxRpm: num('maxRpm', 0), changer: $('changer').checked,
     dialect: $('dialect').value, dec: +$('dec').value, tol: Math.max(0.002, num('tol', 0.05)), prog: num('prog', 1), arcs: $('arcs').checked,
   };
 }
 
 /* ---------- elementos ---------- */
 function rebuildDesign() {
+  if (state.reliefSrc) {
+    // un relieve no se vectoriza: es un solo elemento con su imagen en grises, acomodado en la pieza
+    const p = params(), g = state.reliefSrc, lay = reliefLayout(g.gw, g.gh, p), prev = state.design[0];
+    const el = { src: 'design', type: 'relief', mode: prev && prev.type === 'relief' ? prev.mode : 'relief', relief: { ...lay, ...g }, label: 'Relieve', detail: `${lay.w.toFixed(1)} × ${lay.h.toFixed(1)} mm` };
+    if (prev && prev.type === 'relief' && prev.opts) el.opts = prev.opts;
+    state.design = [el]; state.designNote = ''; state.designScale = lay.w / g.gw; state.designSize = [lay.w, lay.h]; state.cache.clear();
+    svgQualityLabel(); syncSize();
+    return;
+  }
   const r = buildDesign(state.raw, params(), state.design);
   state.design = r.elements; state.designNote = r.note; state.designScale = r.scale; state.designSize = r.size; state.cache.clear();
   svgQualityLabel(); syncSize();
 }
 function rebuildSketch() {
-  state.sketchEls = sketchElements(sketch.entities, sketch.modes);
+  state.sketchEls = sketchElements(sketch.entities, sketch.modes, sketch.opts);
 }
 function assemble() {
   state.elements = state.design.concat(state.sketchEls, state.texts.map(textElement).filter(Boolean));
@@ -133,21 +146,125 @@ function renderAll() {
     onHover: i => { if (state.hovered !== i) { state.hovered = i; drawOnly(); } },
     onMode: (i, m) => { const e = state.elements[i]; e.mode = m; if (e.src === 'text') e.text.mode = m; if (e.src === 'sketch') { sketch.setMode(e.sketchId, m); storeSketch(); } select(i); refresh(); },
     onModeAll: m => { state.elements.forEach(e => { if (e.type === 'region') { e.mode = m; if (e.src === 'text') e.text.mode = m; if (e.src === 'sketch') sketch.setMode(e.sketchId, m); } }); storeSketch(); refresh(); },
+    onOpts: (i, patch) => { setOpts(state.elements[i], patch); refresh(); },
+    job: { depth: num('depth', 0.1), thick: num('thick', 3), tools: allTools().map(toolLabel) },
   });
 }
 
+/* ---------- perfiles de máquina ---------- */
+// lo que define a una máquina: se guarda con su nombre y se pone de un clic
+const MACHINE_FIELDS = ['dialect', 'rpm', 'retract', 'fz', 'fxy', 'dec', 'prog', 'tol', 'arcs', 'maxX', 'maxY', 'maxZ', 'maxRpm', 'changer'];
+const MACHINES_STORE = 'marcnc:maquinas';
+let machines = {};
+try { machines = JSON.parse(localStorage.getItem(MACHINES_STORE) || '{}') || {}; } catch { machines = {}; }
+/** @param {string} [pick] perfil que queda elegido (por omisión, el que ya estaba) */
+function renderMachines(pick) {
+  const sel = $('machine'), cur = pick ?? sel.value;
+  sel.textContent = '';
+  const none = document.createElement('option'); none.value = ''; none.textContent = 'Sin nombre'; sel.append(none);
+  Object.keys(machines).sort().forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; sel.append(o); });
+  sel.value = machines[cur] ? cur : '';
+  $('machineDel').hidden = !sel.value;
+  $('machineName').value = sel.value;
+}
+$('machine').addEventListener('change', () => {
+  const m = machines[$('machine').value];
+  if (m) MACHINE_FIELDS.forEach(id => { if (id in m) { setVal(id, m[id]); $(id).dispatchEvent(new Event('change', { bubbles: true })); } });
+  renderMachines(); storeParams(); syncLabels(); jobSummary(); refresh();
+});
+$('machineSave').addEventListener('click', () => {
+  const name = $('machineName').value.trim();
+  if (!name) { $('machineName').focus(); return; }
+  machines[name] = Object.fromEntries(MACHINE_FIELDS.map(id => [id, getVal(id)]));
+  try { localStorage.setItem(MACHINES_STORE, JSON.stringify(machines)); } catch { /* solo esta sesión */ }
+  renderMachines(name); storeParams();
+  $('toast').textContent = `Perfil “${name}” guardado.`;
+});
+$('machineDel').addEventListener('click', () => {
+  delete machines[$('machine').value];
+  try { localStorage.setItem(MACHINES_STORE, JSON.stringify(machines)); } catch { /* solo esta sesión */ }
+  renderMachines(''); storeParams();
+});
+
+/* ---------- herramientas ---------- */
+const TOOLS_STORE = 'marcnc:herramientas';
+try { state.tools = JSON.parse(localStorage.getItem(TOOLS_STORE) || '[]').filter(t => t && t.t > 0 && t.dia > 0); } catch { state.tools = []; }
+/** La principal (la de Parámetros) y las otras, en ese orden: el índice es el que guardan las figuras. */
+function allTools(p = params()) { return [{ t: p.toolNum, type: p.toolType, dia: p.dia }, ...state.tools]; }
+function storeTools() { try { localStorage.setItem(TOOLS_STORE, JSON.stringify(state.tools)); } catch { /* solo esta sesión */ } }
+/** Renglones de "Otras herramientas": número, tipo y diámetro, y quitar. */
+function renderTools() {
+  const box = $('toolsList');
+  box.textContent = '';
+  state.tools.forEach((t, k) => {
+    const row = document.createElement('div');
+    row.className = 'tool-row';
+    const num = document.createElement('input');
+    num.type = 'number'; num.min = '1'; num.max = '99'; num.step = '1'; num.value = String(t.t); num.setAttribute('aria-label', 'Número de herramienta (T)');
+    const type = document.createElement('select');
+    type.setAttribute('aria-label', 'Tipo');
+    [['ball', 'Ball mill'], ['flat', 'Fresa plana'], ['v', 'V-bit']].forEach(([v, l]) => { const o = document.createElement('option'); o.value = v; o.textContent = l; type.append(o); });
+    type.value = t.type;
+    const dia = document.createElement('input');
+    dia.type = 'number'; dia.min = '0.1'; dia.max = '50'; dia.step = '0.025'; dia.value = String(t.dia); dia.setAttribute('aria-label', 'Diámetro (mm)');
+    const del = document.createElement('button');
+    del.type = 'button'; del.className = 'icon ghost'; del.setAttribute('aria-label', `Quitar T${t.t}`); del.title = 'Quitar';
+    del.innerHTML = '<svg class="i"><use href="#i-close"/></svg>';
+    const save = () => {
+      state.tools[k] = { t: Math.round(+num.value) || t.t, type: type.value, dia: +dia.value > 0 ? +dia.value : t.dia };
+      storeTools(); jobSummary(); refresh();
+    };
+    [num, type, dia].forEach(el => el.addEventListener('change', save));
+    del.addEventListener('click', () => {
+      state.tools.splice(k, 1);
+      // las figuras que la usaban vuelven a la automática; las de después bajan un lugar
+      state.elements.forEach(e => { const i = e.opts?.tool; if (i == null) return; if (i === k + 1) setOpts(e, { tool: null }); else if (i > k + 1) setOpts(e, { tool: i - 1 }); });
+      storeTools(); renderTools(); jobSummary(); refresh();
+    });
+    const tlab = document.createElement('span'); tlab.textContent = 'T'; tlab.className = 'tool-t';
+    row.append(tlab, num, type, dia, del);
+    box.append(row);
+  });
+}
+$('toolAdd').addEventListener('click', () => {
+  const used = new Set(allTools().map(t => t.t));
+  let t = 1; while (used.has(t)) t++;
+  state.tools.push({ t, type: 'flat', dia: 6.35 }); // lo más común como segunda: una fresa plana de 1/4" para recortar
+  storeTools(); renderTools(); jobSummary(); refresh();
+});
+renderTools();
+
+/** Cambia los ajustes propios de una figura y los guarda donde vive (croquis, texto o dibujo cargado). */
+function setOpts(e, patch) {
+  const o = { ...(e.opts || {}), ...patch };
+  Object.keys(o).forEach(k => { if (o[k] == null) delete o[k]; });
+  e.opts = Object.keys(o).length ? o : undefined;
+  if (e.src === 'text') e.text.opts = e.opts;
+  else if (e.src === 'sketch') { sketch.setOpts(e.sketchId, o); storeSketch(); }
+}
+
 function warnings(p, plan, g) {
-  const r = plan.tl.r;
+  // lo que ocupa cada figura: medio ancho de su línea, o medio diámetro si se recorta (la herramienta va por fuera)
+  const rOf = e => (e.mode === 'cut' && e.tl ? e.tl.D / 2 : e.tl ? e.tl.r : plan.tl.r);
   const nm = (e, i) => (e.src === 'text' ? `El texto “${e.text.text}”` : `La figura ${i + 1}`);
   const out = state.elements.map((e, i) => {
     if (e.mode === 'skip') return null;
     const bb = bbox(e);
+    const r = rOf(e);
     return bb && (bb[0] - r < -0.01 || bb[1] - r < -0.01 || bb[2] + r > p.W + 0.01 || bb[3] + r > p.H + 0.01) ? nm(e, i) : null;
   }).filter(Boolean);
   const thin = state.elements.map((e, i) => (e.warn ? { e, i } : null)).filter(Boolean);
   const ws = [];
   if (state.designNote) ws.push(state.designNote);
-  ws.push(...feedRisks($('material').value, p), ...jobRisks(p, plan.tl, g, { material: !!$('material').value }));
+  const nums = allTools(p).map(t => t.t), dup = nums.filter((t, k) => nums.indexOf(t) !== k);
+  if (dup.length) ws.push(`Dos herramientas tienen el número T${dup[0]}: la máquina no sabría cuál tomar. Cambia el número en Parámetros del trabajo.`);
+  // el filo y la punta se revisan con la figura más honda (un recorte atraviesa todo el grosor)
+  const live = state.elements.filter(e => e.mode !== 'skip' && e.tl);
+  const deep = live.reduce((t, e) => (e.tl.depth > t.depth ? e.tl : t), plan.tl);
+  ws.push(...feedRisks($('material').value, p), ...jobRisks(p, deep, g, { material: !!$('material').value, cut: live.some(e => e.mode === 'cut') }));
+  ws.push(...machineRisks(p, deep.depth));
+  const relief = live.find(e => e.mode === 'relief');
+  if (relief && relief.tl.type !== 'ball') ws.push(`Para un relieve conviene una ball mill: ${relief.tl.type === 'v' ? 'el V-bit deja surcos' : 'la fresa plana deja escalones'} entre renglón y renglón.`);
   if (out.length) ws.push(`${out.join(', ')} se sale${out.length > 1 ? 'n' : ''} de la pieza; ajusta su tamaño o su posición.`);
   if (thin.length > 3) {
     const tot = thin.reduce((a, { e }) => a + (parseFloat(e.warn) || 0), 0);
@@ -167,6 +284,13 @@ async function refresh() {
   if (my !== state.gen) return;
   const p = params();
   const tl = toolGeometry(p);
+  // cómo se corta cada figura: su profundidad (la del trabajo, la suya o atravesar el grosor) y sus puentes
+  // con qué herramienta va cada figura (la principal, o la que eligió el usuario, o la fresa plana para recortar)
+  const tools = allTools(p), bases = tools.map((t, k) => (k ? toolGeometry({ ...p, toolType: t.type, dia: t.dia }) : tl));
+  state.elements.forEach(e => {
+    const k = toolFor(e, tools);
+    e.op = { ...elementOp(e, { depth: tl.depth, thick: p.thick, dia: bases[k].D }), tool: k, base: bases[k] };
+  });
   const plan = await computePlan(state.elements, tl, {
     tol: p.tol, cache: state.cache, keyOf, onProgress: busy, isCancelled: () => my !== state.gen,
   });
@@ -182,7 +306,7 @@ async function refresh() {
     busy('Escribiendo el código…');
     await tick();
     if (my !== state.gen) return;
-    const g = generateGcode(plan, state.elements, p);
+    const g = generateGcode(plan, state.elements, { ...p, tools: allTools(p) });
     state.gcode = g.text; state.lastG = g;
     state.explained = explainProgram(g.text);
     $('simTime').textContent = `0:00 / ${clock(simTimeline().total)}`;
@@ -217,7 +341,7 @@ async function loadShapes(fn, isImage, msg) {
   await tick();
   try {
     const t0 = performance.now();
-    state.raw = await fn(); state.rawId++;
+    state.raw = await fn(); state.rawId++; state.reliefSrc = null;
     select(-1);
     busy('Separando figuras…');
     await tick();
@@ -262,6 +386,15 @@ function loadImage() {
     mode: $('imgMode').value, thr: +$('thr').value, invert: $('imgInvert').checked, clean: +$('imgClean').value,
     how: $('imgHow').value, detail: +$('imgDetail').value, crop: state.imgCrop, seeds: state.imgSeeds,
   };
+  if (opts.mode === 'relief') {
+    // relieve: la imagen en grises entra tal cual, sin vectorizar
+    state.reliefSrc = grayImage(state.lastImage, opts); state.raw = null; state.imgMask = null; state.imgInfo = null; state.rawId++;
+    state.design = [];
+    rebuildDesign(); assemble(); select(-1); refresh();
+    $('imgOpts').hidden = false; $('svgOpts').hidden = true; $('loadErr').textContent = '';
+    drawImgView();
+    return;
+  }
   const object = opts.mode === 'object';
   if (object && !state.imgSeeds.some(s => s.fg)) {
     // todavía no hay qué separar: se muestra la foto para tocar el objeto
@@ -358,7 +491,7 @@ async function openDemo() {
   await loadSvg(); await addDemoText(); select(-1); refresh();
 }
 $('clear').addEventListener('click', () => {
-  Object.assign(state, { raw: null, design: [], texts: [], lastImage: null, imgSeeds: [], lastSvg: '', designNote: '', fileName: '', designSize: [0, 0] });
+  Object.assign(state, { raw: null, reliefSrc: null, design: [], texts: [], lastImage: null, imgSeeds: [], lastSvg: '', designNote: '', fileName: '', designSize: [0, 0] });
   $('docName').value = '';
   syncSize();
   sketch.clear(); // se puede deshacer con Ctrl+Z
@@ -371,13 +504,14 @@ $('imgDetect').addEventListener('change', () => setImgKind(false));
 /** Dibujo (con el modo de detección elegido en Más opciones) u objeto en una foto. imgMode guarda el modo que se aplica. */
 function setImgKind(object) {
   const before = $('imgMode').value;
-  $('imgMode').value = object ? 'object' : $('imgDetect').value;
+  $('imgMode').value = object === 'relief' ? 'relief' : object ? 'object' : $('imgDetect').value;
   $('imgMode').dispatchEvent(new Event('change')); // se recuerda para la próxima imagen
   syncLabels();
   if ($('imgMode').value !== before || !object) loadImage();
 }
 $('kindDraw').addEventListener('click', () => setImgKind(false));
 $('kindObj').addEventListener('click', () => setImgKind(true));
+$('kindRelief').addEventListener('click', () => setImgKind('relief'));
 
 /* ---------- imagen: lo que detecta y recorte ---------- */
 const iv = $('imgView'), ivx = iv.getContext('2d');
@@ -446,7 +580,9 @@ function drawImgView() {
   $('objBar').hidden = !object;
   const info = state.imgInfo;
   const auto = $('imgMode').value === 'auto';
-  $('imgInfo').textContent = object
+  const rel = state.reliefSrc && state.design[0]?.type === 'relief' ? state.design[0] : null;
+  $('imgInfo').textContent = rel ? `Relieve de ${rel.relief.w.toFixed(1)} × ${rel.relief.h.toFixed(1)} mm: lo más oscuro baja ${+(rel.op?.depth ?? 2).toFixed(2)} mm (cámbialo en la lista). Arrastra para recortar.`
+    : object
     ? (info ? `Objeto: ${(info.ink * 100).toFixed(1)} % de la imagen. ¿Sobra algo? Elige Fondo y tócalo.` : 'Toca el objeto para separarlo del fondo.')
     : info ? `Dibujo: ${(info.ink * 100).toFixed(1)} % de la imagen${auto && info.used === 'photo' ? ' · parece foto: se ignoran sombras' : ''}${info.inverted ? ' · invertida' : ''}${state.imgMask ? ` · ${state.imgMask.w} × ${state.imgMask.h} px` : ''}` : '';
   $('imgUncrop').hidden = !state.imgCrop;
@@ -461,7 +597,7 @@ iv.addEventListener('pointermove', ev => { if (ivDrag) { ivDrag.cur = ivPos(ev);
  */
 function ivTap([px, py], fg) {
   const L = ivLayout(), x = (px - L.ox) / (L.iw * L.k), y = (py - L.oy) / (L.ih * L.k);
-  if (x < 0 || y < 0 || x > 1 || y > 1) return;
+  if (x < 0 || y < 0 || x > 1 || y > 1 || $('imgMode').value === 'relief') return; // en un relieve solo se recorta
   if ($('imgMode').value !== 'object') { $('imgMode').value = 'object'; $('imgMode').dispatchEvent(new Event('change')); syncLabels(); fg = true; setSeedFg(true); }
   const hit = state.imgSeeds.findIndex(s => Math.hypot((s.x - x) * L.iw * L.k, (s.y - y) * L.ih * L.k) < 10);
   if (hit >= 0) state.imgSeeds.splice(hit, 1);
@@ -516,12 +652,13 @@ $('dh').addEventListener('change', () => {
   storeParams(); rebuildDesign(); assemble(); refresh();
 });
 ['pw', 'ph', 'margin', 'speck', 'fit', 'dw'].forEach(id => $(id).addEventListener('change', () => { rebuildDesign(); assemble(); refresh(); }));
-['depth', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'rpm', 'fz', 'fxy', 'retract', 'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs']
+['depth', 'thick', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'rpm', 'fz', 'fxy', 'retract', 'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs',
+  'maxX', 'maxY', 'maxZ', 'maxRpm', 'changer']
   .forEach(id => $(id).addEventListener('change', () => { $('vAngLbl').hidden = $('vTipLbl').hidden = $('ttype').value !== 'v'; refresh(); }));
 $('showPath').addEventListener('change', () => drawOnly());
 
 // los parámetros se recuerdan entre sesiones (cada taller tiene su máquina y su herramienta)
-const SAVED = ['material', 'pw', 'ph', 'margin', 'speck', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'depth', 'rpm', 'retract', 'fz', 'fxy',
+const SAVED = ['material', 'pw', 'ph', 'thick', 'maxX', 'maxY', 'maxZ', 'maxRpm', 'changer', 'machine', 'margin', 'speck', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'depth', 'rpm', 'retract', 'fz', 'fxy',
   'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs', 'imgHow', 'thr', 'svgQ', 'dw', 'imgMode', 'imgClean', 'imgDetail', 'imgInvert'];
 const STORE = 'marcnc:parametros';
 const getVal = id => ($(id).type === 'checkbox' ? $(id).checked : $(id).value);
@@ -530,10 +667,11 @@ const DEFAULTS = Object.fromEntries(SAVED.map(id => [id, getVal(id)]));
 const syncLabels = () => { $('vAngLbl').hidden = $('vTipLbl').hidden = $('ttype').value !== 'v'; $('thrVal').textContent = $('thr').value; syncImgKind(); svgQualityLabel(); };
 /** Botones de tipo de imagen y opciones que solo aplican a un dibujo, según imgMode. */
 function syncImgKind() {
-  const mode = $('imgMode').value, object = mode === 'object';
-  if (!object) $('imgDetect').value = mode;
-  $('kindDraw').setAttribute('aria-pressed', String(!object)); $('kindObj').setAttribute('aria-pressed', String(object));
-  document.querySelectorAll('.draw-only').forEach(el => { el.hidden = object; });
+  const mode = $('imgMode').value, object = mode === 'object', relief = mode === 'relief';
+  if (!object && !relief) $('imgDetect').value = mode;
+  $('kindDraw').setAttribute('aria-pressed', String(!object && !relief)); $('kindObj').setAttribute('aria-pressed', String(object));
+  $('kindRelief').setAttribute('aria-pressed', String(relief));
+  document.querySelectorAll('.draw-only').forEach(el => { el.hidden = (object || relief) && !(relief && el.classList.contains('relief-too')); });
   $('thrLbl').hidden = mode !== 'manual';
 }
 function storeParams() {
@@ -927,7 +1065,7 @@ function copySelection(keep = false) {
   if (sketch.selection.length > 1) clip = { entities: JSON.parse(JSON.stringify(sketch.selection)), texts: [] };
   else if (e) clip = { entities: [JSON.parse(JSON.stringify(e))], texts: [] };
   else if (el && el.src === 'text') clip = { entities: [], texts: [{ ...el.text, local: null }] };
-  else if (el) {
+  else if (el && el.type !== 'relief') { // un relieve es una imagen: no se copia como croquis
     const entities = el.type === 'region'
       ? el.parts.flatMap(p => [p.outer, ...p.holes].map(q => ({ type: 'line', pts: fromC(q), closed: true })))
       : el.parts.map(p => ({ type: 'line', pts: p.pts.map(q => q.slice()), closed: p.closed }));
@@ -1399,8 +1537,8 @@ function jobSummary() {
   const p = params(), tl = toolGeometry(p), n = v => String(+(+v).toFixed(3));
   sketch.setPiece(p.W, p.H);
   const TOOL = { ball: 'Ball mill', flat: 'Fresa plana', v: 'V-bit' }[p.toolType];
-  $('jobPieceTxt').textContent = `${n(p.W)} × ${n(p.H)} mm`;
-  $('jobToolTxt').textContent = `T${p.toolNum} ${TOOL} Ø${n(p.dia)} · ${n(p.depth)} mm`;
+  $('jobPieceTxt').textContent = `${n(p.W)} × ${n(p.H)} × ${n(p.thick)} mm`;
+  $('jobToolTxt').textContent = `T${p.toolNum} ${TOOL} Ø${n(p.dia)} · ${n(p.depth)} mm${state.tools.length ? ` · +${state.tools.length}` : ''}`;
   $('jobLineTxt').textContent = `${tl.w.toFixed(2)} mm`;
   $('jobFeedsTxt').textContent = `${p.dialect === 'fanuc' ? 'Fanuc' : 'GRBL'} · S${p.rpm} · F${p.fxy}`;
 }
@@ -1419,7 +1557,13 @@ function openExport() {
   $('pfTool').innerHTML = toolFigure(tl, p);
   const mat = $('material').selectedOptions[0];
   $('pfList').textContent = '';
-  setupSheet({ ...p, materialName: $('material').value ? mat.textContent : '' }, tl, g).forEach(({ k, v }) => {
+  const cutEl = state.elements.find(e => e.mode === 'cut' && e.tl);
+  const rows = setupSheet({ ...p, materialName: $('material').value ? mat.textContent : '' }, tl, g, cutEl ? { depth: cutEl.tl.depth } : null);
+  // con varias herramientas: cuáles más y cómo se cambian
+  const tools = allTools(p), used = [...new Set(state.plan.order.map(x => x.tool || 0))];
+  if ($('machine').value) rows.unshift({ k: 'Máquina', v: $('machine').value });
+  if (used.length > 1) rows.splice(rows[0].k === 'Máquina' ? 2 : 1, 0, { k: 'En orden', v: used.map(k => toolLabel(tools[k])).join(' → ') + (p.dialect === 'grbl' ? ' · el programa se pausa (M00) en cada cambio: cambia la herramienta y toma Z0 de nuevo' : '') });
+  rows.forEach(({ k, v }) => {
     const dt = document.createElement('dt'), dd = document.createElement('dd');
     dt.textContent = k; dd.textContent = v; $('pfList').append(dt, dd);
   });
@@ -1468,7 +1612,9 @@ const back = createBack([
 ], { guardExit: !isDesktop(), onExitHint: () => { $('toast').textContent = 'Presiona Atrás otra vez para salir.'; } });
 new MutationObserver(back.schedule).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['hidden', 'open', 'aria-pressed', 'aria-selected'] });
 (async () => {
+  renderMachines(); // las opciones primero, para que el perfil recordado se pueda elegir
   restoreParams();
+  renderMachines();
   loadSketch();
   setTool('select');
   // con un croquis guardado se abre ese; si no, la bienvenida (empezar, abrir, ejemplo o plantilla)

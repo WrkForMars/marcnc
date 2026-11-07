@@ -3,6 +3,13 @@
 Convierte un SVG o una imagen con fondo blanco en código G y M para grabado CNC. Funciona en el navegador o como programa de Windows (.exe) y Linux (.deb / AppImage), sin internet.
 
 - **Para empezar:** plantillas de llavero, placa con nombre, engrane (dientes de evolvente y cuñero), posavasos y regla, y un "?" junto a cada campo que confunde (paso de vaciado, retracción, V-bit…).
+- **Lo que una CNC puede hacer:**
+  - **Recortar** piezas completas: la herramienta va por fuera del contorno y por dentro de los huecos, y deja puentes. Entra en rampa y atraviesa el grosor.
+  - **Barrenar** con G81/G83, o en espiral si el círculo es más grande que la herramienta.
+  - **Tallado en V** con esquinas afiladas.
+  - **Relieve 3D** desde una foto.
+  - **Varias herramientas** en un programa (M06, o una pausa M00).
+  - **Perfiles de máquina** con su área de trabajo y sus límites.
 - **Atrás no te saca:** el botón Atrás (o el lateral del ratón) cierra el diálogo, menú o herramienta abierta, o regresa de Código G a Figuras.
 - **Antes de cortar:** Exportar muestra qué preparar en la máquina (herramienta y su medida en pulgadas, ceros, profundidad, husillo y avances) con el dibujo de la punta en la pieza, y avisa valores sin sentido: husillo parado, más hondo que el filo, cientos de pasadas, días de corte.
 - **Perfiles de material** (MDF, acrílico, aluminio, latón): llenan avances y profundidad por pasada según tu husillo y avisan si un valor es arriesgado.

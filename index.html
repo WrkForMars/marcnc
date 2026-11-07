@@ -253,6 +253,7 @@
           <div class="seg" role="group" aria-labelledby="kindLbl">
             <button type="button" id="kindDraw" aria-pressed="true" title="Un dibujo, logo o letras sobre fondo liso">Dibujo o logo</button>
             <button type="button" id="kindObj" aria-pressed="false" title="Una cosa fotografiada: tócala y se separa del fondo">Objeto en una foto</button>
+            <button type="button" id="kindRelief" aria-pressed="false" title="Lo claro queda arriba y lo oscuro se hunde: una placa en relieve">Relieve 3D</button>
           </div>
         </div>
         <input type="hidden" id="imgMode" value="auto">
@@ -280,7 +281,7 @@
             <label class="full" id="thrLbl" for="thr" hidden>Umbral: <b id="thrVal">128</b><input type="range" id="thr" min="20" max="235" value="128"></label>
             <label>Limpieza<select id="imgClean"><option value="0">Ninguna</option><option value="1" selected>Suave</option><option value="2">Media</option><option value="3">Fuerte</option></select></label>
             <label>Detalle<select id="imgDetail"><option value="600" selected>Normal</option><option value="1200">Alto</option><option value="2000">Máximo</option></select></label>
-            <label class="full check draw-only"><input type="checkbox" id="imgInvert"> Invertir (el dibujo es lo claro)</label>
+            <label class="full check draw-only relief-too"><input type="checkbox" id="imgInvert"> Invertir (el dibujo es lo claro; en un relieve, lo claro se hunde)</label>
           </div>
           <p class="hint">Arrastra sobre la imagen para recortarla. Limpieza quita puntitos y tapa huecos chicos; más detalle conserva líneas finas.</p>
         </details>
@@ -340,7 +341,8 @@
       <h3 id="secPiece">Pieza</h3>
       <label>Ancho (mm)<input type="number" id="pw" value="90" min="5" step="1"></label>
       <label>Alto (mm)<input type="number" id="ph" value="50" min="5" step="1"></label>
-      <label class="full">Material<select id="material"><option value="">Sin elegir (avances a mano)</option><option value="mdf">Madera / MDF</option><option value="acrilico">Acrílico</option><option value="aluminio">Aluminio</option><option value="laton">Latón</option></select></label>
+      <label>Grosor (mm)<input type="number" id="thick" value="3" min="0.5" max="100" step="0.5"></label>
+      <label>Material<select id="material"><option value="">Sin elegir (avances a mano)</option><option value="mdf">Madera / MDF</option><option value="acrilico">Acrílico</option><option value="aluminio">Aluminio</option><option value="laton">Latón</option></select></label>
       <label class="full">Tamaño del dibujo<select id="fit"><option value="fill">Ajustar a la pieza (con margen)</option><option value="width">Elegir ancho y alto (mm)</option><option value="native">Escala 1:1 (unidades del SVG = mm)</option></select></label>
       <label id="dwLbl" hidden>Ancho del dibujo (mm)<input type="number" id="dw" value="40" min="1" step="0.5"></label>
       <label id="dhLbl" hidden>Alto del dibujo (mm)<input type="number" id="dh" min="1" step="0.5"></label>
@@ -354,6 +356,11 @@
       <label id="vTipLbl" hidden>Punta del V-bit (mm)<input type="number" id="vtip" value="0.1" min="0" step="0.05"></label>
       <label>Profundidad (mm)<input type="number" id="depth" value="0.1" min="0.01" step="0.05"></label>
       <div class="eff full" id="eff"></div>
+      <div class="full tools-more">
+        <h4 class="pm-sec">Otras herramientas</h4>
+        <div id="toolsList"></div>
+        <button type="button" id="toolAdd" class="ghost" title="Una fresa plana para recortar, un V-bit para letras…"><svg class="i"><use href="#i-plus"/></svg>Agregar herramienta</button>
+      </div>
     </div>
     <details class="more">
       <summary>Más opciones</summary>
@@ -375,12 +382,28 @@
     <p class="hint">Se configuran una vez por máquina y se guardan en este equipo.</p>
     <div class="params">
       <h3>Máquina</h3>
+      <label class="full">Perfil<select id="machine"><option value="">Sin nombre</option></select></label>
+      <div class="full machine-save">
+        <input type="text" id="machineName" maxlength="40" placeholder="Nombre, p. ej. CNC del taller" aria-label="Nombre del perfil">
+        <button type="button" id="machineSave">Guardar</button>
+        <button type="button" id="machineDel" class="ghost" hidden>Quitar</button>
+      </div>
       <label class="full">Controlador<select id="dialect"><option value="fanuc">Fanuc / Haas</option><option value="grbl">GRBL</option></select></label>
       <label>Husillo (rpm)<input type="number" id="rpm" value="2200" min="100" step="100"></label>
       <label>Retracción Z (mm)<input type="number" id="retract" value="3" min="0.5" step="0.5"></label>
       <label>Avance en Z (mm/min)<input type="number" id="fz" value="60" min="1" step="5"></label>
       <label>Avance en X-Y (mm/min)<input type="number" id="fxy" value="130" min="1" step="5"></label>
     </div>
+    <details class="more">
+      <summary>Área de trabajo y límites</summary>
+      <div class="params">
+        <label>Recorrido X (mm)<input type="number" id="maxX" min="0" step="10" placeholder="Sin dato"></label>
+        <label>Recorrido Y (mm)<input type="number" id="maxY" min="0" step="10" placeholder="Sin dato"></label>
+        <label>Recorrido Z (mm)<input type="number" id="maxZ" min="0" step="5" placeholder="Sin dato"></label>
+        <label>Husillo máximo (rpm)<input type="number" id="maxRpm" min="0" step="1000" placeholder="Sin dato"></label>
+        <label class="full check"><input type="checkbox" id="changer" checked> Cambia herramientas sola (M06). Si no, el programa se pausa (M00) para cambiarlas a mano.</label>
+      </div>
+    </details>
     <details class="more">
       <summary>Formato del código</summary>
       <div class="params">

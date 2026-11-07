@@ -238,8 +238,9 @@ const signedArea = pts => pts.reduce((a, p, i) => { const q = pts[(i + 1) % pts.
  * @param {Map<number,string>|Object<number,string>} [modes] modo elegido para cada figura (por id de la exterior)
  * @returns {import('../model.js').Element[]}
  */
-export function sketchElements(entities, modes = {}) {
+export function sketchElements(entities, modes = {}, opts = {}) {
   const get = id => (modes instanceof Map ? modes.get(id) : modes[id]);
+  const optsOf = id => (opts[id] ? { opts: opts[id] } : {});
   entities = entities.filter(e => !e.construction); // la geometría de construcción es solo de referencia
   const closed = entities.filter(isClosed).map(e => {
     const pts = entityPts(e).pts;
@@ -265,7 +266,7 @@ export function sketchElements(entities, modes = {}) {
     if (!regs.length) return;
     const nh = holes.length;
     out.push({
-      src: 'sketch', type: 'region', sketchId: c.e.id, mode: get(c.e.id) || 'fill',
+      src: 'sketch', type: 'region', sketchId: c.e.id, mode: get(c.e.id) || 'fill', ...optsOf(c.e.id),
       parts: regs.map(r => ({ outer: r.outer, holes: r.holes })),
       label: entityName(c.e), detail: describe(c.e) + (nh ? ` · ${nh} hueco${nh > 1 ? 's' : ''}` : ''),
       sig: JSON.stringify([c.e, ...holes.map(h => h.e)]),
@@ -275,7 +276,7 @@ export function sketchElements(entities, modes = {}) {
     const lp = entityPts(e);
     if (lp.pts.length < 2) return;
     out.push({
-      src: 'sketch', type: 'line', sketchId: e.id, mode: get(e.id) || 'line', parts: [lp],
+      src: 'sketch', type: 'line', sketchId: e.id, mode: get(e.id) || 'line', parts: [lp], ...optsOf(e.id),
       label: entityName(e), detail: describe(e), sig: JSON.stringify(e),
     });
   });

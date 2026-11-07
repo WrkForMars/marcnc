@@ -17,7 +17,7 @@ export const RAPID_MM_MIN = 1500;
 export function buildTimeline(ex) {
   const segs = [];
   let t = 0;
-  ex.forEach(e => {
+  ex.flatMap(e => (e.steps ? e.steps.map(s => ({ ...s, n: e.n, kind: e.kind })) : [e])).forEach(e => {
     if (!e.to) return;
     const [x0, y0, z0] = e.from, [x1, y1, z1] = e.to;
     let len, arc;
