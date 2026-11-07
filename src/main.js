@@ -2,8 +2,6 @@
 import './styles.css';
 import { buildDesign } from './design.js';
 import { DEMO_SVG, DEMO_TEXT } from './demo.js';
-import { explainProgram } from './cam/explain.js';
-import { generateGcode } from './cam/gcode.js';
 import { buildTimeline, clock, positionAt, segAt, segPoint, timeOfLine } from './cam/simulate.js';
 import { computePlan } from './cam/plan.js';
 import { isDesktop, saveTextDesktop } from './desktop.js';
@@ -280,6 +278,15 @@ $('toolAdd').addEventListener('click', () => {
 });
 renderTools();
 
+/** Lo que el programa necesita de cada figura, sin lo que no se puede mandar al worker (imágenes de la vista previa). */
+function forProgram(e) {
+  return {
+    src: e.src, type: e.type, mode: e.mode, tl: e.tl, op: e.op, copyOf: e.copyOf, copyN: e.copyN,
+    text: e.text ? { text: e.text.text } : undefined,
+    parts: e.type === 'region' && e.parts ? e.parts.map(p => ({ holes: p.holes.map(() => 0) })) : undefined, // solo cuántos huecos
+  };
+}
+
 /** Cambia los ajustes propios de una figura y los guarda donde vive (croquis, texto o dibujo cargado). */
 function setOpts(e, patch) {
   const o = { ...(e.opts || {}), ...patch };
@@ -354,10 +361,19 @@ async function refresh() {
     busy('Escribiendo el código…');
     await tick();
     if (my !== state.gen) return;
-    const g = generateGcode(plan, state.elements, { ...p, tools: allTools(p) });
+    // escribir y explicar el programa va en el worker: uno enorme (un relieve, cientos de pasadas) no traba la página
+    let res;
+    try {
+      res = await run('program', { plan: { tl: plan.tl, order: plan.order, tol: plan.tol }, elements: state.elements.map(forProgram), o: { ...p, tools: allTools(p) } }, { lane: 'program' });
+    } catch (err) {
+      if (err.cancelled) return;
+      throw err;
+    }
+    if (my !== state.gen) return;
+    const g = res.g;
     state.gcode = g.text; state.lastG = g;
-    state.explained = explainProgram(g.text);
-    $('simTime').textContent = `0:00 / ${clock(simTimeline().total)}`;
+    state.explained = res.ex; state.exPartial = res.partial; state.simTotal = res.total;
+    $('simTime').textContent = `0:00 / ${clock(res.total)}`;
     if (state.codeSel > state.explained.length) state.codeSel = 0;
     showCode();
     $('stats').textContent = '';
@@ -1490,7 +1506,20 @@ function simBegin() {
   sim.on = true; sim.drawnT = 0;
   drawOnly();
 }
-function simPlay() {
+/** Un programa enorme llega con solo sus primeras líneas explicadas: para simularlo se piden todas (una vez). */
+async function fullExplain() {
+  if (!state.exPartial) return true;
+  const text = state.gcode;
+  busy('Preparando la simulación…');
+  try {
+    const ex = await run('explain', { text }, { lane: 'explain' });
+    if (text !== state.gcode) return false;
+    state.explained = ex; state.exPartial = false; sim.tl = null;
+    return true;
+  } catch { return false; } finally { busy(null); }
+}
+async function simPlay() {
+  if (!(await fullExplain())) return;
   simBegin();
   if (!sim.on) return;
   if (sim.t >= simTimeline().total) { sim.t = 0; sim.drawnT = 0; }
@@ -1503,12 +1532,13 @@ function simEnd() {
   simPause();
   sim.on = false; sim.t = 0; sim.drawnT = 0; state.simPos = null;
   sctx.clearRect(0, 0, simCv.width, simCv.height);
-  $('simSeek').value = '0'; $('simTime').textContent = `0:00 / ${clock(state.explained.length ? simTimeline().total : 0)}`;
+  $('simSeek').value = '0'; $('simTime').textContent = `0:00 / ${clock(state.explained.length ? (state.exPartial ? state.simTotal : simTimeline().total) : 0)}`;
   simButtons(); drawOnly(); showLine();
 }
 $('simPlay').addEventListener('click', () => (sim.playing ? simPause() : simPlay()));
 $('simStop').addEventListener('click', simEnd);
-$('simSeek').addEventListener('input', () => {
+$('simSeek').addEventListener('input', async () => {
+  if (state.exPartial) { const v = $('simSeek').value; if (!(await fullExplain())) return; $('simSeek').value = v; }
   simBegin();
   if (!sim.on) return;
   simPause();

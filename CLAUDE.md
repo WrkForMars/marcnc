@@ -127,6 +127,8 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
   Procesos largos van en `computePlan` con cesiones del hilo, o en el worker: se agregan a `JOBS` en `jobs.js` y se
   llaman con `run()` de `work.js` (con `lane` si un cambio nuevo debe cancelar el anterior). Lo que usa canvas o DOM se
   queda en la página y le pasa al worker solo los datos.
+  El programa se escribe en el worker (job `program`, con `forProgram` para mandar solo lo necesario de cada figura); con
+  más de 20 000 líneas solo regresan las primeras 4 000 explicadas (`state.exPartial`) y la simulación pide las completas.
 - **Distribución de la interfaz:** la pieza es el centro (banco oscuro `--stage` con reglas en mm). Herramientas en el riel
   izquierdo; inspector a la derecha con pestañas Figuras / Código G que muestra solo lo seleccionado. **Parámetros del
   trabajo** (pieza, herramienta, profundidad) en `#jobDlg`, resumidos en la barra de arriba de la pieza; **ajustes de
@@ -161,7 +163,7 @@ es un cambio de comportamiento que hay que justificar.
 
 ## Pendiente (en orden de valor)
 
-1. Pasar al worker también la escritura y explicación del código G de programas enormes y los textos rellenos
-   (el vectorizado de imágenes y la separación de objetos ya corren ahí).
+1. Pasar al worker los textos rellenos (canvas → ImageTracer). Ya corren ahí: vectorizado, separación de objetos,
+   escritura y explicación del programa, y la simulación del material.
 
 No se firmará el .exe: Windows mostrará la advertencia de SmartScreen la primera vez (Más información → Ejecutar de todas formas).
