@@ -110,7 +110,8 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
   - **Varias herramientas** (Parámetros → Otras herramientas, guardadas en `marcnc:herramientas`; la principal es la 0):
     el programa empieza con la de lo primero que se corta, agrupa por herramienta (grabar y luego recortar) y entre una
     y otra cambia: Fanuc `M05` `G28 G91 Z0` `G90` `T# M06` `S M03`; GRBL `M05`, comentario y `M00` (pausa para cambiarla
-    y tomar Z0). Con una sola herramienta el programa no cambia.
+    y tomar Z0). Con una sola herramienta el programa no cambia. Cada herramienta extra tiene sus avances (los escritos;
+    si no, los sugeridos para el material con su diámetro; si no, los del trabajo) y el tiempo se estima con los de cada una.
   - **Cada figura tiene su profundidad** (`e.op.depth`: la del trabajo, la suya o el grosor + 0.2 si se recorta) y su
     herramienta a esa profundidad (`e.tl`). Lo recortado va al final y, en cada pieza, los huecos antes que el contorno.
   - Contornos cerrados con pasadas de más de 0.25 mm, o recortes: bajan a Z0 y entran en **rampa de 5°** a lo largo del

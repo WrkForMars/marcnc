@@ -55,6 +55,21 @@ describe('varias herramientas', () => {
     expect(t).not.toMatch(/M06/);
     expect(t).toMatch(/G28 G91 Z0\nG90\n\(CAMBIA A T1 FRESA PLANA D6\.35 Y TOMA DE NUEVO Z0\)\nM00/);
   });
+  it('cada herramienta corta con sus propios avances', async () => {
+    const p = { toolType: 'ball', dia: 3.175, depth: 0.1, stepdown: 1 };
+    const tools = [TOOLS[0], { ...TOOLS[1], fxy: 400, fz: 120 }];
+    const bases = tools.map(t => toolGeometry({ ...p, toolType: t.type, dia: t.dia }));
+    const pieza = regionEl(square(10, 10, 30), [], 'cut'), letras = regionEl(square(50, 20, 6), [], 'contour');
+    [pieza, letras].forEach(e => { const k = toolFor(e, tools); e.op = { ...elementOp(e, { depth: 0.1, thick: 3, dia: bases[k].D }), tool: k, base: bases[k] }; });
+    const plan = await computePlan([pieza, letras], bases[0], { tol: 0.01 });
+    const g = generateGcode(plan, [pieza, letras], { ...TAREA, W: 90, H: 80, tools });
+    const [antes, despues] = g.text.split('T1 M06');
+    expect(antes).toMatch(/F130/); expect(antes).not.toMatch(/F400/);
+    expect(despues).toMatch(/F120/); expect(despues).toMatch(/F400/); expect(despues).not.toMatch(/F130|F60\b/);
+    // la duración usa el avance de cada una: con la fresa más rápida, el recorte tarda menos que todo a F130
+    const lento = generateGcode(plan, [pieza, letras], { ...TAREA, W: 90, H: 80, tools: [TOOLS[0], TOOLS[1]] });
+    expect(g.mins).toBeLessThan(lento.mins);
+  });
   it('GRBL: se pausa con M00 para que el operador cambie la herramienta y tome Z0 de nuevo', async () => {
     const t = await job('grbl');
     expect(t).not.toMatch(/M06/);

@@ -192,7 +192,14 @@ $('machineDel').addEventListener('click', () => {
 const TOOLS_STORE = 'marcnc:herramientas';
 try { state.tools = JSON.parse(localStorage.getItem(TOOLS_STORE) || '[]').filter(t => t && t.t > 0 && t.dia > 0); } catch { state.tools = []; }
 /** La principal (la de Parámetros) y las otras, en ese orden: el índice es el que guardan las figuras. */
-function allTools(p = params()) { return [{ t: p.toolNum, type: p.toolType, dia: p.dia }, ...state.tools]; }
+function allTools(p = params()) {
+  return [{ t: p.toolNum, type: p.toolType, dia: p.dia, fxy: p.fxy, fz: p.fz }, ...state.tools.map(t => ({ ...t, ...toolFeeds(t, p) }))];
+}
+/** Avances de una herramienta extra: los que se escribieron; si no, los sugeridos para el material; si no, los del trabajo. */
+function toolFeeds(t, p) {
+  const s = $('material').value ? suggestFeeds($('material').value, { rpm: p.rpm, dia: t.dia }) : null;
+  return { fxy: t.fxy || (s ? s.fxy : p.fxy), fz: t.fz || (s ? s.fz : p.fz), auto: !t.fxy && !t.fz };
+}
 function storeTools() { try { localStorage.setItem(TOOLS_STORE, JSON.stringify(state.tools)); } catch { /* solo esta sesión */ } }
 /** Renglones de "Otras herramientas": número, tipo y diámetro, y quitar. */
 function renderTools() {
@@ -213,8 +220,8 @@ function renderTools() {
     del.type = 'button'; del.className = 'icon ghost'; del.setAttribute('aria-label', `Quitar T${t.t}`); del.title = 'Quitar';
     del.innerHTML = '<svg class="i"><use href="#i-close"/></svg>';
     const save = () => {
-      state.tools[k] = { t: Math.round(+num.value) || t.t, type: type.value, dia: +dia.value > 0 ? +dia.value : t.dia };
-      storeTools(); jobSummary(); refresh();
+      state.tools[k] = { ...state.tools[k], t: Math.round(+num.value) || t.t, type: type.value, dia: +dia.value > 0 ? +dia.value : t.dia };
+      storeTools(); renderTools(); jobSummary(); refresh();
     };
     [num, type, dia].forEach(el => el.addEventListener('change', save));
     del.addEventListener('click', () => {
@@ -225,7 +232,21 @@ function renderTools() {
     });
     const tlab = document.createElement('span'); tlab.textContent = 'T'; tlab.className = 'tool-t';
     row.append(tlab, num, type, dia, del);
-    box.append(row);
+    // sus avances: vacío = sugerido para el material (o los del trabajo)
+    const sug = toolFeeds({ ...t, fxy: 0, fz: 0 }, params());
+    const feeds = document.createElement('div');
+    feeds.className = 'tool-feeds';
+    const fIn = (v, ph, label) => { const i = document.createElement('input'); i.type = 'number'; i.min = '1'; i.max = '20000'; i.step = '5'; i.value = v ? String(v) : ''; i.placeholder = `F${ph}`; i.setAttribute('aria-label', label); return i; };
+    const fx = fIn(t.fxy, sug.fxy, 'Avance en X-Y (mm/min)'), fzI = fIn(t.fz, sug.fz, 'Avance en Z (mm/min)');
+    const lab1 = document.createElement('span'); lab1.textContent = 'Avance X-Y';
+    const lab2 = document.createElement('span'); lab2.textContent = 'Z';
+    feeds.append(lab1, fx, lab2, fzI);
+    const saveFeeds = () => {
+      state.tools[k] = { ...state.tools[k], fxy: +fx.value > 0 ? +fx.value : undefined, fz: +fzI.value > 0 ? +fzI.value : undefined };
+      storeTools(); refresh();
+    };
+    [fx, fzI].forEach(el => el.addEventListener('change', saveFeeds));
+    box.append(row, feeds);
   });
 }
 $('toolAdd').addEventListener('click', () => {
@@ -720,6 +741,8 @@ $('material').addEventListener('change', () => {
   storeParams(); refresh();
   $('toast').textContent = `${MATERIALS[key].name} con S${p.rpm}: avance F${s.fxy}, en Z F${s.fz}, ${s.stepdown} mm por pasada.`;
 });
+// los avances sugeridos de las otras herramientas dependen del material y del husillo
+['material', 'rpm'].forEach(id => $(id).addEventListener('change', () => renderTools()));
 
 /* ---------- plantillas ---------- */
 async function applyTemplate(key) {
@@ -1584,7 +1607,7 @@ function openExport() {
   // con varias herramientas: cuáles más y cómo se cambian
   const tools = allTools(p), used = [...new Set(state.plan.order.map(x => x.tool || 0))];
   if ($('machine').value) rows.unshift({ k: 'Máquina', v: $('machine').value });
-  if (used.length > 1) rows.splice(rows[0].k === 'Máquina' ? 2 : 1, 0, { k: 'En orden', v: used.map(k => toolLabel(tools[k])).join(' → ') + (p.dialect === 'grbl' ? ' · el programa se pausa (M00) en cada cambio: cambia la herramienta y toma Z0 de nuevo' : '') });
+  if (used.length > 1) rows.splice(rows[0].k === 'Máquina' ? 2 : 1, 0, { k: 'En orden', v: used.map(k => `${toolLabel(tools[k])} (F${tools[k].fxy})`).join(' → ') + (p.dialect === 'grbl' ? ' · el programa se pausa (M00) en cada cambio: cambia la herramienta y toma Z0 de nuevo' : '') });
   rows.forEach(({ k, v }) => {
     const dt = document.createElement('dt'), dd = document.createElement('dd');
     dt.textContent = k; dd.textContent = v; $('pfList').append(dt, dd);
