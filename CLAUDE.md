@@ -50,7 +50,8 @@ src/
   geometry/clipper.js  envolturas de Clipper (offset, unión, resta, regiones)
   geometry/simplify.js RDP, distancia a segmento, punto en polígono
   cam/tool.js        ancho de línea según herramienta y profundidad — probado
-  cam/toolpaths.js   relleno / contorno / invertir por elemento — probado
+  cam/toolpaths.js   relleno / contorno / tallado V (vcarve: vueltas cada vez más hondas, 0.1 mm hacia adentro) / invertir
+                     / recortar / barrenar por elemento — probado
   cam/arcs.js        ajuste de arcos G02/G03 — probado
   cam/plan.js        cálculo con caché y orden de corte, cede el hilo cada ~30 ms
   cam/gcode.js       escritura del programa (función pura) — probado

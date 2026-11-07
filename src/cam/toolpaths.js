@@ -24,6 +24,31 @@ export function pocket(paths, tl) {
 }
 
 /**
+ * Tallado en V: vueltas hacia adentro, cada una más honda mientras más lejos está de la orilla (la punta en V corta a
+ * la orilla justo con esa profundidad), así las esquinas salen afiladas. Al llegar a la profundidad del trabajo, lo
+ * que queda adentro se vacía a esa profundidad, con fondo plano.
+ * @returns {{pts:[number,number][], closed:true, z:number, w:number}[]} z: profundidad de la vuelta (negativa); w: ancho
+ */
+export function vcarve(paths, tl) {
+  const tan = Math.tan(Math.min(170, Math.max(5, +tl.src?.vAngle || 60)) * Math.PI / 360), tip = Math.max(0, +tl.src?.vTip || 0);
+  const zMax = tl.depth, out = [];
+  const STEP = 0.1; // 0.1 mm hacia adentro por vuelta: las terrazas quedan de menos de 0.1 mm
+  const base = simplifyPaths(paths, POCKET_TOL);
+  let d = tip / 2 + STEP / 2, flat = false, guard = 0;
+  while (guard++ < 600) {
+    const cur = offset(base, -d);
+    if (!cur.length) break;
+    const z = Math.min(zMax, Math.max(0, (d - tip / 2) / tan));
+    const w = tip + 2 * z * tan;
+    cur.forEach(p => { const f = fromC(p); if (f.length > 2) out.push({ pts: f, closed: true, z: -z, w }); });
+    if (z >= zMax - 1e-9) flat = true;
+    // ya a fondo: el resto se vacía con el ancho que deja la punta a esa profundidad
+    d += flat ? Math.max(0.05, w * 0.45) : STEP;
+  }
+  return out;
+}
+
+/**
  * @param {import('../model.js').Element} e
  * @param {ReturnType<import('./tool.js').toolGeometry>} tl
  * @returns {{paths: import('../model.js').LinePart[], warn: string|null}}
@@ -37,6 +62,12 @@ export function toolpaths(e, tl) {
     if (e.src === 'text' && e.text.h < 4 * tl.w) {
       out.warn = `letras de ${e.text.h} mm con una línea de ${tl.w.toFixed(2)} mm se van a empastar; súbelas a ${Math.ceil(4 * tl.w)} mm o más`;
     }
+    return out;
+  }
+
+  if (e.mode === 'vcarve') {
+    if (tl.type !== 'v') { out.warn = 'el tallado en V necesita un V-bit'; return out; }
+    e.parts.forEach(p => out.paths.push(...vcarve([p.outer, ...p.holes], tl)));
     return out;
   }
 

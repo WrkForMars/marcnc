@@ -2,7 +2,7 @@
 import { area, fromC } from '../geometry/clipper.js';
 import { distSeg, pointInPolygon } from '../geometry/simplify.js';
 
-export const MODE_COLOR = { fill: '--m-fill', contour: '--m-contour', cut: '--m-cut', drill: '--m-drill', invert: '--m-invert', line: '--m-line', skip: '--m-skip' };
+export const MODE_COLOR = { fill: '--m-fill', contour: '--m-contour', vcarve: '--m-vcarve', cut: '--m-cut', drill: '--m-drill', invert: '--m-invert', line: '--m-line', skip: '--m-skip' };
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
 /** Contornos de un elemento en mm, para dibujar el borde y para la selección. */
@@ -117,7 +117,10 @@ export function createPreview(cv) {
     } else elements.forEach(e => {
       if (isDragged(e)) return;
       ctx.lineWidth = Math.max(1, (e.tl ? e.tl.w : toolWidth) * k); // cada figura con el ancho a su profundidad (un recorte, el diámetro)
-      (e.paths || []).forEach(p => { path(p.pts, false); ctx.stroke(); });
+      (e.paths || []).forEach(p => {
+        if (p.w != null) ctx.lineWidth = Math.max(1, p.w * k); // tallado en V: cada vuelta con su ancho
+        path(p.pts, false); ctx.stroke();
+      });
     });
 
     if (plan && showPath && !dragging && !simulating) {

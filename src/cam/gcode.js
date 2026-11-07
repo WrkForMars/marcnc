@@ -150,7 +150,11 @@ export function generateGcode(plan, elements, o) {
     const dr = seq[0] && seq[0].drill;
     L.push(`(${label} - ${MODE_NAME[e.mode]}${dr ? ` DE ${f(2 * dr.r)} MM${dr.kind === 'helix' ? ' EN ESPIRAL' : ''}` : ''}${holes ? ` - ${holes} HUECO${holes > 1 ? 'S' : ''}` : ''}${own}${nTabs ? ` - ${nTabs} PUENTE${nTabs > 1 ? 'S' : ''}` : ''})`);
 
-    seq.forEach(p => {
+    seq.forEach(p0 => {
+      // una vuelta de tallado en V va a su propia profundidad (en pasadas si es más honda que la profundidad por pasada)
+      const zsP = p0.z != null ? levels({ depth: -p0.z, down: te.down }) : zsE;
+      if (p0.z != null && -p0.z < 1e-6) return; // a ras de la cara no corta nada
+      const p = p0;
       if (p.drill) {
         const d = p.drill;
         const start = d.kind === 'point' ? [d.cx, d.cy] : [d.cx + d.rc, d.cy];
@@ -167,7 +171,7 @@ export function generateGcode(plan, elements, o) {
         return;
       }
       // contorno cerrado que entra hondo (o un recorte): rampa de entrada y puentes, en vez de bajar de punta
-      if (p.closed && p.pts.length > 2 && (e.mode === 'cut' || dzPass > 0.25)) {
+      if (p.closed && p.pts.length > 2 && (e.mode === 'cut' || (p.z != null ? -p.z / zsP.length : dzPass) > 0.25)) {
         const pts = ring(p), tabs = tabsOf(p);
         tabsN += tabs.length;
         const [x0, y0] = pts[0];
@@ -176,8 +180,8 @@ export function generateGcode(plan, elements, o) {
         L.push(`G01 Z${f(0)} F${fz}`); // a ras de la cara; de ahí baja en rampa
         plunges++;
         let lx = x0, ly = y0, lz = 0;
-        zsE.forEach((z, zi) => {
-          const w = passWalk(pts, { zFrom: zi ? zsE[zi - 1] : 0, z, ramp: true, tabs, tabTop: e.op?.tabTop, cleanup: zi === zsE.length - 1 });
+        zsP.forEach((z, zi) => {
+          const w = passWalk(pts, { zFrom: zi ? zsP[zi - 1] : 0, z, ramp: true, tabs, tabTop: e.op?.tabTop, cleanup: zi === zsP.length - 1 });
           let needF = true;
           w.slice(1).forEach(([x, y, zz]) => {
             const sx = f(x), sy = f(y), sz = f(zz);
@@ -201,7 +205,7 @@ export function generateGcode(plan, elements, o) {
         return;
       }
       const moves = useArcs ? arcMoves(p.dense || p.pts, arcTol) : p.pts.slice(1).map(q => ({ arc: false, to: q }));
-      zsE.forEach((z, zi) => {
+      zsP.forEach((z, zi) => {
         const [x0, y0] = p.pts[0];
         // un contorno cerrado termina donde empezó: la siguiente pasada baja sin moverse
         if (zi === 0 || !p.closed) {

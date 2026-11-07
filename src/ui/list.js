@@ -86,8 +86,8 @@ export function renderList(box, allBox, s) {
     seg.className = 'modes';
     seg.setAttribute('role', 'group');
     seg.setAttribute('aria-label', 'Modo de corte');
-    // Barrenar solo tiene sentido en un círculo
-    MODES[e.type].filter(([m]) => m !== 'drill' || e.mode === 'drill' || circleOf(e)).forEach(([m, label]) => {
+    // Barrenar solo en un círculo; Tallado V solo con un V-bit
+    MODES[e.type].filter(([m]) => m === e.mode || (m !== 'drill' || circleOf(e)) && (m !== 'vcarve' || e.tl?.type === 'v')).forEach(([m, label]) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = label;
@@ -111,7 +111,7 @@ export function renderList(box, allBox, s) {
     lab.textContent = 'Todas las figuras';
     const g = document.createElement('div');
     g.className = 'modes';
-    MODES.region.filter(([m]) => m !== 'drill').forEach(([m, label]) => {
+    MODES.region.filter(([m]) => m !== 'drill' && m !== 'vcarve').forEach(([m, label]) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = label;

@@ -77,6 +77,7 @@ export async function computePlan(elements, tl, opts) {
           const dense = p.closed ? simplify(p.pts, true, 0) : p.pts;
           const q = dense.length > pts.length ? { pts, closed: p.closed, dense } : { pts, closed: p.closed };
           if (p.hole) q.hole = true;
+          if (p.z != null) { q.z = p.z; q.w = p.w; } // tallado en V: cada vuelta a su profundidad
           return q;
         })
         .filter(p => p.pts.length > 1);
