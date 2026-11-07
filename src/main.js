@@ -1570,6 +1570,7 @@ $('sheetForm').addEventListener('submit', async ev => {
   $('sheet').innerHTML = sheetHTML({
     info, p, tl: state.plan.tl, g: state.lastG, ex: state.explained, elements: state.elements, image,
     fileName: `${safeName(state.fileName)}_GM.txt`, withProgram: $('shProgram').checked, test: $('shTest').checked,
+    tools: [...new Set(state.plan.order.map(x => x.tool || 0))].map(k => toolLabel(allTools(p)[k])),
   });
   // la imagen ya está en memoria; el tope evita quedarse esperando si el navegador no la decodifica (ventana oculta)
   await new Promise(r => { const im = $('sheet').querySelector('img'); if (!im || im.complete) r(); else { im.onload = r; im.onerror = r; setTimeout(r, 1500); } });

@@ -2,11 +2,12 @@
 // Se arma en #sheet y se imprime (o se guarda como PDF desde el diálogo de impresión).
 import { blockRanges } from '../cam/explain.js';
 import { bbox } from '../preview/canvas.js';
+import { MODES } from '../model.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const f2 = v => (+v).toFixed(2);
 const TOOL = { ball: 'Ball mill (punta esférica)', flat: 'Fresa plana', v: 'V-bit' };
-const MODE_ES = { fill: 'Relleno', contour: 'Contorno', invert: 'Invertir', line: 'Línea', skip: 'Omitir' };
+const MODE_ES = Object.fromEntries(Object.values(MODES).flat()); // todos los modos, con el nombre que ve el alumno
 const MAX_ROWS = 3000;
 
 /**
@@ -41,15 +42,24 @@ export function sheetImage({ elements, W, H, toolWidth, css }) {
   // grabado con el ancho real, en gris, y la trayectoria del centro en negro
   const path = pts => { x.beginPath(); pts.forEach(([a, b], j) => (j ? x.lineTo(X(a), Y(b)) : x.moveTo(X(a), Y(b)))); x.stroke(); };
   x.lineCap = 'round'; x.lineJoin = 'round';
-  x.strokeStyle = '#b5b5b5'; x.lineWidth = Math.max(2, toolWidth * k);
-  elements.forEach(e => (e.paths || []).forEach(p => path(p.pts)));
+  // cada figura con el ancho que deja a su profundidad (un recorte, el diámetro; el tallado en V, cada vuelta el suyo);
+  // un relieve se marca con su rectángulo: su zigzag llenaría el dibujo
+  const drawn = elements.filter(e => e.type !== 'relief');
+  // lo que la fresa corta por fuera de la pieza es aire: no tapa la regla
+  x.save(); x.beginPath(); x.rect(X(0), Y(H), W * k, H * k); x.clip();
+  x.strokeStyle = '#b5b5b5';
+  drawn.forEach(e => (e.paths || []).forEach(p => { x.lineWidth = Math.max(2, (p.w ?? (e.tl ? e.tl.w : toolWidth)) * k); path(p.pts); }));
   x.strokeStyle = ink; x.lineWidth = 1.5;
-  elements.forEach(e => (e.paths || []).forEach(p => path(p.pts)));
+  drawn.forEach(e => (e.paths || []).forEach(p => path(p.pts)));
+  x.restore();
+  elements.filter(e => e.type === 'relief').forEach(e => {
+    const r = e.relief; x.setLineDash([12, 8]); x.strokeRect(X(r.x0), Y(r.y0 + r.h), r.w * k, r.h * k); x.setLineDash([]);
+  });
 
   // número de cada figura
   x.font = '600 22px "IBM Plex Mono", monospace'; x.textBaseline = 'middle';
   elements.forEach((e, i) => {
-    if (!e.paths || !e.paths.length) return;
+    if (!e.paths || !e.paths.length || e.copyOf != null) return; // las copias no llevan número
     const bb = bbox(e);
     if (!bb) return;
     const lbl = e.src === 'text' ? 'T' : String(i + 1), w = x.measureText(lbl).width + 14;
@@ -62,7 +72,8 @@ export function sheetImage({ elements, W, H, toolWidth, css }) {
 }
 
 /**
- * @param {{info:any, p:any, tl:any, g:any, ex:import('../cam/explain.js').Explained[], elements:any[], image:string, fileName:string, withProgram:boolean, test?:boolean}} d
+ * @param {{info:any, p:any, tl:any, g:any, ex:import('../cam/explain.js').Explained[], elements:any[], image:string, fileName:string, withProgram:boolean, test?:boolean, tools?:string[]}} d
+ *   tools: las herramientas que usa el programa, en orden
  *   test: agrega el registro de prueba en máquina
  * @returns {string} HTML de la hoja
  */
@@ -74,6 +85,7 @@ export function sheetHTML(d) {
   const ranges = blockRanges(ex);
   const lineOf = block => ranges.find(r => r.block === block);
   const figs = elements.map((e, i) => {
+    if (e.copyOf != null) return ''; // las copias van en el renglón del original
     const name = e.src === 'text' ? `TEXTO "${e.text.text.toUpperCase().replace(/[()]/g, '')}"` : `FIGURA ${i + 1}`;
     const r = lineOf(name), bb = bbox(e), first = e.paths && e.paths[0] ? e.paths[0].pts[0] : null;
     const label = e.src === 'text' ? `T · “${e.text.text}”` : `${i + 1} · ${e.label || (e.type === 'line' ? 'Trazo' : 'Figura')}`;
@@ -82,7 +94,7 @@ export function sheetHTML(d) {
   }).join('');
 
   const prog = d.withProgram ? `<h2>Programa explicado</h2>
-    ${ex.length > MAX_ROWS ? `<p class="note">El programa tiene ${ex.length} líneas; aquí van las primeras ${MAX_ROWS}. El archivo .txt va completo.</p>` : ''}
+    ${g.lines > MAX_ROWS ? `<p class="note">El programa tiene ${g.lines} líneas; aquí van las primeras ${MAX_ROWS}. El archivo .txt va completo.</p>` : ''}
     <table class="prog"><thead><tr><th>N</th><th>Código</th><th>Qué hace</th></tr></thead><tbody>
     ${ex.slice(0, MAX_ROWS).map(e => `<tr><td>${e.n}</td><td>${esc(e.code)}</td><td>${esc(e.text)}</td></tr>`).join('')}
     </tbody></table>` : '';
@@ -105,6 +117,7 @@ export function sheetHTML(d) {
       ['Husillo', `S${p.rpm} rpm (M03)`, 'Pasadas', `${g.passes} de ${f2(tl.depth / g.passes)} mm`],
       ['Avance en Z', `F${p.fz} mm/min`, 'Avance en X-Y', `F${p.fxy} mm/min`],
       ['Retracción', `Z${f2(p.retract)} mm`, 'Controlador', p.dialect === 'fanuc' ? 'Fanuc / Haas' : 'GRBL'],
+      ...extraRows(d),
       ['Líneas del programa', String(g.lines), 'Corte y tiempo', `${g.cutLen.toFixed(0)} mm · ~${Math.max(1, Math.round(g.mins))} min`],
     ])}
   </table>
@@ -156,4 +169,26 @@ export function testRecord(d) {
     </tbody></table>
     <p class="note">Observaciones:</p><div class="lines"></div>
   </div>`;
+}
+
+/**
+ * Renglones de parámetros que solo aplican a veces: el recorte (hasta dónde y en cuántas pasadas, con cuántos puentes),
+ * otras profundidades, varias herramientas y copias.
+ * @returns {[string,string,string,string][]}
+ */
+function extraRows(d) {
+  const { tl, g, elements } = d, rows = [];
+  const live = elements.filter(e => e.mode !== 'skip' && e.tl);
+  const cut = live.find(e => e.mode === 'cut');
+  if (cut) {
+    const n = Math.max(1, Math.ceil(cut.tl.depth / cut.tl.down - 1e-9));
+    rows.push(['Recorte', `${f2(cut.tl.depth)} mm en ${n} pasada${n > 1 ? 's' : ''} de ${f2(cut.tl.depth / n)} mm, entrada en rampa`, 'Puentes', g.tabs ? `${g.tabs}, cortarlos a mano al final` : 'ninguno']);
+  }
+  const drills = live.filter(e => e.mode === 'drill' || (e.paths || []).some(p => p.drill)).length;
+  const other = [...new Set(live.filter(e => e.mode !== 'cut' && e.mode !== 'drill' && Math.abs(e.tl.depth - tl.depth) > 1e-9).map(e => f2(e.tl.depth)))];
+  if (drills || other.length) rows.push(['Barrenos', drills ? `${drills} figura${drills > 1 ? 's' : ''} con barrenos (G81/G83 o espiral)` : '—', 'Otras profundidades', other.length ? `${other.join(', ')} mm` : '—']);
+  if (d.tools && d.tools.length > 1) rows.push(['Herramientas en orden', d.tools.join(' → '), 'Cambio', d.p.dialect === 'grbl' || d.p.changer === false ? 'Pausa M00: cambiarla a mano y tomar Z0' : 'Automático (M06)']);
+  const copies = 1 + new Set(elements.filter(e => e.copyOf != null).map(e => e.copyN)).size;
+  if (copies > 1) rows.push(['Copias', `${copies} en la placa`, '', '']);
+  return rows;
 }
