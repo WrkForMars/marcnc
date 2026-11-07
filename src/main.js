@@ -717,7 +717,8 @@ async function applyTemplate(key) {
   }
   state.fileName = t.name; $('docName').value = t.name;
   rebuildDesign(); assemble(); select(-1); await refresh();
-  $('toast').textContent = `${t.name}: pieza de ${t.W} × ${t.H} mm.${t.texts.length ? ' Toca un texto para cambiarlo.' : ''}`;
+  $('toast').textContent = `${t.name}: pieza de ${t.W} × ${t.H} mm.${t.tip ? ` ${t.tip}` : t.texts.length ? ' Toca un texto para cambiarlo.' : ''}`;
+  if (t.tip) $('shTest').checked = true; // la pieza de prueba sale con su registro
 }
 document.querySelectorAll('[data-template]').forEach(b => b.addEventListener('click', () => applyTemplate(b.dataset.template)));
 
@@ -1468,7 +1469,7 @@ $('sheetForm').addEventListener('submit', async ev => {
   const image = sheetImage({ elements: state.elements, W: p.W, H: p.H, toolWidth: state.plan.tl.w, css });
   $('sheet').innerHTML = sheetHTML({
     info, p, tl: state.plan.tl, g: state.lastG, ex: state.explained, elements: state.elements, image,
-    fileName: `${safeName(state.fileName)}_GM.txt`, withProgram: $('shProgram').checked,
+    fileName: `${safeName(state.fileName)}_GM.txt`, withProgram: $('shProgram').checked, test: $('shTest').checked,
   });
   // la imagen ya está en memoria; el tope evita quedarse esperando si el navegador no la decodifica (ventana oculta)
   await new Promise(r => { const im = $('sheet').querySelector('img'); if (!im || im.complete) r(); else { im.onload = r; im.onerror = r; setTimeout(r, 1500); } });

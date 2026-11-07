@@ -60,7 +60,7 @@ function ruler(x0, top) {
 const R = ruler(7, 26);
 
 /**
- * @type {Record<string, {name:string, W:number, H:number, entities:object[], modes:string[],
+ * @type {Record<string, {name:string, W:number, H:number, entities:object[], modes:string[], tip?:string,
  *   texts:{text:string, h:number, x:number, y:number}[]}>}
  *   modes: modo de cada figura, en el mismo orden (la de afuera manda cuando una tiene huecos)
  */
@@ -89,6 +89,19 @@ export const TEMPLATES = {
     ],
     modes: ['cut', 'cut', 'cut', 'cut', 'cut', 'cut'], // sale recortado, con barreno y aligerados huecos
     texts: [],
+  },
+  prueba: {
+    // para probar la máquina del taller en un retazo: cada cosa se mide y se anota en el registro de prueba
+    name: 'Prueba de máquina', W: 70, H: 40,
+    tip: 'Graba con la ball mill y agrega una fresa plana en Parámetros → Otras herramientas para recortar y barrenar. Al exportar, la Hoja de entrega trae el registro de prueba.',
+    entities: [
+      { type: 'rect', x: 2, y: 2, w: 66, h: 36, rr: 3 }, // se recorta: medir que salga de 66 × 36
+      { type: 'circle', cx: 12, cy: 12, r: 1.6 }, // del tamaño de una fresa de 1/8": se barrena (G81)
+      { type: 'circle', cx: 12, cy: 28, r: 4 }, // de 8 mm: se recorta por dentro (o en espiral si es un barreno)
+      { type: 'line', pts: [[24, 12], [54, 12]], closed: false }, // raya de 30 mm: medir su ancho y su largo
+    ],
+    modes: ['cut', 'cut', 'cut', 'line'],
+    texts: [{ text: 'PRUEBA', h: 5, x: 40, y: 27 }],
   },
   posavasos: {
     name: 'Posavasos', W: 90, H: 90,

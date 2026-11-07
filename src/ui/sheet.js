@@ -62,7 +62,8 @@ export function sheetImage({ elements, W, H, toolWidth, css }) {
 }
 
 /**
- * @param {{info:any, p:any, tl:any, g:any, ex:import('../cam/explain.js').Explained[], elements:any[], image:string, fileName:string, withProgram:boolean}} d
+ * @param {{info:any, p:any, tl:any, g:any, ex:import('../cam/explain.js').Explained[], elements:any[], image:string, fileName:string, withProgram:boolean, test?:boolean}} d
+ *   test: agrega el registro de prueba en máquina
  * @returns {string} HTML de la hoja
  */
 export function sheetHTML(d) {
@@ -117,8 +118,42 @@ export function sheetHTML(d) {
   <h2>Figuras</h2>
   <table><thead><tr><th>Figura</th><th>Modo</th><th>Primer punto</th><th>Ocupa</th><th>Líneas del programa</th></tr></thead><tbody>${figs}</tbody></table>
 
+  ${d.test ? testRecord(d) : ''}
+
   ${prog}
 
   <div class="sign"><div>Elaboró</div><div>Revisó</div><div>Calificación</div></div>`;
 }
 
+
+/**
+ * Registro de prueba en máquina: lo que el programa espera y un espacio para anotar lo medido en el retazo. Con eso se
+ * sabe si la máquina acepta el programa y qué tan cerca quedan el ancho de línea, las medidas y el tiempo.
+ * @param {{p:any, tl:any, g:any, elements:any[], ex:any[]}} d
+ */
+export function testRecord(d) {
+  const { tl, g, elements, ex } = d;
+  const live = elements.filter(e => e.mode !== 'skip');
+  const rows = [['El control acepta el programa sin alarmas', 'Corre completo', '']];
+  rows.push(['Ancho de línea grabada', `${f2(tl.w)} mm`, '']);
+  rows.push(['Profundidad del grabado', `${f2(tl.depth)} mm`, '']);
+  const cut = live.find(e => e.mode === 'cut' && e.parts);
+  if (cut) {
+    const bb = bbox(cut);
+    rows.push(['Medida de la pieza recortada', `${f2(bb[2] - bb[0])} × ${f2(bb[3] - bb[1])} mm`, '']);
+    if (g.tabs) rows.push(['Los puentes sostienen la pieza hasta el final', `${g.tabs} puente${g.tabs > 1 ? 's' : ''}`, '']);
+  }
+  const drills = ex.filter(e => e.kind === 'drill').length + (ex.some(e => /G0[23] .*Z-/.test(e.code)) ? 1 : 0);
+  if (drills) rows.push(['Barrenos: diámetro y si atraviesan', `Ø${f2(tl.D)} mm`, '']);
+  if (ex.some(e => /M06|M00/.test(e.code) && e.n > 12)) rows.push(['Cambio de herramienta (y Z0 de nuevo si es a mano)', 'Sin golpes ni brincos de Z', '']);
+  rows.push(['Tiempo de corte', `~${Math.max(1, Math.round(g.mins))} min`, '']);
+  rows.push(['Avance y sonido (sin vibrar ni quemar)', '', '']);
+  return `<div class="avoid">
+    <h2>Registro de prueba en máquina</h2>
+    <p class="note">Corre el programa en un retazo del mismo material, con una tabla de sacrificio debajo. Anota lo medido y marca si quedó bien.</p>
+    <table class="test"><thead><tr><th>Qué revisar</th><th>Esperado</th><th>Medido</th><th>¿Bien?</th></tr></thead><tbody>
+    ${rows.map(([a, b]) => `<tr><td>${esc(a)}</td><td>${esc(b)}</td><td class="blank"></td><td class="box">☐</td></tr>`).join('')}
+    </tbody></table>
+    <p class="note">Observaciones:</p><div class="lines"></div>
+  </div>`;
+}

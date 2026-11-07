@@ -398,6 +398,10 @@ dialog .params{margin:16px 0}
 #sheet .sign{display:flex;gap:16mm;margin-top:12mm}
 #sheet .sign div{flex:1;border-top:1px solid var(--sheet-ink);padding-top:1mm;text-align:center;font-size:9pt}
 #sheet .avoid{break-inside:avoid}
+#sheet .test td.blank{width:28mm}
+#sheet .test td.box{width:12mm;text-align:center;font-size:12pt}
+#sheet .test td{height:8mm}
+#sheet .lines{height:24mm;background:repeating-linear-gradient(to bottom,transparent 0 7.5mm,var(--sheet-line) 7.5mm 8mm)}
 .tabpanel .code{max-height:max(240px,calc(100vh - 420px))}
 
 /* estado de definición de la figura elegida */

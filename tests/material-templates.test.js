@@ -64,3 +64,17 @@ describe('plantillas', () => {
     expect(els[0].parts[0].holes).toHaveLength(5); // barreno y cuatro aligerados
   });
 });
+
+describe('pieza de prueba', () => {
+  it('trae recorte, barreno del tamaño de 1/8", hueco grande, raya de 30 mm y texto', async () => {
+    const { TEMPLATES } = await import('../src/templates.js');
+    const { sketchElements } = await import('../src/sketch/geometry.js');
+    const t = TEMPLATES.prueba;
+    const els = sketchElements(t.entities.map((e, i) => ({ ...e, id: i + 1 })), Object.fromEntries(t.modes.map((m, i) => [i + 1, m])));
+    const placa = els.find(e => e.type === 'region');
+    expect(placa.mode).toBe('cut'); expect(placa.parts[0].holes).toHaveLength(2);
+    const raya = els.find(e => e.type === 'line');
+    expect(Math.hypot(raya.parts[0].pts[1][0] - raya.parts[0].pts[0][0], raya.parts[0].pts[1][1] - raya.parts[0].pts[0][1])).toBe(30);
+    expect(t.texts[0].text).toBe('PRUEBA');
+  });
+});
