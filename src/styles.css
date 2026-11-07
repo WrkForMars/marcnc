@@ -393,8 +393,11 @@ dialog .params{margin:16px 0}
 #sheet th{background:var(--sheet-fill);font-weight:600}
 #sheet .info td:nth-child(odd){width:22%;font-weight:600;background:var(--sheet-fill)}
 #sheet .prog{font-size:8.5pt}
-#sheet .prog td:first-child{width:9mm;text-align:right;color:var(--sheet-muted)}
-#sheet .prog td:nth-child(2){font-family:var(--f-mono);white-space:pre;width:52mm}
+#sheet .prog td:first-child{text-align:right;color:var(--sheet-muted)}
+#sheet .prog{table-layout:fixed}
+#sheet .prog th:first-child{width:11mm}
+#sheet .prog th:nth-child(2){width:62mm}
+#sheet .prog td:nth-child(2){font-family:var(--f-mono);white-space:pre-wrap;overflow-wrap:anywhere} /* un comentario largo se parte: la explicación conserva su ancho */
 #sheet .prog tr{break-inside:avoid}
 #sheet img{width:100%;border:1px solid var(--sheet-line)}
 #sheet .note{color:var(--sheet-muted);font-size:9pt;margin:1mm 0}
