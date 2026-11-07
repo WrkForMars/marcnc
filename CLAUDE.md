@@ -64,6 +64,9 @@ src/
                      sin comerse lo de al lado) y zigzag simplificado en 3D; se desbasta por niveles — probado
   cam/stock.js       resultado: placa virtual tallada por el programa (sello de cada herramienta a lo largo de la línea
                      de tiempo) y su imagen sombreada; corre en el worker (casilla Ver resultado) — probado
+  cam/copies.js      varias copias en una placa: cuadrícula desde el dibujo (copyOffsets) y figura corrida (shiftElement).
+                     Las copias van al final de state.elements con copyOf (índice del original): siguen su modo y
+                     ajustes, no salen en la lista, y tocarlas elige el original — probado
   cam/checks.js      revisión antes de cortar: ficha de preparación (Exportar) y avisos de valores sin sentido — probado
   cam/material.js    perfiles de material: avances sugeridos por carga de viruta con el husillo de la máquina y avisos — probado
   cam/simulate.js    línea de tiempo del programa (duración por avance, posición en cada instante) — probado

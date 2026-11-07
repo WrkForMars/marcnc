@@ -176,6 +176,7 @@ export function createPreview(cv) {
       const bb = bbox(e);
       if (!bb) return;
       const tx = X(bb[2]) - 2, ty = Y(bb[3]) - 3;
+      if (e.copyOf != null) return; // las copias no llevan número: se eligen y cambian con el original
       const lbl = e.src === 'text' ? 'T' : String(i + 1);
       const w = ctx.measureText(lbl).width + 8;
       ctx.fillStyle = css(MODE_COLOR[e.mode].replace('--m-', '--pm-')); // la placa es clara en ambos temas

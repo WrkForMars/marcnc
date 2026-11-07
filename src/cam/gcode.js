@@ -145,7 +145,7 @@ export function generateGcode(plan, elements, o) {
     if ((tool || 0) !== cur) changeTool(tool || 0);
     const te = e.tl || tl, zsE = te === tl ? zs : levels(te);
     const holes = e.type === 'region' && e.parts.length === 1 ? e.parts[0].holes.length : 0;
-    const label = e.src === 'text' ? `TEXTO "${commentSafe(e.text.text)}"` : `FIGURA ${i + 1}`;
+    const label = (e.src === 'text' ? `TEXTO "${commentSafe(e.text.text)}"` : `FIGURA ${(e.copyOf ?? i) + 1}`) + (e.copyOf != null ? ` COPIA ${e.copyN}` : '');
     // la profundidad solo se repite si esta figura tiene la suya
     const own = te.depth === tl.depth ? '' : e.mode === 'drill' ? ` - PROF. ${f(te.depth)} MM`
       : ` - PROF. ${f(te.depth)} MM EN ${zsE.length} PASADA${zsE.length > 1 ? 'S' : ''}`;

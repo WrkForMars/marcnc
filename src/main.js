@@ -16,6 +16,7 @@ import { shadeStock } from './cam/stock.js';
 import { duration, jobRisks, machineRisks, setupSheet } from './cam/checks.js';
 import { elementOp } from './cam/cut.js';
 import { toolFor, toolLabel } from './cam/tools.js';
+import { copyOffsets, shiftElement } from './cam/copies.js';
 import { toolFigure } from './ui/tool-figure.js';
 import { createBack } from './ui/back.js';
 import { dxfEntities, parseDxf } from './input/dxf.js';
@@ -65,7 +66,7 @@ document.addEventListener('change', ev => {
 
 function params() {
   return {
-    W: num('pw', 90), H: num('ph', 50), thick: num('thick', 3), margin: num('margin', 3), fit: $('fit').value, drawW: num('dw', 0), speck: num('speck', 0.5),
+    W: num('pw', 90), H: num('ph', 50), thick: num('thick', 3), copies: Math.max(1, Math.round(num('copies', 1))), gap: num('gap', 3), margin: num('margin', 3), fit: $('fit').value, drawW: num('dw', 0), speck: num('speck', 0.5),
     toolType: $('ttype').value, dia: num('tdia', 3.175), depth: num('depth', 0.1), vAngle: num('vang', 60), vTip: num('vtip', 0.1),
     stepoverPct: num('stepover', 45), stepdown: num('stepdown', 0.2),
     toolNum: num('tnum', 1), rpm: num('rpm', 1000), fz: num('fz', 60), fxy: num('fxy', 130), retract: num('retract', 3),
@@ -93,12 +94,32 @@ function rebuildSketch() {
   state.sketchEls = sketchElements(sketch.entities, sketch.modes, sketch.opts);
 }
 function assemble() {
-  state.elements = state.design.concat(state.sketchEls, state.texts.map(textElement).filter(Boolean));
+  const base = state.design.concat(state.sketchEls, state.texts.map(textElement).filter(Boolean));
+  state.elements = base.concat(copiesOf(base));
   state.hovered = -1; // los índices cambiaron
   if (state.selected >= state.elements.length) state.selected = -1;
 }
-const keyOf = e => (e.src === 'text' ? `t${e.text.id}:${e.text.x}:${e.text.y}:${e.text.rev}`
+const keyOf = e => (e.copyOf != null ? `${keyOf(state.elements[e.copyOf])}@${e.shift}` // una copia: la misma figura, en otro lugar
+  : e.src === 'text' ? `t${e.text.id}:${e.text.x}:${e.text.y}:${e.text.rev}`
   : e.src === 'sketch' ? `s${e.sketchId}:${e.sig}` : `d${state.rawId}:${state.design.indexOf(e)}`);
+
+/**
+ * Copias del dibujo para llenar la placa (Parámetros → Copias): cada figura viva, corrida a su lugar en la cuadrícula.
+ * Lo que ocupa el dibujo incluye medio diámetro de la herramienta más gruesa (al recortar, la fresa pasa por fuera).
+ */
+function copiesOf(base) {
+  const p = params();
+  state.copiesFit = 1;
+  if (!(p.copies > 1)) return [];
+  const live = base.map((e, i) => ({ e, i })).filter(({ e }) => e.mode !== 'skip');
+  const boxes = live.map(({ e }) => bbox(e)).filter(Boolean);
+  if (!boxes.length) return [];
+  const r = Math.max(...allTools(p).map(t => t.dia)) / 2;
+  const box = [Math.min(...boxes.map(b => b[0])) - r, Math.min(...boxes.map(b => b[1])) - r, Math.max(...boxes.map(b => b[2])) + r, Math.max(...boxes.map(b => b[3])) + r];
+  const { offsets, fit } = copyOffsets(box, p.copies, { W: p.W, H: p.H, gap: p.gap });
+  state.copiesFit = fit;
+  return offsets.flatMap(([dx, dy], k) => live.map(({ e, i }) => Object.assign(shiftElement(e, dx, dy), { copyOf: i, copyN: k + 2, shift: `${dx.toFixed(3)},${dy.toFixed(3)}` })));
+}
 
 function select(i) {
   state.selected = i;
@@ -139,7 +160,8 @@ function drawOnly(dragging = false) {
 }
 function renderAll() {
   drawOnly();
-  $('elCount').textContent = state.elements.length ? String(state.elements.length) : '';
+  const nBase = state.elements.filter(e => e.copyOf == null).length;
+  $('elCount').textContent = nBase ? String(nBase) : '';
   $('modeLegend').hidden = !state.elements.length;
   syncEmpty();
   renderList($('els'), $('allModes'), {
@@ -150,6 +172,7 @@ function renderAll() {
     onModeAll: m => { state.elements.forEach(e => { if (e.type === 'region') { e.mode = m; if (e.src === 'text') e.text.mode = m; if (e.src === 'sketch') sketch.setMode(e.sketchId, m); } }); storeSketch(); refresh(); },
     onOpts: (i, patch) => { setOpts(state.elements[i], patch); refresh(); },
     job: { depth: num('depth', 0.1), thick: num('thick', 3), tools: allTools().map(toolLabel) },
+    copies: params().copies > 1 ? Math.min(params().copies, state.copiesFit || 1) : 1,
   });
 }
 
@@ -279,6 +302,7 @@ function warnings(p, plan, g) {
   const thin = state.elements.map((e, i) => (e.warn ? { e, i } : null)).filter(Boolean);
   const ws = [];
   if (state.designNote) ws.push(state.designNote);
+  if (p.copies > state.copiesFit) ws.push(`Pediste ${p.copies} copias y caben ${state.copiesFit} en la placa de ${p.W} × ${p.H} mm (empiezan donde está el dibujo). Acerca el dibujo a la esquina, junta las copias o agranda la placa.`);
   const nums = allTools(p).map(t => t.t), dup = nums.filter((t, k) => nums.indexOf(t) !== k);
   if (dup.length) ws.push(`Dos herramientas tienen el número T${dup[0]}: la máquina no sabría cuál tomar. Cambia el número en Parámetros del trabajo.`);
   // el filo y la punta se revisan con la figura más honda (un recorte atraviesa todo el grosor)
@@ -311,6 +335,7 @@ async function refresh() {
   // con qué herramienta va cada figura (la principal, o la que eligió el usuario, o la fresa plana para recortar)
   const tools = allTools(p), bases = tools.map((t, k) => (k ? toolGeometry({ ...p, toolType: t.type, dia: t.dia }) : tl));
   state.elements.forEach(e => {
+    if (e.copyOf != null) { const b = state.elements[e.copyOf]; e.mode = b.mode; e.opts = b.opts; } // las copias siguen al original
     const k = toolFor(e, tools);
     e.op = { ...elementOp(e, { depth: tl.depth, thick: p.thick, dia: bases[k].D }), tool: k, base: bases[k] };
   });
@@ -675,7 +700,7 @@ $('dh').addEventListener('change', () => {
   if (w && h && v > 0) $('dw').value = r1(v * w / h);
   storeParams(); rebuildDesign(); assemble(); refresh();
 });
-['pw', 'ph', 'margin', 'speck', 'fit', 'dw'].forEach(id => $(id).addEventListener('change', () => { rebuildDesign(); assemble(); refresh(); }));
+['pw', 'ph', 'margin', 'speck', 'fit', 'dw', 'copies', 'gap'].forEach(id => $(id).addEventListener('change', () => { rebuildDesign(); assemble(); refresh(); }));
 ['depth', 'thick', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'rpm', 'fz', 'fxy', 'retract', 'stepdown', 'stepover', 'dialect', 'dec', 'tol', 'prog', 'arcs',
   'maxX', 'maxY', 'maxZ', 'maxRpm', 'changer']
   .forEach(id => $(id).addEventListener('change', () => { $('vAngLbl').hidden = $('vTipLbl').hidden = $('ttype').value !== 'v'; refresh(); }));
@@ -1224,7 +1249,8 @@ cv.addEventListener('pointerdown', ev => {
     if (sketch.tool === 'select') { syncSketchSelection(); select(state.selected); renderAll(); }
     return;
   }
-  const i = preview.hit(mx, my, state.elements, state.plan ? state.plan.tl.w : 1);
+  let i = preview.hit(mx, my, state.elements, state.plan ? state.plan.tl.w : 1);
+  if (i >= 0 && state.elements[i].copyOf != null) i = state.elements[i].copyOf; // tocar una copia elige el original
   select(i);
   if (i >= 0 && state.elements[i].src === 'text') {
     const [x, y] = mm;
