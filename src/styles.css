@@ -77,6 +77,7 @@ input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent);margin:0;
 .err{color:var(--warn)}
 .row2{display:flex;gap:8px;flex-wrap:wrap}
 .sketchbar.blank .sk-status{visibility:hidden}
+.spec-checks{display:flex;flex-direction:column;gap:4px}
 .kind{display:flex;flex-direction:column;gap:4px;margin-bottom:8px}
 .kind-lbl{font-size:12px;font-weight:600;color:var(--muted)}
 .row-between{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}

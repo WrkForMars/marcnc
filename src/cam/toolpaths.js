@@ -89,7 +89,7 @@ export function toolpaths(e, tl) {
   if (e.mode === 'cut') {
     // por fuera del contorno y por dentro de los huecos, con el radio de la herramienta a fondo; un hueco redondo del
     // tamaño de la herramienta se barrena (si no, se perdería: la herramienta no cabe para recortarlo por dentro)
-    let lostHoles = 0;
+    let lostHoles = 0, narrow = 0;
     e.parts.forEach(p => {
       const rest = [];
       p.holes.forEach(h => {
@@ -99,8 +99,13 @@ export function toolpaths(e, tl) {
       });
       const r = profilePaths([p.outer, ...rest], tl.D / 2);
       out.paths.push(...r.paths); lostHoles += r.lost;
+      // lo que la herramienta no alcanza por fuera (entre los dientes de un engrane, en esquinas hacia adentro):
+      // crecer y volver a encoger el contorno rellena justo esos huecos
+      const outerOnly = [p.outer];
+      narrow += Math.max(0, area(offset(offset(outerOnly, tl.D / 2), -tl.D / 2)) - area(outerOnly));
     });
     if (lostHoles) out.warn = `${lostHoles} hueco${lostHoles > 1 ? 's son más chicos' : ' es más chico'} que la herramienta: no se ${lostHoles > 1 ? 'pueden' : 'puede'} recortar`;
+    else if (narrow > 0.5) out.warn = `la herramienta de ${tl.D.toFixed(2)} mm no entra en las partes angostas del contorno: ${narrow.toFixed(1)} mm² quedan sin cortar (usa una más delgada)`;
     return out;
   }
 

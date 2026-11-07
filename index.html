@@ -110,7 +110,10 @@
         <button type="button" class="spec" id="jobLine" title="Ancho que deja la herramienta a esa profundidad"><span class="spec-k">Ancho de línea</span><span class="spec-v strong" id="jobLineTxt">—</span></button>
         <button type="button" class="spec" id="jobFeeds" title="Ajustes de máquina"><span class="spec-k"><svg class="i"><use href="#i-speed"/></svg>Máquina</span><span class="spec-v" id="jobFeedsTxt">—</span></button>
       </div>
-      <label class="check spec-end"><input type="checkbox" id="showPath"> Ver recorrido</label>
+      <div class="spec-end spec-checks">
+        <label class="check"><input type="checkbox" id="showPath"> Ver recorrido</label>
+        <label class="check" title="La pieza como queda después de cortar: hondos, puentes, barrenos y relieve"><input type="checkbox" id="showStock"> Ver resultado</label>
+      </div>
     </div>
 
     <!-- una sola fila de alto fijo: al cambiar de herramienta la pieza no se mueve bajo el cursor -->

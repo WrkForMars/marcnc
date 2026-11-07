@@ -62,6 +62,8 @@ src/
   cam/tools.js       varias herramientas: cuál usa cada figura (toolFor: la elegida; recortar/barrenar → fresa plana)
   cam/relief.js      relieve 3D desde una imagen en grises: acomodo en la pieza, drop cutter (la punta toca la superficie
                      sin comerse lo de al lado) y zigzag simplificado en 3D; se desbasta por niveles — probado
+  cam/stock.js       resultado: placa virtual tallada por el programa (sello de cada herramienta a lo largo de la línea
+                     de tiempo) y su imagen sombreada; corre en el worker (casilla Ver resultado) — probado
   cam/checks.js      revisión antes de cortar: ficha de preparación (Exportar) y avisos de valores sin sentido — probado
   cam/material.js    perfiles de material: avances sugeridos por carga de viruta con el husillo de la máquina y avisos — probado
   cam/simulate.js    línea de tiempo del programa (duración por avance, posición en cada instante) — probado

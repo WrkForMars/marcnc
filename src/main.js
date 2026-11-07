@@ -11,7 +11,8 @@ import { toolGeometry } from './cam/tool.js';
 import { parseSVG, SVG_QUALITY } from './input/svg.js';
 import { grayImage, traceImage } from './input/image.js';
 import { reliefLayout } from './cam/relief.js';
-import { Cancelled } from './work.js';
+import { Cancelled, run } from './work.js';
+import { shadeStock } from './cam/stock.js';
 import { duration, jobRisks, machineRisks, setupSheet } from './cam/checks.js';
 import { elementOp } from './cam/cut.js';
 import { toolFor, toolLabel } from './cam/tools.js';
@@ -131,6 +132,7 @@ function drawOnly(dragging = false) {
   preview.draw({
     elements: state.elements, selected: state.selected, hovered: state.hovered ?? -1, W: p.W, H: p.H,
     toolWidth: state.plan ? state.plan.tl.w : toolGeometry(p).w, plan: state.plan, showPath: $('showPath').checked, dragging, simulating: sim.on,
+    stock: $('showStock').checked && state.stock && state.stock.text === state.gcode ? state.stock.img : null,
   });
   if (sim.on) { simResize(); simPaint(sim.t); }
   drawOverlay();
@@ -330,6 +332,7 @@ async function refresh() {
   simButtons();
   jobSummary();
   renderAll();
+  if ($('showStock').checked) updateStock(); // el resultado se vuelve a tallar con el programa nuevo
   // cómo corta la herramienta elegida: el dibujo de la punta y una frase
   $('eff').innerHTML = toolFigure(tl, p) + '<p></p>';
   $('eff').querySelector('p').textContent = `A ${tl.depth} mm de profundidad deja una línea de ${tl.w.toFixed(2)} mm${tl.type === 'ball' ? ': la bola solo corta con la punta' : tl.type === 'v' ? ': más hondo, más ancha' : ', igual a su diámetro'}.`;
@@ -656,6 +659,24 @@ $('dh').addEventListener('change', () => {
   'maxX', 'maxY', 'maxZ', 'maxRpm', 'changer']
   .forEach(id => $(id).addEventListener('change', () => { $('vAngLbl').hidden = $('vTipLbl').hidden = $('ttype').value !== 'v'; refresh(); }));
 $('showPath').addEventListener('change', () => drawOnly());
+/* ---------- resultado: la placa tallada por el programa (en el worker) ---------- */
+async function updateStock() {
+  if (!$('showStock').checked || !state.gcode) { drawOnly(); return; }
+  if (state.stock && state.stock.text === state.gcode) { drawOnly(); return; }
+  const p = params(), text = state.gcode;
+  const tools = allTools(p).map(t => ({ ...t, vAngle: p.vAngle }));
+  busy('Tallando la placa…');
+  try {
+    const s = await run('stock', { text, o: { W: p.W, H: p.H, toolNum: tools[0].t, tools } }, { lane: 'stock' });
+    if (text !== state.gcode) return; // ya cambió el programa: lo calcula la siguiente vuelta
+    const rgb = v => [1, 3, 5].map(i => parseInt(css(v).slice(i, i + 2), 16));
+    const c = document.createElement('canvas'); c.width = s.gw; c.height = s.gh;
+    c.getContext('2d').putImageData(new ImageData(shadeStock(s, rgb('--plate'), rgb('--cut')), s.gw, s.gh), 0, 0);
+    state.stock = { text, img: c };
+  } catch (err) { if (!err.cancelled) $('toast').textContent = err.message; } finally { busy(null); }
+  drawOnly();
+}
+$('showStock').addEventListener('change', updateStock);
 
 // los parámetros se recuerdan entre sesiones (cada taller tiene su máquina y su herramienta)
 const SAVED = ['material', 'pw', 'ph', 'thick', 'maxX', 'maxY', 'maxZ', 'maxRpm', 'changer', 'machine', 'margin', 'speck', 'ttype', 'tdia', 'vang', 'vtip', 'tnum', 'depth', 'rpm', 'retract', 'fz', 'fxy',
