@@ -1,12 +1,12 @@
 name: App de escritorio (Windows y Linux)
 
 # Compila MarCNC para Windows (.exe portable e instalador) y Linux (.deb y AppImage).
-# Con una etiqueta v* (p. ej. v1.0.0) además publica un Release con todos los archivos.
+# Solo corre con una etiqueta v* (p. ej. v1.0.0), que además publica un Release,
+# o a mano desde la pestaña Actions. No compila en cada push para no llenar el
+# almacenamiento de Actions.
 on:
   push:
-    branches: [main]
     tags: ['v*']
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -39,6 +39,7 @@ jobs:
         with:
           name: MarCNC-windows
           path: salida/*
+          retention-days: 1
 
   # Ubuntu 22.04: el paquete usa bibliotecas de esa versión y así funciona en Ubuntu 22.04/24.04 y Linux Mint 21/22
   linux:
@@ -70,6 +71,7 @@ jobs:
         with:
           name: MarCNC-linux
           path: salida/*
+          retention-days: 1
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
