@@ -35,6 +35,9 @@ const M_TEXT = {
   0: () => 'Pausa: la máquina espera a que el operador presione inicio de ciclo.',
 };
 
+/** Altura supuesta de home (G28) para dibujar la subida: la real depende de la máquina. */
+export const HOME_Z = 25;
+
 const fx = v => (Math.abs(v) < 5e-7 ? 0 : v).toFixed(2);
 const pt = (x, y) => `X${fx(x)} Y${fx(y)}`;
 
@@ -88,11 +91,18 @@ export function explainProgram(text) {
       e.kind = 'end';
       parts.push('Regresa Z a la posición de referencia (home): aleja la herramienta de la pieza para retirarla con seguridad.');
       if (gs.includes(91)) abs = false;
-      out.push({ ...e, text: parts.join(' ') });
+      // la herramienta sube hasta arriba: el siguiente movimiento en Z baja desde ahí
+      const to = [x, y, Math.max(z, HOME_Z)];
+      out.push({ ...e, text: parts.join(' '), from: [x, y, z], to, g: 0, f });
+      z = to[2];
       return;
     }
 
     gs.forEach(v => { if (SETUP[v]) { parts.push(SETUP[v]); if (v === 90) abs = true; if (v === 91) abs = false; if (e.kind === 'other') e.kind = 'setup'; } });
+    if (gs.includes(43)) {
+      const H = get('H');
+      parts.push(`Compensa el largo de la herramienta con el valor ${H !== undefined ? `H${H}` : 'H'} de la tabla de la máquina: así cada herramienta llega a la misma Z0 aunque sea más larga o más corta.`);
+    }
     const T = get('T');
     if (T !== undefined) { e.kind = 'tool'; parts.push(ms.includes(6) ? `Cambia a la herramienta ${T}.` : `Prepara la herramienta ${T}.`); }
     const S = get('S');

@@ -74,3 +74,26 @@ describe('rampas y puentes', () => {
     expect(by('G01 Z-0.20')).toMatch(/puente/);
   });
 });
+
+describe('compensación de largo', () => {
+  it('G00 G43 H# Z… se explica, no es peligro y la simulación la recorre como un rápido', async () => {
+    const { buildTimeline } = await import('../src/cam/simulate.js');
+    const t = '%\nO0001\nG21 G90\nT3 M06\nS2200 M03\nG54\nG00 G43 H3 Z3.00\nG00 X10.00 Y10.00\nG01 Z-0.10 F60\nG01 X20.00 F130\nG00 Z3.00\nM05\nG28 G91 Z0\nG90\nT1 M06\nS2200 M03\nG00 G43 H1 Z3.00\nM30\n%';
+    const ex = explainProgram(t);
+    expect(ex.filter(e => e.kind === 'danger')).toEqual([]);
+    const h3 = ex.find(e => e.code === 'G00 G43 H3 Z3.00'), h1 = ex.find(e => e.code === 'G00 G43 H1 Z3.00');
+    expect(h3.text).toMatch(/largo de la herramienta con el valor H3/);
+    expect(h3.text).toMatch(/Z3\.00/);
+    expect(h1.text).toMatch(/H1/);
+    expect(h3.g).toBe(0);
+    const seg = buildTimeline(ex).segs.find(s => s.n === h3.n);
+    expect(seg.to[2]).toBe(3);
+    expect(seg.dur).toBeCloseTo(3 / 1500 * 60); // a la velocidad de los rápidos
+    // G28 sube a home: el G43 después del cambio baja desde ahí, sin tocar la pieza
+    const home = ex.find(e => e.code === 'G28 G91 Z0');
+    expect(home.to[2]).toBeGreaterThan(3);
+    expect(h1.from[2]).toBe(home.to[2]);
+    expect(h1.text).toMatch(/Baja rápido a Z3\.00, todavía fuera del material/);
+    expect(buildTimeline(ex).segs.some(s => s.n === home.n)).toBe(true);
+  });
+});
