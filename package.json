@@ -1,6 +1,6 @@
 {
   "name": "marcnc",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "private": true,
   "description": "Convierte SVG e imágenes en código G y M para grabado CNC, con modo de corte por figura y simulación.",
   "type": "module",
