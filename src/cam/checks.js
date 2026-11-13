@@ -29,7 +29,7 @@ export function duration(mins) {
 export function setupSheet(p, tl, g, cut = null) {
   const inch = inchName(tl.D);
   return [
-    { k: 'Herramienta', v: `T${p.toolNum} · ${TOOL_LABEL[tl.type] || tl.type} de ${n(tl.D, 3)} mm${inch ? ` (${inch})` : ''}${p.dialect === 'grbl' ? ' · cámbiala a mano' : ''}` },
+    { k: 'Herramienta', v: `T${p.toolNum} · ${TOOL_LABEL[tl.type] || tl.type} de ${n(tl.D, 3)} mm${inch ? ` (${inch})` : ''}${p.dialect === 'grbl' || p.changer === false ? ' · cámbiala a mano' : ''}` },
     { k: 'Pieza', v: `${n(p.W)} × ${n(p.H)} mm${p.materialName ? ` de ${p.materialName.toLowerCase()}` : ''}, bien sujeta` },
     { k: 'Ceros', v: 'X0 Y0 en la esquina inferior izquierda; Z0 en la cara de arriba' },
     { k: 'Corte', v: `${n(tl.depth)} mm de profundidad en ${g.passes} pasada${g.passes > 1 ? 's' : ''} · línea de ${n(tl.w)} mm` },
@@ -37,6 +37,18 @@ export function setupSheet(p, tl, g, cut = null) {
     { k: 'Husillo y avances', v: `S${p.rpm} a la derecha (M03) · F${p.fz} al bajar · F${p.fxy} al cortar` },
     { k: 'Duración', v: `~${duration(g.mins)}` },
   ];
+}
+
+/**
+ * Cómo se cambian las herramientas a media obra (solo aplica con más de una).
+ * Con cambiador automático el programa compensa el largo de cada una con G43 H# (H = número de la herramienta):
+ * esos largos tienen que estar medidos y cargados en la máquina, o la segunda herramienta corta a otra altura.
+ * @param {{dialect:string, changer?:boolean}} p
+ * @param {number[]} nums números (T#) de las herramientas que usa el programa
+ */
+export function toolChangeNote(p, nums) {
+  if (p.dialect === 'grbl' || p.changer === false) return 'el programa se pausa (M00) en cada cambio: cambia la herramienta y toma Z0 de nuevo';
+  return `cambio automático (M06) con compensación de largo (G43): antes de correr, mide el largo de cada herramienta y cárgalo en la tabla de la máquina (${nums.map(t => `H${t}`).join(', ')})`;
 }
 
 /**

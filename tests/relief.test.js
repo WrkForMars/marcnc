@@ -41,3 +41,49 @@ describe('relieve 3D', () => {
     expect(p.pts3.length).toBeLessThan(400); // los tramos planos se simplifican
   });
 });
+
+describe('tiempo del relieve', () => {
+  it('las bajadas empinadas van al avance de Z y la estimación las cuenta a ese avance (igual que la simulación)', async () => {
+    const { assignOps } = await import('../src/cam/tools.js');
+    const { computePlan } = await import('../src/cam/plan.js');
+    const { generateGcode } = await import('../src/cam/gcode.js');
+    const { explainProgram } = await import('../src/cam/explain.js');
+    const { buildTimeline } = await import('../src/cam/simulate.js');
+    // dientes de sierra de 2 mm: muchas bajadas casi verticales
+    const gw = 60, gh = 40, data = new Float32Array(gw * gh);
+    for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) data[j * gw + i] = (i % 20) > 10 ? 1 : 0;
+    const el = { src: 'design', type: 'relief', mode: 'relief', relief: { x0: 5, y0: 5, w: 30, h: 20, gw, gh, data }, opts: { depth: 2 } };
+    const tl = toolGeometry({ toolType: 'ball', dia: 3.175, depth: 0.1, stepdown: 2, stepoverPct: 45 });
+    const tools = [{ t: 3, type: 'ball', dia: 3.175, fz: 20, fxy: 600 }];
+    assignOps([el], tools, tl, { thick: 5 });
+    const plan = await computePlan([el], tl, { tol: 0.01 });
+    const g = generateGcode(plan, [el], { W: 40, H: 30, dialect: 'grbl', dec: 2, retract: 3, fz: 20, fxy: 600, toolNum: 3, rpm: 2200, arcs: false, tools });
+    expect(g.text).toMatch(/Z-\d.*F20\n/); // hay bajadas en diagonal a F20
+    const sim = buildTimeline(explainProgram(g.text)).total / 60;
+    expect(Math.abs(g.mins - sim) / sim).toBeLessThan(0.03);
+  });
+});
+
+describe('tiempo con varias herramientas', () => {
+  it('las bajadas de cada herramienta se cuentan a su propio avance de Z', async () => {
+    const { assignOps } = await import('../src/cam/tools.js');
+    const { computePlan } = await import('../src/cam/plan.js');
+    const { generateGcode } = await import('../src/cam/gcode.js');
+    const { explainProgram } = await import('../src/cam/explain.js');
+    const { buildTimeline } = await import('../src/cam/simulate.js');
+    const { regionEl, square } = await import('./helpers.js');
+    const gw = 60, gh = 40, data = new Float32Array(gw * gh);
+    for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) data[j * gw + i] = (i % 20) > 10 ? 1 : 0;
+    const relieve = { src: 'design', type: 'relief', mode: 'relief', relief: { x0: 5, y0: 5, w: 30, h: 20, gw, gh, data }, opts: { depth: 2 } };
+    const pieza = regionEl(square(2, 2, 36), [], 'cut');
+    const tl = toolGeometry({ toolType: 'ball', dia: 3.175, depth: 0.1, stepdown: 2, stepoverPct: 45 });
+    // la bola baja muy despacio (F20) y la fresa plana del recorte muy rápido (F300)
+    const tools = [{ t: 3, type: 'ball', dia: 3.175, fz: 20, fxy: 600 }, { t: 1, type: 'flat', dia: 3.175, fz: 300, fxy: 600 }];
+    assignOps([relieve, pieza], tools, tl, { thick: 3 });
+    const plan = await computePlan([relieve, pieza], tl, { tol: 0.01 });
+    const g = generateGcode(plan, [relieve, pieza], { W: 40, H: 40, dialect: 'grbl', dec: 2, retract: 3, fz: 20, fxy: 600, toolNum: 3, rpm: 2200, arcs: false, tools });
+    expect(g.text).toMatch(/M00/);
+    const sim = buildTimeline(explainProgram(g.text)).total / 60;
+    expect(Math.abs(g.mins - sim) / sim).toBeLessThan(0.05);
+  });
+});

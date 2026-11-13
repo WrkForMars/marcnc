@@ -8,6 +8,7 @@ import { elementOp } from '../src/cam/cut.js';
 import { toolGeometry } from '../src/cam/tool.js';
 import { toC } from '../src/geometry/clipper.js';
 import { distSeg } from '../src/geometry/simplify.js';
+import { verifyProgram } from './verify.js';
 
 const W = 90, H = 50;
 let seed = 7;
@@ -45,8 +46,13 @@ describe('piezas aleatorias', () => {
       elements.forEach(e => { e.op = elementOp(e, { depth: tl.depth, thick, dia: tl.D }); if (e.mode === 'cut' && rnd() < 0.3) e.op.tabs = 0; });
       const dec = [2, 3][Math.floor(rnd() * 2)], tol = [0.005, 0.02, 0.05, 0.2][Math.floor(rnd() * 4)];
       const plan = await computePlan(elements, tl, { tol });
-      const g = generateGcode(plan, elements, { W, H, dialect: rnd() < 0.5 ? 'fanuc' : 'grbl', dec, retract: 3, fz: 60, fxy: 130, toolNum: 3, rpm: 2200, prog: 1, arcs: true });
+      const dialect = rnd() < 0.5 ? 'fanuc' : 'grbl';
+      const g = generateGcode(plan, elements, { W, H, dialect, dec, retract: 3, fz: 60, fxy: 130, toolNum: 3, rpm: 2200, prog: 1, arcs: true });
       const tag = `pieza ${it}`;
+      // el verificador independiente revisa cada línea (rápidos, avances, profundidad, límites, arcos, formato)
+      const maxDepth = Math.max(tl.depth, ...elements.map(e => e.op.depth));
+      verifyProgram(g.text, { dialect, W, H, retract: 3, dec, maxDepth, tools: [{ t: 3, dia: tl.D, fz: 60, fxy: 130 }] })
+        .forEach(m => problems.push(`${tag}: ${m}`));
       if (/NaN|Infinity|undefined/.test(g.text)) problems.push(`${tag}: valor inválido en el código`);
       const ex = explainProgram(g.text);
       ex.filter(e => e.kind === 'danger').forEach(e => problems.push(`${tag}: rápido con la herramienta abajo (línea ${e.n})`));

@@ -8,7 +8,19 @@ export const BREAK = 0.2;
 /** Profundidad de un relieve si no se le da otra: lo más oscuro baja 2 mm. */
 export const RELIEF_DEPTH = 2;
 /** Pendiente de la rampa de entrada: 5° (una fresa corta bien de lado, mal de punta). */
-const RAMP = Math.tan(5 * Math.PI / 180);
+export const RAMP = Math.tan(5 * Math.PI / 180);
+/** Lo más empinado que se acepta una rampa en un contorno chico (20°), lejos de los 30° desde donde se baja al avance de Z. */
+export const MAX_RAMP = Math.tan(20 * Math.PI / 180);
+
+/**
+ * Largo de la rampa para bajar `dz` en un contorno de largo `len`: a 5° si cabe; si no, la vuelta completa mientras no
+ * pase de 20°; si ni así, 0 (baja de punta).
+ */
+export function rampLength(dz, len) {
+  if (!(dz > 0)) return 0;
+  if (dz / RAMP <= len) return dz / RAMP;
+  return dz <= MAX_RAMP * len ? len : 0;
+}
 
 /**
  * Profundidad y puentes de cada figura según su modo.
@@ -75,7 +87,7 @@ export function tabIntervals(len, n, w, skip = 0) {
 export function passWalk(pts, o) {
   const len = perimeter(pts);
   const dz = o.zFrom - o.z;
-  const rampLen = o.ramp && dz > 0 ? Math.min(len, dz / RAMP) : 0;
+  const rampLen = o.ramp ? rampLength(dz, len) : 0;
   const tabs = o.z < (o.tabTop ?? -Infinity) ? (o.tabs || []) : [];
   const total = len + (o.cleanup === false ? 0 : rampLen); // vuelta completa (+ repaso de la rampa)
   // profundidad a lo largo del recorrido (s de 0 a total)

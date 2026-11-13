@@ -72,8 +72,8 @@ export function sheetImage({ elements, W, H, toolWidth, css }) {
 }
 
 /**
- * @param {{info:any, p:any, tl:any, g:any, ex:import('../cam/explain.js').Explained[], elements:any[], image:string, fileName:string, withProgram:boolean, test?:boolean, tools?:string[]}} d
- *   tools: las herramientas que usa el programa, en orden
+ * @param {{info:any, p:any, tl:any, g:any, ex:import('../cam/explain.js').Explained[], elements:any[], image:string, fileName:string, withProgram:boolean, test?:boolean, tools?:string[], toolNums?:number[]}} d
+ *   tools: las herramientas que usa el programa, en orden (toolNums: sus números T#)
  *   test: agrega el registro de prueba en máquina
  * @returns {string} HTML de la hoja
  */
@@ -182,12 +182,12 @@ function extraRows(d) {
   const cut = live.find(e => e.mode === 'cut');
   if (cut) {
     const n = Math.max(1, Math.ceil(cut.tl.depth / cut.tl.down - 1e-9));
-    rows.push(['Recorte', `${f2(cut.tl.depth)} mm en ${n} pasada${n > 1 ? 's' : ''} de ${f2(cut.tl.depth / n)} mm, entrada en rampa`, 'Puentes', g.tabs ? `${g.tabs}, cortarlos a mano al final` : 'ninguno']);
+    rows.push(['Recorte', `${f2(cut.tl.depth)} mm en ${n} pasada${n > 1 ? 's' : ''} de ${f2(cut.tl.depth / n)} mm, entrada en rampa (de punta si el contorno es muy chico)`, 'Puentes', g.tabs ? `${g.tabs}, cortarlos a mano al final` : 'ninguno']);
   }
   const drills = live.filter(e => e.mode === 'drill' || (e.paths || []).some(p => p.drill)).length;
   const other = [...new Set(live.filter(e => e.mode !== 'cut' && e.mode !== 'drill' && Math.abs(e.tl.depth - tl.depth) > 1e-9).map(e => f2(e.tl.depth)))];
   if (drills || other.length) rows.push(['Barrenos', drills ? `${drills} figura${drills > 1 ? 's' : ''} con barrenos (G81/G83 o espiral)` : '—', 'Otras profundidades', other.length ? `${other.join(', ')} mm` : '—']);
-  if (d.tools && d.tools.length > 1) rows.push(['Herramientas en orden', d.tools.join(' → '), 'Cambio', d.p.dialect === 'grbl' || d.p.changer === false ? 'Pausa M00: cambiarla a mano y tomar Z0' : 'Automático (M06)']);
+  if (d.tools && d.tools.length > 1) rows.push(['Herramientas en orden', d.tools.join(' → '), 'Cambio', d.p.dialect === 'grbl' || d.p.changer === false ? 'Pausa M00: cambiarla a mano y tomar Z0' : `Automático (M06) con G43: largos cargados en la tabla (${(d.toolNums || []).map(t => `H${t}`).join(', ')})`]);
   const copies = 1 + new Set(elements.filter(e => e.copyOf != null).map(e => e.copyN)).size;
   if (copies > 1) rows.push(['Copias', `${copies} en la placa`, '', '']);
   return rows;

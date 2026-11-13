@@ -11,9 +11,8 @@ import { grayImage, traceImage } from './input/image.js';
 import { reliefLayout } from './cam/relief.js';
 import { Cancelled, run } from './work.js';
 import { shadeStock } from './cam/stock.js';
-import { duration, jobRisks, machineRisks, setupSheet } from './cam/checks.js';
-import { elementOp } from './cam/cut.js';
-import { toolFor, toolLabel } from './cam/tools.js';
+import { duration, jobRisks, machineRisks, setupSheet, toolChangeNote } from './cam/checks.js';
+import { assignOps, toolLabel, usedTools } from './cam/tools.js';
 import { copyOffsets, shiftElement } from './cam/copies.js';
 import { toolFigure } from './ui/tool-figure.js';
 import { createBack } from './ui/back.js';
@@ -338,14 +337,8 @@ async function refresh() {
   if (my !== state.gen) return;
   const p = params();
   const tl = toolGeometry(p);
-  // cómo se corta cada figura: su profundidad (la del trabajo, la suya o atravesar el grosor) y sus puentes
-  // con qué herramienta va cada figura (la principal, o la que eligió el usuario, o la fresa plana para recortar)
-  const tools = allTools(p), bases = tools.map((t, k) => (k ? toolGeometry({ ...p, toolType: t.type, dia: t.dia }) : tl));
-  state.elements.forEach(e => {
-    if (e.copyOf != null) { const b = state.elements[e.copyOf]; e.mode = b.mode; e.opts = b.opts; } // las copias siguen al original
-    const k = toolFor(e, tools);
-    e.op = { ...elementOp(e, { depth: tl.depth, thick: p.thick, dia: bases[k].D }), tool: k, base: bases[k] };
-  });
+  // cómo se corta cada figura: su herramienta, su profundidad y sus puentes
+  assignOps(state.elements, allTools(p), tl, p);
   const plan = await computePlan(state.elements, tl, {
     tol: p.tol, cache: state.cache, keyOf, onProgress: busy, isCancelled: () => my !== state.gen,
   });
@@ -726,7 +719,7 @@ async function updateStock() {
   if (!$('showStock').checked || !state.gcode) { drawOnly(); return; }
   if (state.stock && state.stock.text === state.gcode) { drawOnly(); return; }
   const p = params(), text = state.gcode;
-  const tools = allTools(p).map(t => ({ ...t, vAngle: p.vAngle }));
+  const tools = allTools(p).map(t => ({ ...t, vAngle: t.vAngle ?? p.vAngle }));
   busy('Tallando la placa…');
   try {
     const s = await run('stock', { text, o: { W: p.W, H: p.H, toolNum: tools[0].t, tools } }, { lane: 'stock' });
@@ -1567,10 +1560,11 @@ $('sheetForm').addEventListener('submit', async ev => {
   const p = params(), css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
   busy('Preparando la hoja…'); await tick();
   const image = sheetImage({ elements: state.elements, W: p.W, H: p.H, toolWidth: state.plan.tl.w, css });
+  const used = usedTools(state.plan.order).map(k => allTools(p)[k]);
   $('sheet').innerHTML = sheetHTML({
     info, p, tl: state.plan.tl, g: state.lastG, ex: state.explained, elements: state.elements, image,
     fileName: `${safeName(state.fileName)}_GM.txt`, withProgram: $('shProgram').checked, test: $('shTest').checked,
-    tools: [...new Set(state.plan.order.map(x => x.tool || 0))].map(k => toolLabel(allTools(p)[k])),
+    tools: used.map(toolLabel), toolNums: used.map(t => t.t),
   });
   // la imagen ya está en memoria; el tope evita quedarse esperando si el navegador no la decodifica (ventana oculta)
   await new Promise(r => { const im = $('sheet').querySelector('img'); if (!im || im.complete) r(); else { im.onload = r; im.onerror = r; setTimeout(r, 1500); } });
@@ -1662,9 +1656,9 @@ function openExport() {
   const cutEl = state.elements.find(e => e.mode === 'cut' && e.tl);
   const rows = setupSheet({ ...p, materialName: $('material').value ? mat.textContent : '' }, tl, g, cutEl ? { depth: cutEl.tl.depth } : null);
   // con varias herramientas: cuáles más y cómo se cambian
-  const tools = allTools(p), used = [...new Set(state.plan.order.map(x => x.tool || 0))];
+  const tools = allTools(p), used = usedTools(state.plan.order);
   if ($('machine').value) rows.unshift({ k: 'Máquina', v: $('machine').value });
-  if (used.length > 1) rows.splice(rows[0].k === 'Máquina' ? 2 : 1, 0, { k: 'En orden', v: used.map(k => `${toolLabel(tools[k])} (F${tools[k].fxy})`).join(' → ') + (p.dialect === 'grbl' ? ' · el programa se pausa (M00) en cada cambio: cambia la herramienta y toma Z0 de nuevo' : '') });
+  if (used.length > 1) rows.splice(rows[0].k === 'Máquina' ? 2 : 1, 0, { k: 'En orden', v: used.map(k => `${toolLabel(tools[k])} (F${tools[k].fxy})`).join(' → ') + ' · ' + toolChangeNote(p, used.map(k => tools[k].t)) });
   rows.forEach(({ k, v }) => {
     const dt = document.createElement('dt'), dd = document.createElement('dd');
     dt.textContent = k; dd.textContent = v; $('pfList').append(dt, dd);

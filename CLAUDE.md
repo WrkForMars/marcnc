@@ -59,7 +59,8 @@ src/
                      rampa de entrada (passWalk: recorrido 3D de cada pasada) — probado
   cam/drill.js       barrenos: círculos del tamaño de la herramienta con G81/G83 (GRBL: movimientos sueltos), más
                      grandes en espiral con G02; al recortar, los huecos redondos chicos se barrenan — probado
-  cam/tools.js       varias herramientas: cuál usa cada figura (toolFor: la elegida; recortar/barrenar → fresa plana)
+  cam/tools.js       varias herramientas: cuál usa cada figura (toolFor: la elegida; recortar/barrenar → fresa plana;
+                     tallado V → V-bit), assignOps (herramienta, profundidad y puentes de cada figura) y usedTools — probado
   cam/relief.js      relieve 3D desde una imagen en grises: acomodo en la pieza, drop cutter (la punta toca la superficie
                      sin comerse lo de al lado) y zigzag simplificado en 3D; se desbasta por niveles — probado
   cam/stock.js       resultado: placa virtual tallada por el programa (sello de cada herramienta a lo largo de la línea
@@ -80,7 +81,8 @@ src/
   ui/help.js         botón "?" con explicación corta en los campos que confunden (textos en HELP)
   ui/code-view.js    visor del programa: tocar una línea la explica y resalta su movimiento
   ui/sheet.js        hoja de entrega imprimible (#sheet, solo visible con @media print)
-tests/               Vitest en entorno node; helpers.js trae parseMoves() para leer G-code
+tests/               Vitest en entorno node; helpers.js trae parseMoves() para leer G-code; verify.js revisa un programa
+                     línea por línea (verificador independiente) y audit.test.js pasa por él plantillas, herramientas y relieves
 ```
 
 El croquis no pasa por `buildDesign`: ya está en mm de la pieza y `sketchElements` da los elementos directo.
@@ -112,14 +114,21 @@ Flujo: archivo → `RawShape[]` (unidades de lienzo) → `buildDesign` (mm, Y ha
   - Fanuc: `%`, `O####`, `T# M06`, `G28 G91 Z0`. GRBL: nada de eso (lo rechaza).
   - **Varias herramientas** (Parámetros → Otras herramientas, guardadas en `marcnc:herramientas`; la principal es la 0):
     el programa empieza con la de lo primero que se corta, agrupa por herramienta (grabar y luego recortar) y entre una
-    y otra cambia: Fanuc `M05` `G28 G91 Z0` `G90` `T# M06` `S M03`; GRBL `M05`, comentario y `M00` (pausa para cambiarla
-    y tomar Z0). Con una sola herramienta el programa no cambia. Cada herramienta extra tiene sus avances (los escritos;
-    si no, los sugeridos para el material con su diámetro; si no, los del trabajo) y el tiempo se estima con los de cada una.
+    y otra cambia: Fanuc `M05` `G28 G91 Z0` `G90` `T# M06` `S M03` `G00 G43 H# Z{retract}` (H = número de la herramienta;
+    la ficha y la hoja piden cargar esos largos en la máquina); GRBL o Fanuc sin cambiador: `M05`, comentario y `M00`
+    (pausa para cambiarla y tomar Z0), sin G43. Con una sola herramienta el programa no cambia (ni lleva G43).
+    `assignOps` (`cam/tools.js`) decide herramienta y profundidad de cada figura; tallado en V → el V-bit si hay uno.
+    Cada herramienta extra tiene sus avances (los escritos; si no, los sugeridos para el material con su diámetro; si no,
+    los del trabajo) y el tiempo se estima con los de cada una.
   - **Cada figura tiene su profundidad** (`e.op.depth`: la del trabajo, la suya o el grosor + 0.2 si se recorta) y su
     herramienta a esa profundidad (`e.tl`). Lo recortado va al final y, en cada pieza, los huecos antes que el contorno.
   - Contornos cerrados con pasadas de más de 0.25 mm, o recortes: bajan a Z0 y entran en **rampa de 5°** a lo largo del
-    contorno (nunca de punta); en la última pasada repasan la rampa a fondo. Sobre un puente suben en vertical y vuelven
-    a bajar con `fz`. Esos recorridos van en rectas (sin arcos). Con la tarea de referencia (0.1 mm) nada de esto aplica.
+    contorno; en la última pasada repasan la rampa a fondo. Si la rampa de 5° no cabe, bajan en la vuelta completa (hasta
+    20°); solo si ni así cabe bajan de punta con `fz` (`rampLength` en `cam/cut.js`). Sobre un puente suben en vertical y
+    vuelven a bajar con `fz`. Esos recorridos van en rectas (sin arcos). Con la tarea de referencia (0.1 mm) nada aplica.
+  - Cualquier bajada de más de 30° (`STEEP`, medida con las coordenadas ya redondeadas) va a `fz`, y el tiempo estimado
+    la cuenta a ese avance; las bajadas y `fz` se cuentan con los de cada herramienta.
+  - `tests/verify.js` es un verificador independiente del programa; lo usan `audit.test.js` y `fuzz.test.js`.
   - Barrenos: Fanuc usa `G98 G81/G83 … R1 F{fz}` y `G80` después de cada uno; GRBL no tiene ciclos fijos y se escriben
     con G00/G01 (picoteo: sube a R y baja rápido hasta 0.2 mm arriba de lo ya barrenado). El visor explica los ciclos y
     la simulación recorre sus pasos (`steps`).

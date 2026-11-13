@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { duration, inchName, jobRisks, machineRisks, setupSheet } from '../src/cam/checks.js';
+import { duration, inchName, jobRisks, machineRisks, setupSheet, toolChangeNote } from '../src/cam/checks.js';
 import { toolGeometry } from '../src/cam/tool.js';
 
 const P = { rpm: 2200, fz: 60, fxy: 130, toolNum: 3, W: 90, H: 50, dialect: 'fanuc' };
@@ -40,6 +40,8 @@ describe('revisión antes de cortar', () => {
     expect(s[3].v).toBe('0.1 mm de profundidad en 1 pasada · línea de 1.11 mm');
     expect(s[4].v).toBe('S2200 a la derecha (M03) · F60 al bajar · F130 al cortar');
     expect(setupSheet({ ...P, dialect: 'grbl' }, ball, G)[0].v).toMatch(/cámbiala a mano/);
+    expect(setupSheet({ ...P, changer: false }, ball, G)[0].v).toMatch(/cámbiala a mano/);
+    expect(setupSheet(P, ball, G)[0].v).not.toMatch(/cámbiala a mano/);
   });
   it('límites de la máquina: pieza que no cabe (o solo girada), recorrido de Z y husillo máximo; sin límites, nada', () => {
     const m = { ...P, maxX: 300, maxY: 200, maxZ: 10, maxRpm: 2000, retract: 3 };
@@ -52,5 +54,13 @@ describe('revisión antes de cortar', () => {
   it('reconoce medidas en pulgadas y escribe duraciones', () => {
     expect(inchName(6.35)).toBe('1/4"'); expect(inchName(3)).toBe('');
     expect(duration(0.2)).toBe('1 min'); expect(duration(125)).toBe('2 h 5 min'); expect(duration(120)).toBe('2 h');
+  });
+});
+
+describe('cambio de herramienta en la ficha', () => {
+  it('con cambiador pide cargar la tabla de largos (H#); a mano, pausa y Z0 de nuevo', () => {
+    expect(toolChangeNote({ dialect: 'fanuc' }, [3, 1])).toMatch(/G43.*tabla de la máquina \(H3, H1\)/);
+    expect(toolChangeNote({ dialect: 'fanuc', changer: false }, [3, 1])).toMatch(/M00.*toma Z0 de nuevo/);
+    expect(toolChangeNote({ dialect: 'grbl' }, [3, 1])).toMatch(/M00/);
   });
 });
